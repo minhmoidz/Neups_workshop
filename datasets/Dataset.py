@@ -89,32 +89,23 @@ class Dataset(data.Dataset):
                     label[idx_d] = 1
                 self.ac_labels_1.append(label)
 
-            # Load images
-            image1 = pil_loader(self.image_path + self.image_pairs[i][0], self.n_channels)
-            image2 = pil_loader(self.image_path + self.image_pairs[i][1], self.n_channels)
-
-            # Resize images
-            image1 = self.resize(image1)
-            image2 = self.resize(image2)
-
-            # Append images to respective lists
-            self.images_1.append(image1)
-            self.images_2.append(image2)
-            self.labels_id.append(float(self.image_pairs[i][2]))
-
     def __len__(self):
         return len(self.image_pairs)
 
     def __getitem__(self, index):
-        # Get image1 and image2
-        image1 = self.images_1[index]
-        image2 = self.images_2[index]
+        # Load images
+        image1 = pil_loader(self.image_path + self.image_pairs[index][0], self.n_channels)
+        image2 = pil_loader(self.image_path + self.image_pairs[index][1], self.n_channels)
+
+        # Resize images
+        image1 = self.resize(image1)
+        image2 = self.resize(image2)
 
         # Apply the transformation
         image1 = self.transform(image1)
         image2 = self.transform(image2)
 
-        return image1, image2, self.ac_labels_1[index].astype(np.float32), self.labels_id[index]
+        return image1, image2, self.ac_labels_1[index].astype(np.float32), float(self.image_pairs[index][2])
 
 
 def pil_loader(path, n_channels):

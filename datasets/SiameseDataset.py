@@ -61,48 +61,34 @@ class SiameseDataset(data.Dataset):
         self.resize = transforms.Resize((self.image_size, self.image_size))
         self.to_pil = transforms.ToPILImage()
 
-        self.images_1 = []
-        self.images_2 = []
-        self.labels = []
-
-        for i in range(len(self.image_pairs)):
-            # Load images
-            image1 = pil_loader(self.PATH + self.image_pairs[i][0], self.n_channels)
-            image2 = pil_loader(self.PATH + self.image_pairs[i][1], self.n_channels)
-
-            # Resize images
-            image1 = self.resize(image1)
-            image2 = self.resize(image2)
-
-            # Apply DP-Pix if respective flag is activated
-            if self.use_dp_pix:
-                image1 = self.transform(image1).unsqueeze(0)
-                image1 = utils.dp_pix(image_tensor=image1, b=self.b, m=self.m, eps=self.eps, plot=False).squeeze(0)
-                image1 = self.to_pil(image1)
-
-                if self.phase == 'training' or self.phase == 'validation':
-                    image2 = self.transform(image2).unsqueeze(0)
-                    image2 = utils.dp_pix(image_tensor=image2, b=self.b, m=self.m, eps=self.eps, plot=False).squeeze(0)
-                    image2 = self.to_pil(image2)
-
-            # Append images to respective lists
-            self.images_1.append(image1)
-            self.images_2.append(image2)
-            self.labels.append(float(self.image_pairs[i][2]))
-
     def __len__(self):
         return len(self.image_pairs)
 
     def __getitem__(self, index):
-        # Get image1 and image2
-        image1 = self.images_1[index]
-        image2 = self.images_2[index]
+        # Load images
+        image1 = pil_loader(self.PATH + self.image_pairs[index][0], self.n_channels)
+        image2 = pil_loader(self.PATH + self.image_pairs[index][1], self.n_channels)
+
+        # Resize images
+        image1 = self.resize(image1)
+        image2 = self.resize(image2)
+
+        # Apply DP-Pix if respective flag is activated
+        if self.use_dp_pix:
+            image1 = self.transform(image1).unsqueeze(0)
+            image1 = utils.dp_pix(image_tensor=image1, b=self.b, m=self.m, eps=self.eps, plot=False).squeeze(0)
+            image1 = self.to_pil(image1)
+
+            if self.phase == 'training' or self.phase == 'validation':
+                image2 = self.transform(image2).unsqueeze(0)
+                image2 = utils.dp_pix(image_tensor=image2, b=self.b, m=self.m, eps=self.eps, plot=False).squeeze(0)
+                image2 = self.to_pil(image2)
 
         # Apply the transformation
         image1 = self.transform(image1)
         image2 = self.transform(image2)
 
-        return image1, image2, self.labels[index]
+        return image1, image2, float(self.image_pairs[index][2])
 
 
 def pil_loader(path, n_channels):

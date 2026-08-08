@@ -87,6 +87,66 @@ def get_data_loader(phase='training', experimental_step='pretrain', image_size=2
     return data_loader
 
 
+def load_flow_generator(model_file):
+    """Rebuild the flow field generator that matches a checkpoint.
+
+    A generator trained with a budget map predicts 3 output channels instead of 2, so the architecture has to
+    follow the checkpoint rather than being hard-coded.
+
+    :param model_file: str
+        Path to the saved generator state dict.
+    :return: UNet
+        The generator with the weights loaded.
+    """
+
+    from networks.UNet_PriCheXyNet import UNet
+
+    state = torch.load(model_file, weights_only=False)
+    generator = UNet(1, state['conv.weight'].shape[0], 32).cuda()
+    generator.load_state_dict(state)
+
+    return generator
+
+
+def deform(images, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda=0.0):
+    """Apply the learned flow field to a batch of images, optionally with a stochastic component.
+
+    A purely deterministic warp F = UNet(x) is close to bijective and therefore re-encodes the biometric
+    information rather than destroying it -- an attacker re-trained on anonymized data simply learns the new
+    encoding. Mixing in an independent random field per image makes the mapping one-to-many, so two scans of
+    the same patient are deformed in uncorrelated ways and identity information is genuinely lost.
+
+    :param stochastic_lambda: float
+        Convex mixing weight in [0, 1] between the predicted field and a random one. 0 reproduces the
+        deterministic baseline exactly; the mixture stays within [-1, 1] because both terms do.
+    :return: torch.Tensor
+        The deformed images.
+    """
+
+    grids = perturbation_net(images)
+
+    if grids.shape[1] == 3:
+        # The third channel is a spatial deformation budget. It is renormalized so that its per-image mean
+        # equals mu, hence the total budget matches the uniform-mu baseline exactly and any gain can only come
+        # from how the budget is allocated. A zero third channel gives a uniform map, i.e. the baseline.
+        budget = 1.0 + grids[:, 2:3]
+        budget = mu * budget / budget.mean(dim=(1, 2, 3), keepdim=True).clamp_min(1e-6)
+        grids = grids[:, :2]
+    else:
+        budget = mu
+
+    if stochastic_lambda > 0:
+        noise = torch.randn_like(grids).clamp(-1.0, 1.0)
+        grids = (1.0 - stochastic_lambda) * grids + stochastic_lambda * noise
+
+    grids = grid_identity - budget * grids
+    # Smoothing happens after mixing so that the random component yields smooth deformations as well
+    grids = gauss_filter(grids)
+    grids = grids.permute(0, 2, 3, 1)
+
+    return torch.nn.functional.grid_sample(images, grids, padding_mode='border', align_corners=True)
+
+
 def pretrain(generator, training_loader, gauss_filter, grid_identity, mu, mse_loss, optimizer_g, epoch, n_epochs,
              show_every_n_epochs, show_every_n_iters, save_path):
     """This function is used to pre-train the flow field generator of the anonymization model.
@@ -246,9 +306,10 @@ def preval(generator, validation_loader, gauss_filter, grid_identity, mu, mse_lo
     return mean(list_rec_loss)
 
 
-def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, verification_loss, ac_loss_weight, 
-          ver_loss_weight, optimizer_g, optimizer_ac, optimizer_ver, criterion_ac, criterion_ver, epoch, n_epochs, 
-          show_every_n_epochs, show_every_n_iters, save_path):
+def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, verification_loss, ac_loss_weight,
+          ver_loss_weight, optimizer_g, optimizer_ac, optimizers_ver, criterion_ac, criterion_ver, epoch, n_epochs,
+          show_every_n_epochs, show_every_n_iters, save_path, accumulation_steps=1, ver_active_per_step=1,
+          stochastic_lambda=0.0):
     """This function is used to train the entire anonymization model.
 
     :param generator: torch.nn.Module
@@ -276,8 +337,8 @@ def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, 
         The chosen optimizer used to train the anonymization architecture.
     :param optimizer_ac: torch.optim.Optimizer
         The chosen optimizer used to train the auxiliary classifier.
-    :param optimizer_ver: torch.optim.Optimizer
-        The chosen optimizer used to train the patient verification model.
+    :param optimizers_ver: list of torch.optim.Optimizer
+        One optimizer per patient verification model of the adversary ensemble.
     :param criterion_ac: torch.nn.Loss
         The loss to update the auxiliary classifier model.
     :param criterion_ver: torch.nn.Loss
@@ -292,6 +353,10 @@ def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, 
         An integer value indicating in which iterations the original and deformed images are added to the tensorboard.
     :param save_path: str
         Path to the folder where the tensorboard files are stored.
+    :param accumulation_steps: int
+        Number of iterations accumulated before a generator update (emulates a larger batch size).
+    :param ver_active_per_step: int
+        How many models of the adversary ensemble the generator is back-propagated through per iteration.
     :return loss_values: list
         Epoch-wise loss values.
     """
@@ -309,16 +374,7 @@ def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, 
         inputs1, inputs2, labels, labels_id = inputs1.cuda(), inputs2.cuda(), labels.cuda(), labels_id.cuda()
 
         if grid_identity is not None:
-            # Generate grids
-            grids = generator(inputs1)
-
-            # Constraints on grids
-            grids = grid_identity - mu * grids
-            grids = gauss_filter(grids)
-            grids = grids.permute(0, 2, 3, 1)
-
-            # Compute deformed images by using original input values in conjunction with pixel locations from grids
-            fakes_1 = torch.nn.functional.grid_sample(inputs1, grids, padding_mode='border', align_corners=True)
+            fakes_1 = deform(inputs1, generator, grid_identity, gauss_filter, mu, stochastic_lambda)
         else:
             fakes_1 = generator(inputs1)
 
@@ -332,10 +388,11 @@ def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, 
             writer.close()
 
         # Compute AC loss
-        ac_loss_value = ac_loss(fakes_1, labels)
+        ac_loss_value = ac_loss(fakes_1, labels, inputs1)
 
-        # Compute verification loss
-        ver_loss = verification_loss(fakes_1, inputs2)
+        # Compute verification loss against a random subset of the adversary ensemble (VRAM constraint)
+        ver_loss = verification_loss(fakes_1, inputs2,
+                                     indices=verification_loss.sample_indices(ver_active_per_step))
         log_likelihood_ver_loss = - torch.log(1 - ver_loss)
         ver_loss = ver_loss.mean()
         log_likelihood_ver_loss = log_likelihood_ver_loss.mean()
@@ -349,13 +406,17 @@ def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, 
         list_log_likelihood_ver_loss.append(log_likelihood_ver_loss.item())
         list_total_loss.append(total_loss.item())
 
-        # Optimize the flow field generator
-        optimizer_g.zero_grad()
-        total_loss.backward()
-        optimizer_g.step()
+        # Optimize the flow field generator (gradient accumulation to emulate a larger batch size).
+        # zero_grad() must NOT be called every iteration here, otherwise each step only ever sees a single
+        # batch's gradient scaled by 1/accumulation_steps instead of the sum over accumulation_steps batches.
+        (total_loss / accumulation_steps).backward()
+        if (i + 1) % accumulation_steps == 0 or (i + 1) == len(training_loader):
+            optimizer_g.step()
+            optimizer_g.zero_grad()
 
         # Set loss models to train mode
-        verification_loss.verification_model.train()
+        for ver_model in verification_loss.verification_models:
+            ver_model.train()
         ac_loss.ac_model.train()
 
         inputs1_snn = fakes_1.detach().expand(-1, 3, -1, -1)
@@ -368,17 +429,21 @@ def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, 
         inputs2_snn = normalize(inputs2_snn)
 
         # Zero the parameter gradients
-        optimizer_ver.zero_grad()
         optimizer_ac.zero_grad()
 
-        # Optimize patient verification model
-        outputs_snn = verification_loss.verification_model(inputs1_snn, inputs2_snn)
-        outputs_snn = outputs_snn.squeeze()
-        labels_id = labels_id.type_as(outputs_snn)
-        loss_ver = criterion_ver(outputs_snn, labels_id)
-        loss_ver.backward()
-        optimizer_ver.step()
-        verification_loss.verification_model.eval()
+        # Optimize every patient verification model of the adversary ensemble
+        for ver_model, opt_ver in zip(verification_loss.verification_models, optimizers_ver):
+            opt_ver.zero_grad()
+            outputs_snn = ver_model(inputs1_snn, inputs2_snn)
+            outputs_snn = outputs_snn.squeeze()
+            labels_id = labels_id.type_as(outputs_snn)
+            loss_ver = criterion_ver(outputs_snn, labels_id)
+            loss_ver.backward()
+            opt_ver.step()
+            ver_model.eval()
+
+        # Advance the warm-up counters of recently re-initialized adversaries
+        verification_loss.decrement_warmup()
 
         # Optimize auxiliary classifier
         inputs_ac = fakes_1.detach().expand(-1, 3, -1, -1)
@@ -398,7 +463,8 @@ def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, 
 
 
 def validate(generator, validation_loader, gauss_filter, grid_identity, mu, ac_loss, verification_loss, ac_loss_weight, 
-             ver_loss_weight, epoch, n_epochs, show_every_n_epochs, show_every_n_iters, save_path):
+             ver_loss_weight, epoch, n_epochs, show_every_n_epochs, show_every_n_iters, save_path,
+             stochastic_lambda=0.0):
     """This function is used to validate the entire anonymization model.
 
     :param generator: torch.nn.Module
@@ -450,16 +516,7 @@ def validate(generator, validation_loader, gauss_filter, grid_identity, mu, ac_l
             inputs1, inputs2, labels = inputs1.cuda(), inputs2.cuda(), labels.cuda()
 
             if grid_identity is not None:
-                # Generate grids
-                grids = generator(inputs1)
-
-                # Constraints on grids
-                grids = grid_identity - mu * grids
-                grids = gauss_filter(grids)
-                grids = grids.permute(0, 2, 3, 1)
-
-                # Compute deformed images by using original input values in conjunction with pixel locations from grids
-                fakes_1 = torch.nn.functional.grid_sample(inputs1, grids, padding_mode='border', align_corners=True)
+                fakes_1 = deform(inputs1, generator, grid_identity, gauss_filter, mu, stochastic_lambda)
             else:
                 fakes_1 = generator(inputs1)
 
@@ -473,7 +530,7 @@ def validate(generator, validation_loader, gauss_filter, grid_identity, mu, ac_l
                 writer.close()
 
             # Compute AC loss
-            ac_loss_value = ac_loss(fakes_1, labels)
+            ac_loss_value = ac_loss(fakes_1, labels, inputs1)
 
             # Compute verification loss
             ver_loss = verification_loss(fakes_1, inputs2)
@@ -499,7 +556,7 @@ def validate(generator, validation_loader, gauss_filter, grid_identity, mu, ac_l
 
 
 def train_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filter, mu, training_loader, criterion,
-              optimizer, epoch, n_epochs):
+              optimizer, epoch, n_epochs, stochastic_lambda=0.0):
     """This function is used to re-train the incorporated patient verification architecture with 
     deformed/perturbed/anonymized images.
 
@@ -541,19 +598,9 @@ def train_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_fil
         inputs1, inputs2, labels = inputs1.cuda(), inputs2.cuda(), labels.cuda()
 
         if perturbation_type == 'flow_field':
-            # Generate grids, impose constraints, and compute the deformed images
-            grid1 = perturbation_net(inputs1)
-            grid1 = grid_identity - mu * grid1
-            grid1 = gauss_filter(grid1)
-            grid1 = grid1.permute(0, 2, 3, 1)
-            inputs1 = torch.nn.functional.grid_sample(inputs1, grid1, padding_mode='border', align_corners=True)
-
-            # Generate grids, impose constraints, and compute the deformed images
-            grid2 = perturbation_net(inputs2)
-            grid2 = grid_identity - mu * grid2
-            grid2 = gauss_filter(grid2)
-            grid2 = grid2.permute(0, 2, 3, 1)
-            inputs2 = torch.nn.functional.grid_sample(inputs2, grid2, padding_mode='border', align_corners=True)
+            # Each image is deformed with an independent draw, so scans of the same patient are decorrelated
+            inputs1 = deform(inputs1, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda)
+            inputs2 = deform(inputs2, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda)
 
         if perturbation_type == 'privacy_net':
             # Compute Privacy-Net output
@@ -592,7 +639,7 @@ def train_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_fil
 
 
 def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filter, mu, validation_loader,
-                 criterion, epoch, n_epochs):
+                 criterion, epoch, n_epochs, stochastic_lambda=0.0):
     """This function is used to validate the incorporated patient verification architecture with
     deformed/perturbed/anonymized images.
 
@@ -633,19 +680,8 @@ def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_
             inputs1, inputs2, labels = inputs1.cuda(), inputs2.cuda(), labels.cuda()
 
             if perturbation_type == 'flow_field':
-                # Generate grids, impose constraints, and compute the deformed images
-                grid1 = perturbation_net(inputs1)
-                grid1 = grid_identity - mu * grid1
-                grid1 = gauss_filter(grid1)
-                grid1 = grid1.permute(0, 2, 3, 1)
-                inputs1 = torch.nn.functional.grid_sample(inputs1, grid1, padding_mode='border', align_corners=True)
-
-                # Generate grids, impose constraints, and compute the deformed images
-                grid2 = perturbation_net(inputs2)
-                grid2 = grid_identity - mu * grid2
-                grid2 = gauss_filter(grid2)
-                grid2 = grid2.permute(0, 2, 3, 1)
-                inputs2 = torch.nn.functional.grid_sample(inputs2, grid2, padding_mode='border', align_corners=True)
+                inputs1 = deform(inputs1, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda)
+                inputs2 = deform(inputs2, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda)
 
             if perturbation_type == 'privacy_net':
                 # Compute Privacy-Net output
@@ -678,7 +714,8 @@ def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_
     return validation_loss
 
 
-def test_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filter, mu, test_loader):
+def test_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filter, mu, test_loader,
+             stochastic_lambda=0.0):
     """This function is used to test the incorporated patient verification architecture after re-training with
     deformed/perturbed/anonymized images. This function represents a realistic attack scenario where a real image is
     attempted to be linked to an anonymized image.
@@ -726,12 +763,7 @@ def test_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filt
             inputs1, inputs2, labels = inputs1.cuda(), inputs2.cuda(), labels.cuda()
 
             if perturbation_type == 'flow_field':
-                # Generate grids, impose constraints, and compute the deformed images
-                grid1 = perturbation_net(inputs1)
-                grid1 = grid_identity - mu * grid1
-                grid1 = gauss_filter(grid1)
-                grid1 = grid1.permute(0, 2, 3, 1)
-                inputs1 = torch.nn.functional.grid_sample(inputs1, grid1, padding_mode='border', align_corners=True)
+                inputs1 = deform(inputs1, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda)
 
             if perturbation_type == 'privacy_net':
                 # Compute Privacy-Net output

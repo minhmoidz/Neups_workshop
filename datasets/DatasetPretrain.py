@@ -47,23 +47,15 @@ class DatasetPretrain(data.Dataset):
 
         self.resize = transforms.Resize((self.image_size, self.image_size))
 
-        self.images = []
-
-        for file in self.filenames:
-            # Load image
-            image = pil_loader(self.image_path + file, self.n_channels)
-            # Resize image
-            image = self.resize(image)
-            # Append image to list
-            self.images.append(image)
-
     def __len__(self):
         return len(self.filenames)
 
     def __getitem__(self, index):
-        # Get image
-        image = self.images[index]
-
+        # Load image
+        file = self.filenames[index]
+        image = pil_loader(self.image_path + file, self.n_channels)
+        # Resize image
+        image = self.resize(image)
         # Apply the transformation
         image = self.transform(image)
 

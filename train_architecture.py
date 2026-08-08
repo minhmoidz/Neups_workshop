@@ -25,7 +25,7 @@ if __name__ == "__main__":
     config = json.loads(config)
 
     # Create folder to save experiment-related files
-    os.mkdir('./archive/' + config['experiment_description'])
+    os.makedirs('./archive/' + config['experiment_description'], exist_ok=True)
     SAVINGS_PATH = './archive/' + config['experiment_description'] + '/'
     utils.make_zip(SAVINGS_PATH + config['experiment_description'] + '.zip', './', args.config)
 

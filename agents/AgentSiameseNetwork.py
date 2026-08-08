@@ -30,12 +30,13 @@ class AgentSiameseNetwork:
         self.IMAGE_PATH = self.config['image_path']
 
         # Reproducibility
-        utils.seed_all(42)
+        utils.seed_all(self.config.get('seed', 42))
 
         # Set all the important variables
         self.perturbation_type = self.config['perturbation_type']
         self.perturbation_model_file = self.config['perturbation_model_file']
         self.mu = self.config['mu']
+        self.stochastic_lambda = self.config.get('stochastic_lambda', 0.0)
 
         self.b = self.config['b']
         self.m = self.config['m']
@@ -76,11 +77,10 @@ class AgentSiameseNetwork:
         else:
             self.n_channels = 1
             if self.perturbation_type == 'flow_field':
-                self.perturbation_net = UNet(1, 2, 32).cuda()
-                self.perturbation_net.load_state_dict(torch.load(self.perturbation_model_file))
+                self.perturbation_net = utils.load_flow_generator(self.perturbation_model_file)
             elif self.perturbation_type == 'privacy_net':
                 self.perturbation_net = Unet2D_encoder(self.n_channels, self.n_channels, 16).cuda()
-                self.perturbation_net.load_state_dict(torch.load(self.perturbation_model_file))
+                self.perturbation_net.load_state_dict(torch.load(self.perturbation_model_file, weights_only=False))
             elif self.perturbation_type == 'dp_pix':
                 self.perturbation_net = None
             else:
@@ -121,10 +121,11 @@ class AgentSiameseNetwork:
 
             training_loss = utils.train_snn(self.perturbation_type, self.net, self.perturbation_net, self.grid_identity, 
                                             self.gauss_filter, self.mu, self.training_loader, self.loss, self.optimizer, 
-                                            epoch, self.max_epochs)
+                                            epoch, self.max_epochs, stochastic_lambda=self.stochastic_lambda)
             validation_loss = utils.validate_snn(self.perturbation_type, self.net, self.perturbation_net, 
                                                  self.grid_identity, self.gauss_filter, self.mu, self.validation_loader, 
-                                                 self.loss, epoch, self.max_epochs)
+                                                 self.loss, epoch, self.max_epochs,
+                                                 stochastic_lambda=self.stochastic_lambda)
 
             self.loss_dict['training'].append(training_loss)
             self.loss_dict['validation'].append(validation_loss)
@@ -151,7 +152,8 @@ class AgentSiameseNetwork:
     def testing_evaluation(self):
         # Testing phase
         y_true, y_pred = utils.test_snn(self.perturbation_type, self.best_net, self.perturbation_net, 
-                                        self.grid_identity, self.gauss_filter, self.mu, self.test_loader)
+                                        self.grid_identity, self.gauss_filter, self.mu, self.test_loader,
+                                        stochastic_lambda=self.stochastic_lambda)
 
         y_true, y_pred = [y_true.numpy(), y_pred.numpy()]
 

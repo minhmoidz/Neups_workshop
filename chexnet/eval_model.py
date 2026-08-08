@@ -17,7 +17,7 @@ import chexnet.cxr_dataset as CXR
 
 
 def make_pred_multilabel(data_transforms, model, image_path, save_path, perturbation_type='none', 
-                         perturbation_checkpoint=None, mu=None, b=None, m=None, eps=None):
+                         perturbation_checkpoint=None, mu=None, b=None, m=None, eps=None, stochastic_lambda=0.0):
     """Gives predictions for test fold and calculates AUCs using pre-trained classifier model.
 
     :param data_transforms: torchvision.transforms
@@ -70,7 +70,7 @@ def make_pred_multilabel(data_transforms, model, image_path, save_path, perturba
     true_df = pd.DataFrame(columns=["Image Index"])
 
     if perturbation_type == 'flow_field':
-        perturbation_model = UNet(1, 2, 32).cuda()
+        perturbation_model = UNet(1, perturbation_checkpoint['conv.weight'].shape[0], 32).cuda()
         perturbation_model.load_state_dict(perturbation_checkpoint)
         perturbation_model.eval()
 
@@ -98,11 +98,7 @@ def make_pred_multilabel(data_transforms, model, image_path, save_path, perturba
         inputs, labels = Variable(inputs.cuda()), Variable(labels.cuda())
 
         if perturbation_type == 'flow_field':
-            grid = perturbation_model(inputs)
-            grid = grid_identity - mu * grid
-            grid = gauss_filter(grid)
-            grid = grid.permute(0, 2, 3, 1)
-            inputs = torch.nn.functional.grid_sample(inputs, grid, padding_mode='border', align_corners=True)
+            inputs = utils.deform(inputs, perturbation_model, grid_identity, gauss_filter, mu, stochastic_lambda)
 
         if perturbation_type == 'privacy_net':
             inputs = perturbation_model(inputs)

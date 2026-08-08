@@ -1,0 +1,14 @@
+{
+	"image_path": "/data/images/",
+	"save_path": "./chexnet/results/test_baseline_none/",
+	"classifier_checkpoint": "./networks/pretrained_classifier.pth",
+	"seed": 42,
+
+	"perturbation_type": "none",
+	"perturbation_model_file": null,
+	"mu": 0.01,
+
+	"b": null,
+	"m": null,
+	"eps": null
+}

@@ -2,3 +2,30 @@
 __pycache__
 .vscode
 .DS_Store
+
+# Model weights & large binaries — never commit
+*.pth
+*.pt
+*.ckpt
+*.onnx
+*.tar
+*.zip
+*.png
+
+# Dataset images
+data/
+
+# Training run outputs (weights, tensorboard, 20 GB) — keep only text results
+archive/
+
+# Downstream eval scratch
+segmentation/
+chexnet/results/
+
+# Logs and status scratch
+*.log
+_status.txt
+stage3_status.txt
+
+# Experiment-local generated configs
+config_files/retrain_snn_seed*.json

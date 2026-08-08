@@ -1,0 +1,525 @@
+Deep Learning-based Anonymization of Chest
+Radiographs: A Utility-preserving Measure for
+Patient Privacy
+Kai Packh¨ auser, Sebastian G¨ undel, Florian Thamm, Felix Denzinger, and
+Andreas Maier
+Friedrich-Alexander-Universit¨ at Erlangen-N¨ urnberg, Erlangen, Germany
+kai.packhaeuser@fau.de
+Abstract. Robust and reliable anonymization of chest radiographs con-
+stitutes an essential step before publishing large datasets of such for re-
+search purposes. The conventional anonymization process is carried out
+by obscuring personal information in the images with black boxes and
+removing or replacing meta-information. However, such simple measures
+retain biometric information in the chest radiographs, allowing patients
+to be re-identified by a linkage attack. Therefore, there is an urgent
+need to obfuscate the biometric information appearing in the images. We
+propose the first deep learning-based approach (PriCheXy-Net) to tar-
+getedly anonymize chest radiographs while maintaining data utility for
+diagnostic and machine learning purposes. Our model architecture is a
+composition of three independent neural networks that, when collectively
+used, allow for learning a deformation field that is able to impede pa-
+tient re-identification. Quantitative results on the ChestX-ray14 dataset
+show a reduction of patient re-identification from 81.8 % to 57.7 % (AUC)
+after re-training with little impact on the abnormality classification per-
+formance. This indicates the ability to preserve underlying abnormality
+patterns while increasing patient privacy. Lastly, we compare our pro-
+posed anonymization approach with two other obfuscation-based meth-
+ods (Privacy-Net, DP-Pix) and demonstrate the superiority of our me-
+thod towards resolving the privacy-utility trade-off for chest radiographs.
+Keywords: Image Anonymization · Patient Privacy · Data Utility.
+1 Introduction
+Deep learning (DL) [19] has positively contributed to the development of diag-
+nostic algorithms for the detection and classification of lung diseases in recent
+years [11,20]. This progress can largely be attributed to the availability of pub-
+lic chest X-ray datasets [4,5,14,15,27]. However, as chest radiographs inherently
+contain biometric information (similar to a fingerprint), the public release of such
+data bears the risk of automated patient re-identification by DL-based linkage
+attacks [22]. This would allow patient-related information, e. g., age, gender, or
+disease findings to be revealed. Therefore, there is an urgent need for stronger
+privacy mechanisms for chest X-ray data to alleviate the risk of linkage attacks.
+arXiv:2209.11531v2  [eess.IV]  24 Jul 2023
+2 K. Packh¨ auser et al.
+Perturbation-based anonymization approaches [16] – such as differential pri-
+vacy (DP) [7,8] – have become the gold standard to obfuscate biometric identi-
+fiers from sensitive data. Such approaches are based on the postulate that the
+global statistical distribution of a dataset is retained while personal information
+is reduced. This can be realized by applying randomized modifications, i. e. noise,
+to either the inputs [2,6,8], the computational results, or to algorithms [1,28]. Al-
+though originally proposed for statistical data, DP has been extended to image
+data with the differentially private pixelization method (DP-Pix) [9,10]. This me-
+thod involves pixelizing an image by averaging the pixel values of each b × b grid
+cell, followed by adding Laplace noise with 0 mean and 255m
+b2ϵ scale. Parameter ϵ
+is used to determine the privacy budget (smaller values indicate greater privacy),
+while the m-neighborhood represents a sensitivity factor. However, one major
+drawback of perturbation-based anonymization is the potential degradation of
+image quality and an associated reduction in data utility.
+In recent years, DL has emerged as a prominent tool for anonymizing medical
+images. In this context, synthetic image generation with privacy guarantees is
+currently actively explored, aimed at creating fully anonymous medical image
+datasets [21,24]. Furthermore, adversarial approaches – such as Privacy-Net [17]
+– have been proposed, which focus on concealing biometric information while
+maintaining data utility. Privacy-Net is composed of a U-Net encoder that pre-
+dicts an anonymized image, an identity discriminator, and a task-specific seg-
+mentation network. Through the dual process of deceiving the discriminator and
+optimizing the segmentation network, the encoder acquires the ability to obfus-
+cate patient-specific patterns, while preserving those necessary for the down-
+stream task. However, while originally designed for utility preservation on MRI
+segmentation tasks, the direct applicability and transferability of Privacy-Net to
+other image modalities and downstream tasks (e. g. chest X-ray classification) is
+limited. As we will experimentally demonstrate in our study, more sophisticated
+constraints are required for the utility-preserving anonymization of chest radio-
+graphs in order to successfully maintain fine-grained abnormality details that
+are crucial for reliable classification tasks.
+In this work, we aim to resolve the privacy-utility trade-off by proposing the –
+to the best of our knowledge – first adversarial image anonymization approach
+for chest radiography data. Our proposed model architecture (PriCheXy-Net) is
+a composition of three independent neural networks that collectively allow for
+the learning of targeted image deformations to deceive a well-trained patient
+verification model. We apply our method to the publicly available ChestX-ray14
+dataset [27] and evaluate the impact of different deformation degrees on ano-
+nymization capability and utility preservation. To evaluate the effectiveness of
+image anonymization, we perform linkage attacks on anonymized data and an-
+alyze the respective success rates. Furthermore, to quantify the extent of data
+utility preservation despite the induced image deformations, we compare the per-
+formance of a trained thoracic abnormality classification system on anonymized
+images versus the performance on real data. Throughout our study, we utilize
+Privacy-Net [17] and DP-Pix [9,10] as baseline obfuscation methods.
+Deep Learning-based Anonymization of Chest Radiographs 3
+(1)
+Flow Field Generator G
+w/ parameters θG
+Verification Network
+w/ parameters θver 
+(3)
+SNN
+U-Net
+x2
+yv^
+x1, yc
+Auxiliary Classifier
+w/ parameters θaux
+(2)
+CheXNet yc^
+F(x1)F
+Fig. 1. PriCheXy-Net:Proposed adversarial image anonymization architecture.
+2 Methods
+2.1 Data
+We use X-ray data from the ChestX-ray14 dataset [27], a large-scale collection
+of 112 ,120 frontal-view chest radiographs from 30 ,805 unique patients. The 8-
+bit gray-scale images are provided with a resolution of 1024 ×1024 pixels. We
+resize the images to a size of 256 ×256 pixels for further processing. On average,
+the dataset contains ≈ 3.6 images per patient. The corresponding 14 abnormal-
+ity labels include Atelectasis, Cardiomegaly, Consolidation, Edema, Effusion,
+Emphysema, Fibrosis, Hernia, Infiltration, Mass, Nodule, Pleural Thickening,
+Pneumonia, and Pneumothorax. A patient-wise splitting strategy is applied to
+roughly divide the data into a training, validation, and test set by ratio 70:10:20,
+respectively. Based on this split, we utilize available follow-up scans to randomly
+construct positive image pairs (two unique images from the same patient) and
+negative image pairs (two unique images from two different patients) – 10,000
+for training, 2,000 for validation, and 5,000 for testing. The resulting subsets are
+balanced with respect to the number of positive and negative samples.
+2.2 PriCheXy-Net: Adversarial Image Anonymization
+The proposed adversarial image anonymization approach is depicted in Fig. 1.
+It is composed of three trainable components: (1) A U-Net generator G that
+predicts a flow field F used to deform the original image x1 of abnormality
+class yc, (2) an auxiliary classifier that takes the modified image F (x1) resulting
+in corresponding class predictions ˆyc, and (3) a siamese neural network (SNN)
+that receives the deformed image F (x1) as well as another real image x2 of either
+the same or a different patient and yields the similarity score ˆ yv for patient
+verification. The U-Net serves as an anonymization tool aiming to obfuscate
+biometric information through targeted image deformations, while the auxiliary
+classifier and the patient verification model contribute as guidance to optimize
+the flow field generator.
+4 K. Packh¨ auser et al.
+U-Net. The U-Net [26] architecture is implemented according to Buda et al. [3].
+Its last sigmoid activation function is replaced by a hyperbolic tangent activation
+function to predict a 2-channel flow field F , bounded by [−1, 1]. During training,
+especially in early stages, the raw output of the U-Net may lead to random
+deformations that destroy the content of the original images, thus revoking the
+diagnostic utility. To circumvent this issue, the following constraints are imposed
+for F . First, to ensure that the learned flow fieldF does not substantially deviate
+from the identity Fid, it is weighted with factor µ and subsequently subtracted
+from the identity according to
+F = Fid − µF . (1)
+Factor µ controls the degree of deformation, with larger values allowing for more
+deformation. Note that the exclusive use of Fid would result in the original
+image, i. e., x = F (x), assuming the deformation factor is being set to µ = 0.
+The resulting flow field F is Gaussian filtered (kernel size 9, σ = 2) to ensure
+smooth deformations in the final image. The corresponding parameters were
+selected manually in preliminary experiments.
+Auxiliary Classifier. To ensure the preservation of underlying abnormal-
+ity patterns and image utility during deformation, PriCheXy-Net integrates
+an auxiliary classifier using CheXNet [25], a densely connected convolutional
+network (DenseNet) [13] consisting of 121 layers. It outputs a 14-dimensional
+probability vector ˆyc indicating the presence or absence of each abnormality ap-
+pearing in the ChestX-ray14 dataset. Its parameters θaux are initialized using a
+pre-trained model that achieves a mean AUC of 80.5 %.
+Patient V erification Network. The incorporated patient verification model
+is represented by the SNN architecture presented by Packh¨ auser et al. [22],
+consisting of two ResNet-50 [12] branches that are merged using the absolute
+difference of their resulting 128-dimensional feature vectors. A fully-connected
+layer with a sigmoid activation function produces the final verification score ˆyv in
+the value range of [0, 1], indicating the probability of whether or not the two input
+images belong to the same patient. For initializing the network parameters θver,
+we employ a pre-trained network that has been created according to [22] yielding
+an AUC value of 99 .4 % for a patient verification task.
+2.3 Objective F unctions
+Similar to most adversarial models, our system undergoes training through the
+use of dual loss functions that guide the model towards opposing directions. To
+enforce the U-Net not to eliminate important class information while deforming a
+chest radiograph, we introduce the auxiliary classifier lossLaux(θG, θaux) realized
+by the class-wise binary cross entropy (BCE) loss according to Eq. 2
+Laux(θG, θaux) = −
+14X
+i=1
+[yc,i log(ˆyc,i) + (1 − yc,i) log(1 − ˆyc,i)] , (2)
+Deep Learning-based Anonymization of Chest Radiographs 5
+where i represents one out of 14 abnormality classes. Conversely, to guide the
+U-Net with deceiving the incorporated patient verification model, we utilize its
+output as an additional verification loss term Lver(θG, θver) (see Eq. 3):
+Lver(θG, θver) = − log(1 − ˆyv) , with ˆyv = SNN
+ 
+F (x1), x2
+
+(3)
+The total loss to be minimized (see Eq. 4) results from the sum of the two partial
+losses Laux(θG, θaux) and Lver(θG, θver):
+arg min
+θG
+L(θG, θaux, θver) = Laux(θG, θaux) + Lver(θG, θver) (4)
+Lastly, both the auxiliary classifier and the verification model are updated by
+minimizing the loss terms in Eq. 5 and Eq. 6, respectively. Note that the similar-
+ity labels for positive and negative pairs are encoded using yv = 1 and yv = 0.
+arg min
+θaux
+L(θG, θaux) (5) arg min
+θver
+[−yv log ˆyv − (1 − yv) log(1 − ˆyv)] (6)
+3 Experiments and Results
+3.1 Experimental Setup
+For all experiments, we used PyTorch (1.10.2) [23] and Python (3.9.5). We fol-
+lowed a multi-part experimental setup consisting of the following steps.
+Pre-training of the flow field generator. The incorporated U-Net architec-
+ture was pre-trained on an autoencoder-like reconstruction task for 200 epochs
+using the mean squared error (MSE) loss, Adam [18], a batch size of 64 and a
+learning rate of 10 −4 to enable faster convergence. The model that performed
+best on the validation set was then used for weight initialization in step 2.
+T raining of PriCheXy-Net. After pre-training, PriCheXy-Net was trained
+in an end-to-end fashion for 250 epochs using the Adam optimizer [18], a batch
+size of 64 and a learning rate of 10 −4 using the objective functions presented
+above. To evaluate the effect of the deformation degree µ on anonymization
+capability and image utility, we performed multiple training runs with various
+values µ ∈ {0.001, 0.005, 0.01}. For each configuration, the U-Net that performed
+best on the validation set was then used for further evaluations in steps 3 and 4.
+Re-training and evaluation of the verification model. To assess the ano-
+nymization capability of PriCheXy-Net and to determine if the anonymized im-
+ages can reliably deceive the verification model, we re-trained the incorporated
+SNN for each model configuration by using deformed images only. We then sim-
+ulated multiple linkage attacks by comparing deformed images with real ones.
+Training was conducted until early stopping (patience p = 5) using the BCE
+loss, the Adam optimizer [18], a batch size of 32 and a learning rate of 10 −4.
+For each model configuration, we performed 10 independent training and testing
+runs. We report the means and standard deviations of the resulting AUC values.
+6 K. Packh¨ auser et al.
+Evaluation of the classification model on anonymized data.To assess the
+extent to which underlying abnormalities, and thus data utility, were preserved
+during the anonymization process, each individually trained anonymization net-
+work was used to perturb the images of our test set. Then, the pre-trained aux-
+iliary classifier was evaluated using the resulting images. We report the mean of
+the 14 class-wise AUC values. To quantify the uncertainty, the 95 % confidence
+intervals (CIs) from 1,000 bootstrap runs were computed.
+Comparison with other obfuscation-based methods. To compare our pro-
+posed system with other obfuscation-based methods, we additionally analyzed
+the anonymization capability and utility preservation of Privacy-Net [17] and
+DP-Pix [9,10]. Since Privacy-Net was originally proposed for segmentation tasks,
+we replaced its segmentation component with the auxiliary classifier. Then, the
+network was trained and evaluated in the exact same setting as PriCheXy-Net.
+For DP-Pix, we investigated the effect of different cell sizes b ∈ {1, 2, 4, 8} at a
+common privacy budget ϵ = 0.1. The m-neighborhood was set to the smallest
+possible value (m = 1) to prevent the added Laplace noise (mean: 0; scale: 255m
+b2ϵ )
+from destroying the complete content of the images.
+T able 1.Quantitative comparison of all examined methods. The baseline performance
+results from leveraging non-anonymized real data. Verification: AUC (mean ± std)
+over 10 independent training and testing runs; Classification: mean AUC + 95 % CIs.
+Performance scores of 50 % indicate random decisions.
+Baseline Privacy-Net PriCheXy-Net (Ours)
+T ask (real data) [17] µ = 0.001 µ = 0.005 µ = 0.01
+Ver. ↓ 81.8 ± 0.6 49 .8 ± 2.2 74 .7 ± 2.6 64 .3 ± 5.8 57 .7 ± 4.0
+Class. ↑ 80.5 80.9
+80.1 57.5 58.1
+56.9 80.4 80.8
+79.9 79.3 79.7
+78.9 76.2 76.6
+75.8
+DP-Pix [9,10]
+b = 1 b = 2 b = 4 b = 8
+Ver. ↓ 81.8 ± 0.6 50 .0 ± 0.7 50 .4 ± 0.6 51 .8 ± 1.3 52 .5 ± 3.2
+Class. ↑ 80.5 80.9
+80.1 50.0 50.6
+49.4 50.3 51.0
+49.7 52.7 53.3
+52.0 52.9 53.5
+52.2
+3.2 Results
+Baseline and comparison methods. The results of all conducted experiments
+are shown in Table 1. Compared to real (non-anonymized) data, which enables
+a successful re-identification with an AUC of 81.8 %, the patient verification
+performance desirably decreases after applying DP-Pix (50.0 % - 52.5 %) and
+Privacy-Net (49.8 %). However, while the classification performance on real data
+indicates a high data utility with a mean AUC of 80.5 %, we observe a sharp
+drop for images that have been modified with DP-Pix (50.0 % - 52.9 %) and
+Deep Learning-based Anonymization of Chest Radiographs 7
+50 55 60 65 70 75 80
+50
+60
+70
+80
+U tility
+P rivacy
+Abnormality Classification Performance
+Patient Verification Performance
+Real data DP-Pix Privacy-Net PriCheXy-Net (Ours)
+Fig. 2.Visual illustration of the results and the associated privacy-utility trade-off.
+The patient verification performance (y-axis) measures the amount of privacy, whereas
+the abnormality classification performance (x-axis) represents the level of data utility.
+(a) real
+ (b) µ = 0.001
+ (c) µ = 0.005
+ (d) µ = 0.01
+Fig. 3.Chest radiographs resulting from PriCheXy-Net when using different deforma-
+tion degrees µ. Images were cropped to better highlight the diagnostically relevant area.
+Privacy-Net (57.5 %). This suggests that relevant class information and specific
+abnormality patterns are destroyed during the obfuscation process. Resulting
+example images for both comparison methods are provided in Suppl. Fig. 1.
+PriCheXy-Net. The results of our proposed PriCheXy-Net (see Table 1) show
+more promising behavior. As can be seen, increasing deformation degrees µ lead
+to a successive decline in patient verification performance. Compared to the
+baseline, the AUC decreases to 74.7 % ( µ = 0.001), to 64.3 % ( µ = 0.005), and
+to 57.7 % ( µ = 0 .01), indicating a positive effect on patient privacy and the
+obfuscation of biometric information. In addition, PriCheXy-Net hardly results
+in a loss of data utility, as characterized by the constantly high classification
+performance with a mean AUC of 80.4 % ( µ = 0.001), 79.3 % (µ = 0.005), and
+76.2 % (µ = 0 .01). These findings are further visualized in the privacy-utility
+trade-off plot in Fig. 2. In contrast to the examined comparison methods, the
+data point corresponding to our best experiment with PriCheXy-Net (green) lies
+near the top right corner, highlighting the capability to closely satisfy both ob-
+8 K. Packh¨ auser et al.
+jectives in the privacy-utility trade-off. Examples of deformed chest radiographs
+resulting from a trained model of PriCheXy-Net are shown in Fig. 3. More ex-
+amples are given in Suppl. Fig. 1. Difference maps are provided in Suppl. Fig. 2.
+4 Discussion and Conclusion
+To the best of our knowledge, we presented the first adversarial approach to
+anonymize thoracic images while preserving data utility for diagnostic purposes.
+Our proposed anonymization approach – PriCheXy-Net – is a composition of
+three independent neural networks consisting of (1) a flow field generator, (2) an
+auxiliary classifier, and (3) a patient verification network. In this work, we were
+able to show that collective utilization of these three components enables learn-
+ing of a flow field that targetedly deforms chest radiographs and thus reliably
+deceives a patient verification model, even after re-training was performed. For
+the best hyper-parameter configuration of PriCheXy-Net, the re-identification
+performance drops from 81 .8 % to 57 .7 % in AUC for a simulated linkage at-
+tack, whereas the abnormality classification performance only decreases from
+80.5 % to 76 .2 %, which indicates the effectiveness of the proposed approach.
+We strongly hypothesize that the promising performance of PriCheXy-Net can
+be largely attributed to the constraints imposed on the learned flow field F .
+The limited deviation of the flow field from the identity (cf. Eq. 1) ensures a
+realistic appearance of the resulting deformed image to a considerable extent,
+thereby avoiding its content from being completely destroyed. This idea has
+a positive impact on preserving relevant abnormality patterns in chest radio-
+graphs, while allowing adequate scope to obfuscate biometric information. Such
+domain-specific constraints are not integrated in examined comparison methods
+such as Privacy-Net (which directly predicts an anonymized image without en-
+suring realism) and DP-Pix (which does not contain any mechanism to maintain
+data utility). This is, as we hypothesize, the primary reason for their limited abil-
+ity to preserve data utility and the overall superiority of our proposed system.
+Interestingly, PriCheXy-Net’s deformation fields primarily focus on anatomical
+structures, including lungs and ribs, as demonstrated in Fig. 3, Suppl. Fig. 1,
+and Suppl. Fig. 2. This observation aligns with Packh¨ auser et al.’s previous find-
+ings [22], which revealed that these structures contain the principal biometric
+information in chest radiographs.
+In future work, we aim to further improve the performance of PriCheXy-
+Net by incorporating additional components into its current architecture. For
+instance, we plan to integrate a discriminator loss into the model, which may
+positively contribute to achieving perceptual realism. Furthermore, we also con-
+sider implementing a region of interest segmentation step into the pipeline to
+ensure not to perturb diagnostically relevant image areas. Lastly, we hypothe-
+size that our method is robust to variations in image size or compression rate,
+and posit its applicability beyond chest X-rays to other imaging modalities as
+well. However, confirmation of these hypotheses requires further exploration to
+be conducted in forthcoming studies.
+Deep Learning-based Anonymization of Chest Radiographs 9
+Data use declaration. This research study was conducted retrospectively us-
+ing human subject data made available in open access by the National Institutes
+of Health (NIH) Clinical Center [27]. Ethical approval was not required as con-
+firmed by the license attached with the open-access data.
+Code availability . The source code of this study has been made available at
+https://github.com/kaipackhaeuser/PriCheXy-Net.
+Acknowledgments. The research leading to these results has received funding
+from the European Research Council (ERC) under the European Union’s Hori-
+zon 2020 research and innovation program (ERC Grant no. 810316). The au-
+thors gratefully acknowledge the scientific support and HPC resources provided
+by the Erlangen National High Performance Computing Center (NHR@F AU) of
+the Friedrich-Alexander-Universit¨ at Erlangen-N¨ urnberg (F AU). The hardware is
+funded by the German Research Foundation (DFG). The authors declare that
+they have no conflicts of interest.
+References
+1. Abadi, M., Chu, A., Goodfellow, I., McMahan, H.B., Mironov, I., Talwar, K.,
+Zhang, L.: Deep Learning with Differential Privacy. In: Proceedings of the 2016
+ACM SIGSAC Conference on Computer and Communications Security. pp. 308–
+318 (2016)
+2. Bu, Z., Dong, J., Long, Q., Su, W.J.: Deep Learning with Gaussian Differential
+Privacy. Harvard Data Science Review 2020(23) (2020)
+3. Buda, M., Saha, A., Mazurowski, M.A.: Association of genomic subtypes of lower-
+grade gliomas with shape features automatically extracted by a deep learning al-
+gorithm. Computers in Biology and Medicine 109 (2019)
+4. Bustos, A., Pertusa, A., Salinas, J.M., de la Iglesia-Vay´ a, M.: PadChest: A large
+chest x-ray image dataset with multi-label annotated reports. Medical Image Anal-
+ysis 66, 101797 (2020)
+5. Cohen, J.P., Morrison, P., Dao, L., Roth, K., Duong, T.Q., Ghassemi, M.: COVID-
+19 Image Data Collection: Prospective Predictions Are the Future. arXiv preprint
+arXiv:2006.11988 (2020)
+6. Dong, J., Roth, A., Su, W.J.: Gaussian Differential Privacy. arXiv preprint
+arXiv:1905.02383 (2019)
+7. Dwork, C.: Differential Privacy: A Survey of Results. In: International Conference
+on Theory and Applications of Models of Computation. pp. 1–19. Springer (2008)
+8. Dwork, C., McSherry, F., Nissim, K., Smith, A.: Calibrating Noise to Sensitivity
+in Private Data Analysis. In: Theory of Cryptography Conference. pp. 265–284.
+Springer (2006)
+9. Fan, L.: Image Pixelization with Differential Privacy. In: IFIP Annual Conference
+on Data and Applications Security and Privacy. pp. 148–162. Springer (2018)
+10. Fan, L.: Differential Privacy for Image Publication. In: Theory and Practice of
+Differential Privacy (TPDP) Workshop. vol. 1, p. 6 (2019)
+11. G¨ undel, S., Grbic, S., Georgescu, B., Liu, S., Maier, A., Comaniciu, D.: Learning to
+Recognize Abnormalities in Chest X-Rays with Location-Aware Dense Networks.
+In: Iberoamerican Congress on Pattern Recognition. pp. 757–765. Springer (2018)
+10 K. Packh¨ auser et al.
+12. He, K., Zhang, X., Ren, S., Sun, J.: Deep Residual Learning for Image Recogni-
+tion. In: Proceedings of the IEEE Conference on Computer Vision and Pattern
+Recognition. pp. 770–778 (2016)
+13. Huang, G., Liu, Z., Van Der Maaten, L., Weinberger, K.Q.: Densely Connected
+Convolutional Networks. In: Proceedings of the IEEE Conference on Computer
+Vision and Pattern Recognition. pp. 4700–4708 (2017)
+14. Irvin, J., Rajpurkar, P., Ko, M., Yu, Y., Ciurea-Ilcus, S., Chute, C., Marklund, H.,
+Haghgoo, B., Ball, R., Shpanskaya, K., et al.: CheXpert: A Large Chest Radiograph
+Dataset with Uncertainty Labels and Expert Comparison. In: Proceedings of the
+AAAI Conference on Artificial Intelligence. vol. 33, pp. 590–597 (2019)
+15. Johnson, A.E., Pollard, T.J., Berkowitz, S.J., Greenbaum, N.R., Lungren, M.P.,
+Deng, C.y., Mark, R.G., Horng, S.: MIMIC-CXR, a de-identified publicly available
+database of chest radiographs with free-text reports. Scientific Data 6(1), 1–8
+(2019)
+16. Kaissis, G.A., Makowski, M.R., R¨ uckert, D., Braren, R.F.: Secure, privacy-
+preserving and federated machine learning in medical imaging. Nature Machine
+Intelligence 2(6), 305–311 (2020)
+17. Kim, B.N., Dolz, J., Jodoin, P.M., Desrosiers, C.: Privacy-Net: An Adversarial
+Approach for Identity-Obfuscated Segmentation of Medical Images. IEEE Trans-
+actions on Medical Imaging 40(7), 1737–1749 (2021)
+18. Kingma, D.P., Ba, J.: Adam: A Method for Stochastic Optimization. arXiv preprint
+arXiv:1412.6980 (2014)
+19. LeCun, Y., Bengio, Y., Hinton, G.: Deep learning. Nature 521(7553), 436–444
+(2015)
+20. Maier, A., Syben, C., Lasser, T., Riess, C.: A gentle introduction to deep learning
+in medical image processing. Zeitschrift f¨ ur Medizinische Physik 29(2), 86–101
+(2019)
+21. Packh¨ auser, K., Folle, L., Thamm, F., Maier, A.: Generation of Anonymous Chest
+Radiographs Using Latent Diffusion Models for Training Thoracic Abnormality
+Classification Systems. arXiv preprint arXiv:2211.01323 (2022)
+22. Packh¨ auser, K., G¨ undel, S., M¨ unster, N., Syben, C., Christlein, V., Maier, A.: Deep
+learning-based patient re-identification is able to exploit the biometric nature of
+medical chest X-ray data. Scientific Reports 12(1), 1–13 (2022)
+23. Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, T.,
+Lin, Z., Gimelshein, N., Antiga, L., et al.: PyTorch: An Imperative Style, High-
+Performance Deep Learning Library. Advances in Neural Information Processing
+Systems 32, 8026–8037 (2019)
+24. Pinaya, W.H., Tudosiu, P.D., Dafflon, J., Da Costa, P.F., Fernandez, V., Nachev,
+P., Ourselin, S., Cardoso, M.J.: Brain Imaging Generation with Latent Diffusion
+Models. In: Deep Generative Models: Second MICCAI Workshop, DGM4MICCAI
+2022, Held in Conjunction with MICCAI 2022, Singapore, September 22, 2022,
+Proceedings. pp. 117–126. Springer (2022)
+25. Rajpurkar, P., Irvin, J., Zhu, K., Yang, B., Mehta, H., Duan, T., Ding, D., Bagul,
+A., Langlotz, C., Shpanskaya, K., et al.: CheXNet: Radiologist-Level Pneumonia
+Detection on Chest X-rays with Deep Learning. arXiv preprint arXiv:1711.05225
+(2017)
+26. Ronneberger, O., Fischer, P., Brox, T.: U-Net: Convolutional Networks for Biomed-
+ical Image Segmentation. In: International Conference on Medical Image Comput-
+ing and Computer-Assisted Intervention. pp. 234–241. Springer (2015)
+Deep Learning-based Anonymization of Chest Radiographs 11
+27. Wang, X., Peng, Y., Lu, L., Lu, Z., Bagheri, M., Summers, R.M.: ChestX-ray8:
+Hospital-Scale Chest X-ray Database and Benchmarks on Weakly-Supervised Clas-
+sification and Localization of Common Thorax Diseases. In: Proceedings of the
+IEEE Conference on Computer Vision and Pattern Recognition. pp. 2097–2106
+(2017)
+28. Ziller, A., Usynin, D., Braren, R., Makowski, M., Rueckert, D., Kaissis, G.: Med-
+ical imaging deep learning with differential privacy. Scientific Reports 11(1), 1–8
+(2021)
+12 K. Packh¨ auser et al.
+Example 1
+PriCheXy-Net
+μ = 0.001
+PriCheXy-Net
+μ = 0.005
+PriCheXy-Net
+μ = 0.01 realPrivacy-NetDP-Pix
+b = 1
+DP-Pix
+b = 2
+DP-Pix
+b = 8
+DP-Pix
+b = 4
+Example 2 Example 3 Example 4
+Suppl. Fig. 1.Example images resulting from different obfuscation-based anonymiza-
+tion techniques at various hyper-parameter configurations. Row 1: Real chest X-rays.
+Rows 2-4: PriCheXy-Net (ours). Row 5: Privacy-Net. Rows 6-9: DP-Pix.
+Deep Learning-based Anonymization of Chest Radiographs 13
+Example 1
+PriCheXy-Net
+μ = 0.001
+PriCheXy-Net
+μ = 0.005
+PriCheXy-Net
+μ = 0.01 real
+Example 2 Example 3 Example 4
+Suppl. Fig. 2.Visualizations of difference maps computed according to |x − F (x)| ,
+with F being the learned deformation field that is applied to an image x. As shown,
+PriCheXy-Net targets anatomical structures, such as lungs and ribs, which contain the
+principal biometric information in chest radiographs.
+Algorithm 1: Training procedure.
+Input : Images X1 ,
+Images X2 ,
+Class labels Yc ,
+Similarity labels Yv
+Output: Network parameters θG
+/* Network initialization */
+Initialize network parametersθG , θaux , θver ;
+/* Main loop */
+for epoch = 1, ..., Emax do
+for iter = 1, ..., Imax do
+/* Random batch selection */
+Randomly select batchB;
+/* Update flow field generator */
+Update θG according to Eq. 4;
+/* Update auxiliary classifier */
+Update θaux according to Eq. 5;
+/* Update verification network */
+Update θver according to Eq. 6;
+end
+end
+return θG;
+Algorithm 2: Inference procedure.
+Input : Image x,
+Network parameters θG
+Output: Anonymized image F (x)
+/* Network initialization */
+Initialize flow field generatorG with learned
+network parameters θG;
+/* Flow field prediction */
+Predict the flow fieldF for image x by
+applying the flow field generatorG;
+/* Image anonymization */
+Generate anonymized imageF (x) by applying
+the predicted flow fieldF to image x;
+return F (x);
+Suppl. Fig. 3.Pseudocode that outlines the training procedure (Algorithm 1) and the
+inference procedure (Algorithm 2), respectively.

@@ -1,10 +1,11 @@
 {
-	"image_path": "/path/to/images/",
+	"image_path": "/data/images/",
 	"save_path": "./chexnet/results/test/",
 	"classifier_checkpoint": "./networks/pretrained_classifier.pth",
+	"seed": 42,
 
 	"perturbation_type": "flow_field",
-	"perturbation_model_file": "./networks/generator_lowest_total_loss_mu_0.01.pth",
+	"perturbation_model_file": "./archive/train_prichexy_net_run_1/generator_lowest_total_loss.pth",
 	"mu": 0.01,
 
 	"b": null,

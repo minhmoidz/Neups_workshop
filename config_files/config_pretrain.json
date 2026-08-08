@@ -1,6 +1,6 @@
 {
-	"experiment_description": "EXPERIMENT_DESCRIPTION",
-	"image_path": "/path/to/images/",
+	"experiment_description": "pretrain_flow_field",
+	"image_path": "/data/images/",
 
 	"generator_type": "flow_field",
 	"image_size": 256,

@@ -163,7 +163,7 @@ def train_model(model, criterion, optimizer, LR, num_epochs, dataloaders, datase
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
 
     # load best model weights to return
-    checkpoint_best = torch.load(SAVE_PATH + 'checkpoint')
+    checkpoint_best = torch.load(SAVE_PATH + 'checkpoint', weights_only=False)
     model = checkpoint_best['model']
 
     return model, best_epoch

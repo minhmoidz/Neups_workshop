@@ -52,13 +52,14 @@ if __name__ == "__main__":
             ]),
     }
 
-    checkpoint_best = torch.load(classifier_checkpoint)
+    checkpoint_best = torch.load(classifier_checkpoint, weights_only=False)
     model = checkpoint_best['model']
 
     if perturbation_model_file is not None:
-        perturbation_checkpoint = torch.load(perturbation_model_file)
+        perturbation_checkpoint = torch.load(perturbation_model_file, weights_only=False)
     else:
         perturbation_checkpoint = None
 
-    preds, aucs = E.make_pred_multilabel(data_transforms, model, image_path, save_path, perturbation_type, 
-                                         perturbation_checkpoint, mu, b, m, eps)
+    preds, aucs = E.make_pred_multilabel(data_transforms, model, image_path, save_path, perturbation_type,
+                                         perturbation_checkpoint, mu, b, m, eps,
+                                         config.get('stochastic_lambda', 0.0))
