@@ -149,7 +149,8 @@ Nếu chạy vài epoch không lỗi data → data chuẩn.
 
 ## 8. Ghi chú triển khai trên server
 
-- Dữ liệu ở môi trường này (`F:\datasets\...\images`) là bản đầy đủ 112,120 ảnh, đã mount `/data/images`
-  trong Docker. Khi cài server không Docker, tự lấy ảnh theo mục 2.
+- Setup native (không Docker): env trong `.venv` (Python 3.10, torch 2.7.0+cu128), `image_path`
+  mặc định `"/data/images/"`. Đặt 112,120 ảnh đúng path đó (hoặc sửa đồng bộ 4 loại config như mục 6,
+  B2) rồi tự lấy ảnh theo mục 2.
 - Nếu server không có mạng ngoài (chỉ proxy nội bộ): tải Kaggle/NIH trên máy có mạng rồi upload bằng
   `scp -r ./images user@server:/data/` (hoặc rsync).

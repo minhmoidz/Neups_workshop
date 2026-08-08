@@ -51,7 +51,7 @@
 - Đã có: SNN eval seed 0–3 (4/10). Chạy tiếp 6 seed còn lại:
 
 ```bash
-cd /workspace
+cd /home/minhtt/Neups_workshop   # hoặc đường dẫn repo của bạn (dùng venv: source .venv/bin/activate)
 python run_snn_multiseed.py --n_runs 6 \
   --checkpoint ./archive/train_prichexy_net_baseline_fixed/generator_lowest_total_loss.pth \
   --out_dir ./archive/retrain_snn_runs_baseline_fixed --start_seed 4
