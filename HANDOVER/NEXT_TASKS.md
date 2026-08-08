@@ -1,8 +1,27 @@
 # NEXT_TASKS — Việc cần làm tiếp cho PriCheXy-Net (xếp theo ưu tiên)
 
-> Đừng kết luận phương pháp nào trước khi hoàn tất T1 (baseline với code đã sửa). Mọi macro kết luận
-> trong `PLAN.md` mục 0.5 đang được cảnh báo là chưa vững vì code từng có bug gradient accumulation.
-> Số liệu sau "sửa bug" chỉ dùng để xếp ưu tiên, không phải để kết luận.
+> **Mọi so sánh "cải thiện" phải neo trên baseline đúng code (T1/T2).** Tất cả số Re-ID/Class ghi trong
+> PLAN.md mục 0.5 đều sinh ra từ code *có bug* `zero_grad()` trong gradient accumulation — kể cả run_1
+> (0.604), run_2, run_3, run_4, C2 (0.760/0.709). Chúng chỉ dùng để *định hướng*, **không** được dùng làm
+> baseline so sánh để kết luận "phương pháp này cải thiện hay không".
+
+---
+
+## Nguyên tắc cải thiện (đọc trước khi làm gì)
+
+1. **Biến số tuân theo hướng**: Re-ID AUC ↓ = privacy tốt hơn; Class AUC ↑ = utility tốt hơn.
+   Một phương án "cải thiện" CHỈ khi nó thắng baseline trên ≥1 trục và không thua trục kia (Pareto),
+   đo trên **cùng 10-seed protocol + cùng tập test**, so với **cùng µ**.
+2. **Baseline chuẩn = `baseline_fixed`** (1 adversary, `accumulation_steps=1`, 60 epochs, code sau sửa bug),
+   cặp (Re-ID, Class) lấy từ **T1 + T2**. Trước khi T1/T2 xong, không kết luận gì về "so với paper 0.577 / 0.762".
+3. **Không tin số cũ vội**: nếu một khẳng định trong PLAN.md dựa trên run_1/run_2/.../C2 (kết quả cũ
+   hoặc chưa chạy 10-seed đúng), phải chạy lại/retrain mới (T8/T9) trước khi dùng làm bằng chứng.
+4. **µ-sweep làm nổi bật Pareto**, không phải để "đạt mốc số to". Chỉ tăng µ nếu thêm được giá trị
+   (ví dụ giữ class cao mà Re-ID giảm) — nếu chỉ đổi chỗ đánh đổi thì không gọi là cải thiện.
+5. **Rẻ trước, đắt sau**: mọi ý tưởng cải thiện phải lọc qua `proxy_reid.py` (r=0.975 với 10-seed) trước khi
+   cam kết 10-seed (≈10h) + retrain (≈4–7h).
+
+---
 
 ## Bước 0 — Chuẩn bị khi mới clone/pull (làm 1 lần)
 
@@ -53,17 +72,20 @@ python eval_classifier.py --config_path ./config_files/ --config config_eval_cla
 ## Ưu tiên 2 (đánh giá các phụ-release ablation)
 
 ### T3. Hoàn tất training + eval cho các ablation còn thiếu
-| Run | Config | Checkpoint | Trạng thái |
+> ⚠ Số liệu trong bảng này (trừ cột "Trạng thái") là của **code cũ / chưa chạy 10-seed đúng** — chỉ để
+> tham khảo hướng, **không phải bằng chứng cải thiện**. Muốn dùng phải retrain lại trên code đã sửa (T9).
+
+| Run | Config | Checkpoint đúng-code | Trạng thái |
 |---|---|---|---|
-| C2 budget-map | `config_anonymization_c2.json` | `train_prichexy_net_c2_budgetmap` | **eval XONG**: Re-ID 0.760 ± 0.026 (10 seeds), class 0.709 |
+| C2 budget-map | `config_anonymization_c2.json` | cần retrain | eval cũ (code bug): Re-ID 0.760, class 0.709 — **không dùng làm mốc** |
 | C2+C4 | `config_anonymization_c2c4.json` | — | **chưa train** |
 | C4 (feature loss) | `config_anonymization_c4.json` | — | **chưa train** |
 | Stoch (λ=0.5) | `config_anonymization_stoch.json` | — | **chưa train** |
 
 - Chạy: `python train_architecture.py --config_path ./config_files/ --config config_anonymization_c2c4.json`
   (60 epochs, ~4–7h mỗi run) rồi `run_snn_multiseed.py` + `eval_classifier`.
-- Việc này trả lời: liệu C4 (loss bảo toàn đặc trưng) có cứu được utility mà C2 làm tụt (0.709) không —
-  dự đoán `C2+C4 > C2` trên/trục utility (PLAN.md D6).
+- Việc này trả lời: liệu C4 (loss bảo toàn đặc trưng) có cứu được utility hay không — **so với baseline
+  ở T1/T2, không phải so với số C2 cũ**. Kết luận chỉ hợp lệ sau khi có baseline đúng code (T1+T2).
 
 ### T4. Đo Re-ID + class cho control D4 một lần nữa bằng evaluate 10-seed sau khi code ổn
 (Warp ngẫu nhiên không cần train; chỉ cần eval lại nếu muốn đóng góp đo trong paper.)
@@ -71,9 +93,10 @@ python eval_classifier.py --config_path ./config_files/ --config config_eval_cla
 ## Ưu tiên 3 (phần đónggóp hình)
 
 ### T5. Đường cong µ cho baseline + đề xuất
-- Quét µ ∈ {0.005, 0.01, 0.02, 0.04} cho (a) uniform baseline và (b) C2.
-- Mục tiêu: kiểm tra "C2 thống trị Pareto" tại bất kỳ µ nào so với baseline.
-- Cách đo: train 60ep → proxy (PHÚt) → chỉ applicant tốt mới chạy 10-seed → plot Re-ID vs Class.
+- Quét µ ∈ {0.005, 0.01, 0.02, 0.04} cho (a) baseline_fixed (đúng code) và (b) phương án đang thử (sau T3).
+- Mục tiêu: kiểm tra phương án thử có thống trị Pareto **tại bất kỳ µ nào** so với baseline — trên
+  cùng µ, chứ không phải trộn µ khác nhau rồi so.
+- Cách đo: train 60 ep (đúng code) → proxy (phút) → chỉ ứng viên tốt mới chạy 10-seed → plot Re-ID vs Class.
 
 ### T6. Top-1 identification rate (khi có generator tạm ổn định)
 - Linkage 1-với-N trên gallery N bệnh nhân; phép đo này paper không có — thêm giá trị.
