@@ -4,11 +4,31 @@
 > trong `PLAN.md` mục 0.5 đang được cảnh báo là chưa vững vì code từng có bug gradient accumulation.
 > Số liệu sau "sửa bug" chỉ dùng để xếp ưu tiên, không phải để kết luận.
 
+## Bước 0 — Chuẩn bị khi mới clone/pull (làm 1 lần)
+
+1. **Data ảnh**: xem `HANDOVER/DATA.md` — 112,120 PNG đặt ở địa điểm mà `image_path` trong config
+   trỏ tới (mặc định `/data/images/`). Số file phải = 112,120.
+2. **Dependencies**: `pip install -r requirements.txt` (torch phù hợp CUDA server).
+3. **Sửa `image_path`**: các config đang để `"/data/images/"`; nếu server dùng path khác, sửa đồng bộ
+   4 loại config: `config_pretrain`, `config_anonymization_*`, `config_retrainSNN`, `config_eval_classifier*`.
+4. **Checkpoints có sẵn trong git (không cần làm gì)**:
+   - `networks/*.pth` (pretrained classifier/generator/verifier — LFS, pull tự lấy).
+   - `archive/train_prichexy_net_baseline_fixed/generator_lowest_total_loss.pth` (LFS).
+   - Mọi kết quả số `archive/retrain_snn_runs_*/summary.txt` (đã commit).
+5. **Checkpoint KHÔNG có trong git** (phải tự retrain nếu cần, xem T9): generator của
+   `c2_budgetmap`, `run_1`, `run_2_h1fix`, `run_3_entropy`, `run_4_ensemble`.
+6. Test nhanh data/setup: chạy smoke 2 epochs bằng `python train_architecture.py --config_path ./config_files/ --config config_smoke_acc64.json`.
+
+---
+
 ## Ưu tiên 1 — Bản baseline đúng code (bắt buộc)
 
 ### T1. Hoàn tất 10-seed SNN cho baseline_fixed (đang treo ở 4/10)
 - Checkpoint: `archive/train_prichexy_net_baseline_fixed/generator_lowest_total_loss.pth`
   (1 adversary, `accumulation_steps=1`, 60 epochs — paper-faithful, đúng code sau khi sửa bug).
+- **Checkpoint này CÓ trong git (LFS)** khi bạn clone/pull repo — không cần retrain.
+  Các generator khác (`c2`, `run_1`, `run_2`, `run_3`, `run_4`) **không** trong repo, phải tự retrain
+  theo T9 nếu cần dùng.
 - Đã có: SNN eval seed 0–3 (4/10). Chạy tiếp 6 seed còn lại:
 
 ```bash
@@ -70,6 +90,18 @@ python eval_classifier.py --config_path ./config_files/ --config config_eval_cla
 ## Kéo dài: tooling & rigorous
 - Giữ bộ regression test (T8): chạy `python test_grad_accum.py` trước mỗi baseline/ablation mới;
   cân nhắc test tương tự cho `ACLoss.refresh()` và `VerificationLoss` ensemble.
+
+### T9. Retrain generator khi cần checkpoint chưa có trong git
+Dùng để tái tạo `c2_budgetmap` / `run_1` / `run_3` / ... khi agent cần chạy eval cho các run đó:
+
+```bash
+python -u train_architecture.py --config_path ./config_files/ --config config_anonymization_run1.json \
+  > logs/retrain_run1.log 2>&1
+# sau khi xong, tìm checkpoint tốt nhất:
+#   archive/<experiment_description>/generator_lowest_total_loss.pth
+# rồi chạy 10-seed SNN (giống T1) + eval_classifier (giống T2)
+```
+- Run thường mất 4–7h (60 epochs, GPU RTX). Nếu server không đủ GPU, chỉ dùng checkpoint có sẵn trong git.
 
 ---
 

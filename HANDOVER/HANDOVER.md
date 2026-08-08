@@ -50,6 +50,9 @@ PriCheXy-Net/
 ## 3. Quy ước kết quả — nơi nào để đọc số
 
 - Mỗi generation checkpoint: `archive/<run>/generator_lowest_total_loss.pth` + `generator_lowest_ver_loss.pth`.
+  > **Trong git (LFS):** chỉ `archive/train_prichexy_net_baseline_fixed/generator_lowest_total_loss.pth`
+  > và các pretrained `networks/*.pth`. Các generator `c2 / run_1 / run_2 / run_3 / run_4` **không** nằm
+  > trong repo — phải tự retrain (xem `NEXT_TASKS.md` T9) trước khi eval.
 - Mỗi 10-seed SNN eval: `archive/retrain_snn_runs_<tag>/summary.txt` (`N_runs, AUC_mean, AUC_std, Per_run`).
 - Classification: `chexnet/results/<tag>/aucs.csv` (14 pathologies → mean).
 
