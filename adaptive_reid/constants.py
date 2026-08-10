@@ -1,0 +1,36 @@
+"""Named constants for the frozen adaptive re-ID protocol (STEP 2A/2B)."""
+
+import math
+
+CHANCE_LOSS = math.log(2)
+
+NEAR_CHANCE_VAL_LOSS = 0.6800
+NEAR_CHANCE_VAL_AUC = 0.55
+
+# Run states
+NUMERICALLY_INVALID = 'NUMERICALLY_INVALID'
+VALID = 'VALID'
+
+# Termination reasons
+TERMINATION_EARLY_STOPPING = 'early_stopping'
+TERMINATION_EPOCH_CAP = 'epoch_cap'
+TERMINATION_INFRASTRUCTURE = 'infrastructure_failure'
+
+# Schedule sizes (from the frozen protocol)
+SCREENING_TARGET = 3
+SCREENING_INITIAL_SEEDS = (0, 1, 2)
+SCREENING_MAX_REPLACEMENTS = 2
+SCREENING_MAX_ATTEMPTS = 5
+
+CONFIRMATORY_TARGET = 10
+CONFIRMATORY_INITIAL_SEEDS = tuple(range(10))
+CONFIRMATORY_MAX_REPLACEMENTS = 5
+CONFIRMATORY_MAX_ATTEMPTS = 15
+
+# Top-k gallery/probe canonical configuration
+TOPK_N_PATIENTS = 500
+TOPK_SELECTION_SEED = 42
+TOPK_GALLERY_CLEAN = True
+TOPK_PROBE_ANONYMIZED = True
+
+CANONICAL_THRESHOLD = 0.5

@@ -744,7 +744,7 @@ def train_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_fil
 
 
 def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filter, mu, validation_loader,
-                 criterion, epoch, n_epochs, stochastic_lambda=0.0, transform_mode='legacy'):
+                 criterion, epoch, n_epochs, stochastic_lambda=0.0, transform_mode='legacy', return_metrics=False):
     """This function is used to validate the incorporated patient verification architecture with
     deformed/perturbed/anonymized images.
 
@@ -769,20 +769,33 @@ def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_
         The current epoch. Only needed for printing purposes.
     :param n_epochs: int
         The maximum number of epochs for the training/validation loop. Only needed for printing purposes.
-    :return validation_loss: float
-        Epoch-wise validation loss for the patient verification task.
+    :param return_metrics: bool
+        If False (default, backward-compatible), returns validation_loss (float) exactly as
+        historically. If True, additionally collects y_true and continuous model scores of
+        the validation split and returns (validation_loss, {'auc': float, 'accuracy': float}).
+        ROC-AUC is computed on continuous scores; accuracy uses the canonical 0.5 threshold.
+        The validation data ordering/pair files are untouched; the test split is not touched.
+    :return: float or (float, dict)
     """
 
     net.eval()
     if perturbation_type in ['flow_field', 'privacy_net']:
         perturbation_net.eval()
     running_loss = 0.0
+    y_true = None
+    y_scores = None
 
     print('Validating----->')
     with torch.no_grad():
         for i, batch in enumerate(validation_loader):
             inputs1, inputs2, labels = batch
             inputs1, inputs2, labels = inputs1.cuda(), inputs2.cuda(), labels.cuda()
+
+            if return_metrics:
+                if y_true is None:
+                    y_true = labels.cpu()
+                else:
+                    y_true = torch.cat((y_true, labels.cpu()), 0)
 
             if perturbation_type == 'flow_field':
                 inputs1 = deform(inputs1, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda, transform_mode)
@@ -812,12 +825,31 @@ def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_
 
             running_loss += loss.item()
 
+            # Continuous scores (logits before sigmoid) for ROC-AUC.
+            if return_metrics:
+                if y_scores is None:
+                    y_scores = outputs.cpu()
+                else:
+                    y_scores = torch.cat((y_scores, outputs.cpu()), 0)
+
             print('Epoch [%d/%d], Iteration [%d/%d], Loss: %.4f' % (epoch + 1, n_epochs, i + 1, len(validation_loader),
                                                                     loss.item()))
 
     # Compute the average loss per epoch
     validation_loss = running_loss / len(validation_loader)
-    return validation_loss
+
+    if not return_metrics:
+        return validation_loss
+
+    # Backward-compatible default is preserved above; only when requested do we compute
+    # metrics. AUC/acc estimators live in adaptive_reid.metrics (imported lazily to keep
+    # this file's import graph independent of the protocol package).
+    from adaptive_reid import metrics as arm_metrics
+
+    y_true = y_true.squeeze().numpy().astype(np.int64)
+    y_scores = y_scores.squeeze().numpy()
+    met = arm_metrics.validation_metrics(y_scores, y_true)
+    return validation_loss, met
 
 
 def test_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filter, mu, test_loader,
