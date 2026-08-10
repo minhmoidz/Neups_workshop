@@ -14,13 +14,17 @@
 9eaa5fdf22ec08885a15d726c949de8404d522ea
 ```
 
-### Dedicated commits
+### Dedicated commits (substantive content frozen)
 
 ```
 STEP 1 (operator repair):                83738bb341e8ce920490d5c06c48c69fd8d47f09
 STEP 1B (review remediation):            18f6eb9a3e3e7a532da93f31393f3d0e27a52d86
-STEP 1B (evidence docs 00F/00F2):        22a71b6b25d00d9d32eca244ce98a5755b1c6804   <- current HEAD
 ```
+
+> Note: this evidence document references the *substantive* commits above. Subsequent
+> metadata-only edits (this file's own commit) move `HEAD` by design; run
+> `git rev-parse HEAD` for the exact tip. The full diff vs the pre-repair commit
+> `9eaa5fd` is regenerated with `git diff 9eaa5fdf22ec08885a15d726c949de8404d522ea HEAD`.
 
 ### Auditable artifacts
 
@@ -37,8 +41,10 @@ STEP 1B (evidence docs 00F/00F2):        22a71b6b25d00d9d32eca244ce98a5755b1c680
 ?? research_agent/STEP1_OPERATOR_REPAIR.diff
 ```
 
-The only untracked files are this file's metadata update and the generated diff artifact;
-all source/test/doc changes are committed.
+### `git status` (working tree)
+
+The only untracked file is the generated diff artifact `research_agent/STEP1_OPERATOR_REPAIR.diff`;
+all source/test/doc changes are committed (see commit list above).
 
 ### `git diff --stat` (pre-repair → HEAD)
 
@@ -297,7 +303,7 @@ cd /home/minhtt/Neups_workshop
 .venv/bin/python -c "import torch; print(torch.__version__)"
 
 # 1. Provenance
-git rev-parse HEAD                                   # 22a71b6b25d00d9d32eca244ce98a5755b1c6804
+git rev-parse HEAD                                   # (run at reproduction time)
 git log --oneline -5
 git diff --stat 9eaa5fdf22ec08885a15d726c949de8404d522ea HEAD
 git diff 9eaa5fdf22ec08885a15d726c949de8404d522ea HEAD > research_agent/STEP1_OPERATOR_REPAIR.diff
