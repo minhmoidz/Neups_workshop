@@ -19,7 +19,7 @@
 ```
 STEP 1 (operator repair):                83738bb341e8ce920490d5c06c48c69fd8d47f09
 STEP 1B (review remediation):            18f6eb9a3e3e7a532da93f31393f3d0e27a52d86
-STEP 1B (evidence docs 00F/00F2):        2d7c6acaa942c4afb7005e1e317eb0cb4c9402f3   <- current HEAD
+STEP 1B (evidence docs 00F/00F2):        7ac6a96f0df754d71c132f5943cf443a6862e907   <- current HEAD
 ```
 
 ### Auditable artifacts
@@ -37,8 +37,8 @@ STEP 1B (evidence docs 00F/00F2):        2d7c6acaa942c4afb7005e1e317eb0cb4c9402f
 ?? research_agent/STEP1_OPERATOR_REPAIR.diff
 ```
 
-The only untracked file is the generated diff artifact (1309 lines); all source/test/doc
-changes are committed.
+The only untracked files are this file's metadata update and the generated diff artifact;
+all source/test/doc changes are committed.
 
 ### `git diff --stat` (pre-repair → HEAD)
 
