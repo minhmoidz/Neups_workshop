@@ -17,7 +17,8 @@ import chexnet.cxr_dataset as CXR
 
 
 def make_pred_multilabel(data_transforms, model, image_path, save_path, perturbation_type='none', 
-                         perturbation_checkpoint=None, mu=None, b=None, m=None, eps=None, stochastic_lambda=0.0):
+                         perturbation_checkpoint=None, mu=None, b=None, m=None, eps=None, stochastic_lambda=0.0,
+                         transform_mode='legacy'):
     """Gives predictions for test fold and calculates AUCs using pre-trained classifier model.
 
     :param data_transforms: torchvision.transforms
@@ -98,7 +99,8 @@ def make_pred_multilabel(data_transforms, model, image_path, save_path, perturba
         inputs, labels = Variable(inputs.cuda()), Variable(labels.cuda())
 
         if perturbation_type == 'flow_field':
-            inputs = utils.deform(inputs, perturbation_model, grid_identity, gauss_filter, mu, stochastic_lambda)
+            inputs = utils.deform(inputs, perturbation_model, grid_identity, gauss_filter, mu, stochastic_lambda,
+                                  transform_mode)
 
         if perturbation_type == 'privacy_net':
             inputs = perturbation_model(inputs)

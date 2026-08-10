@@ -37,6 +37,7 @@ class AgentSiameseNetwork:
         self.perturbation_model_file = self.config['perturbation_model_file']
         self.mu = self.config['mu']
         self.stochastic_lambda = self.config.get('stochastic_lambda', 0.0)
+        self.transform_mode = self.config.get('transform_mode', 'legacy')
 
         self.b = self.config['b']
         self.m = self.config['m']
@@ -121,11 +122,13 @@ class AgentSiameseNetwork:
 
             training_loss = utils.train_snn(self.perturbation_type, self.net, self.perturbation_net, self.grid_identity, 
                                             self.gauss_filter, self.mu, self.training_loader, self.loss, self.optimizer, 
-                                            epoch, self.max_epochs, stochastic_lambda=self.stochastic_lambda)
+                                            epoch, self.max_epochs, stochastic_lambda=self.stochastic_lambda,
+                                            transform_mode=self.transform_mode)
             validation_loss = utils.validate_snn(self.perturbation_type, self.net, self.perturbation_net, 
                                                  self.grid_identity, self.gauss_filter, self.mu, self.validation_loader, 
                                                  self.loss, epoch, self.max_epochs,
-                                                 stochastic_lambda=self.stochastic_lambda)
+                                                 stochastic_lambda=self.stochastic_lambda,
+                                                 transform_mode=self.transform_mode)
 
             self.loss_dict['training'].append(training_loss)
             self.loss_dict['validation'].append(validation_loss)
@@ -153,7 +156,7 @@ class AgentSiameseNetwork:
         # Testing phase
         y_true, y_pred = utils.test_snn(self.perturbation_type, self.best_net, self.perturbation_net, 
                                         self.grid_identity, self.gauss_filter, self.mu, self.test_loader,
-                                        stochastic_lambda=self.stochastic_lambda)
+                                        stochastic_lambda=self.stochastic_lambda, transform_mode=self.transform_mode)
 
         y_true, y_pred = [y_true.numpy(), y_pred.numpy()]
 

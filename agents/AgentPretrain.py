@@ -36,6 +36,7 @@ class AgentPretrain:
         self.learning_rate = self.config['learning_rate']
         self.max_epochs = self.config['max_epochs']
         self.mu = self.config['mu']
+        self.transform_mode = self.config.get('transform_mode', 'legacy')
 
         self.num_workers = 8
         self.pin_memory = True
@@ -95,12 +96,14 @@ class AgentPretrain:
             # Pre-train the model
             train_loss = utils.pretrain(self.generator, self.training_loader, self.gauss_filter, self.grid_identity,
                                         self.mu, self.generator_loss, self.optimizer_g, epoch, self.max_epochs,
-                                        self.show_every_n_epochs, self.show_every_n_iterations, self.SAVINGS_PATH)
+                                        self.show_every_n_epochs, self.show_every_n_iterations, self.SAVINGS_PATH,
+                                        transform_mode=self.transform_mode)
 
             # Pre-validate the model
             val_loss = utils.preval(self.generator, self.validation_loader, self.gauss_filter, self.grid_identity,
                                     self.mu, self.generator_loss, epoch, self.max_epochs, self.show_every_n_epochs,
-                                    self.show_every_n_iterations, self.SAVINGS_PATH)
+                                    self.show_every_n_iterations, self.SAVINGS_PATH,
+                                    transform_mode=self.transform_mode)
 
             end_time = time.time()
             print('Time elapsed for epoch ' + str(epoch + 1) + ': ' + str(

@@ -62,4 +62,5 @@ if __name__ == "__main__":
 
     preds, aucs = E.make_pred_multilabel(data_transforms, model, image_path, save_path, perturbation_type,
                                          perturbation_checkpoint, mu, b, m, eps,
-                                         config.get('stochastic_lambda', 0.0))
+                                         config.get('stochastic_lambda', 0.0),
+                                         transform_mode=config.get('transform_mode', 'legacy'))

@@ -48,7 +48,7 @@ def evaluate(model, loader, batch_size, device, deformation_fn=None):
     return dice / hits, ious / hits, hds / hits
 
 
-def build_deform_fn(generator_path, mu, stochastic_lambda=0.0, device='cuda'):
+def build_deform_fn(generator_path, mu, stochastic_lambda=0.0, device='cuda', transform_mode='legacy'):
     chk = torch.load(generator_path, weights_only=False, map_location='cpu')
     gen = UNet(1, chk['conv.weight'].shape[0], 32).to(device)
     gen.load_state_dict(chk)
@@ -60,7 +60,7 @@ def build_deform_fn(generator_path, mu, stochastic_lambda=0.0, device='cuda'):
     gauss = GaussianSmoothing(channels=2, kernel_size=9, sigma=2).to(device)
 
     def fn(images):
-        return utils.deform(images, gen, grid_identity, gauss, mu, stochastic_lambda)
+        return utils.deform(images, gen, grid_identity, gauss, mu, stochastic_lambda, transform_mode)
 
     return fn
 
@@ -74,6 +74,7 @@ def main():
     parser.add_argument('--mu', type=float, default=0.0)
     parser.add_argument('--generator', default=None)
     parser.add_argument('--stochastic_lambda', type=float, default=0.0)
+    parser.add_argument('--transform_mode', default='legacy', choices=['legacy', 'corrected'])
     args = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -87,7 +88,7 @@ def main():
 
     deform_fn = None
     if args.generator is not None:
-        deform_fn = build_deform_fn(args.generator, args.mu, args.stochastic_lambda, device)
+        deform_fn = build_deform_fn(args.generator, args.mu, args.stochastic_lambda, device, args.transform_mode)
 
     dice, ious, hds = evaluate(model, loader, args.batch_size, device, deformation_fn=deform_fn)
 

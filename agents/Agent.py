@@ -43,6 +43,7 @@ class Agent:
         self.accumulation_steps = self.config.get('accumulation_steps', 1)
         self.use_budget_map = self.config.get('use_budget_map', False)
         self.stochastic_lambda = self.config.get('stochastic_lambda', 0.0)
+        self.transform_mode = self.config.get('transform_mode', 'legacy')
         self.ac_pos_weight = self.config.get('ac_pos_weight', None)
         self.feature_loss_weight = self.config.get('feature_loss_weight', 0.0)
 
@@ -171,14 +172,16 @@ class Agent:
                                        self.max_epochs, self.show_every_n_epochs, self.show_every_n_iterations,
                                        self.SAVINGS_PATH, accumulation_steps=self.accumulation_steps,
                                        ver_active_per_step=self.ver_active_per_step,
-                                       stochastic_lambda=self.stochastic_lambda)
+                                       stochastic_lambda=self.stochastic_lambda,
+                                       transform_mode=self.transform_mode)
 
             # Validate the anonymization model
             val_losses = utils.validate(self.generator, self.validation_loader, self.gauss_filter, self.grid_identity, 
                                         self.mu, self.ac_loss, self.verification_loss, self.ac_loss_weight, 
                                         self.ver_loss_weight, epoch, self.max_epochs, self.show_every_n_epochs, 
                                         self.show_every_n_iterations, self.SAVINGS_PATH,
-                                        stochastic_lambda=self.stochastic_lambda)
+                                        stochastic_lambda=self.stochastic_lambda,
+                                        transform_mode=self.transform_mode)
 
             end_time = time.time()
             print('Time elapsed for epoch ' + str(epoch + 1) + ': ' + str(

@@ -44,6 +44,7 @@ def main():
     parser.add_argument('--checkpoint', default=None, help='Generator checkpoint; omit for real images.')
     parser.add_argument('--mu', type=float, default=0.01)
     parser.add_argument('--stochastic_lambda', type=float, default=0.0)
+    parser.add_argument('--transform_mode', default='legacy', choices=['legacy', 'corrected'])
     parser.add_argument('--image_size', type=int, default=256)
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--image_path', default='/data/images/')
@@ -77,7 +78,7 @@ def main():
             if generator is not None:
                 # Only the released image is deformed; it is matched against a real gallery image
                 inputs1 = utils.deform(inputs1, generator, grid_identity.expand(inputs1.shape[0], -1, -1, -1),
-                                       gauss_filter, args.mu, args.stochastic_lambda)
+                                       gauss_filter, args.mu, args.stochastic_lambda, args.transform_mode)
 
             similarity = (embed(extractor, inputs1, mean, std) * embed(extractor, inputs2, mean, std)).sum(dim=1)
             scores.append(similarity.cpu().numpy())

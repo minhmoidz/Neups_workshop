@@ -108,7 +108,42 @@ def load_flow_generator(model_file):
     return generator
 
 
-def deform(images, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda=0.0):
+def build_sampling_grid(grids, grid_identity, gauss_filter, transform_mode='legacy'):
+    """Construct the sampling grid (N, H, W, 2) from a raw displacement field.
+
+    :param grids: torch.Tensor (N, 2, H, W)
+        The raw flow / displacement field, in the same normalized grid coordinate system as
+        ``grid_identity`` (i.e. pixel values roughly in [-1, 1]).
+    :param grid_identity: torch.Tensor (1, 2, H, W)
+        The identity sampling grid used by grid_sample.
+    :param gauss_filter: torch.nn.Module (GaussianSmoothing)
+        The Gaussian smoothing layer.
+    :param transform_mode: str
+        'legacy'    : smooths the *full* displaced grid ``G * (I - u)``. Because the Gaussian is applied
+                      with zero padding, ``G * I != I`` near the image borders, so even a zero displacement
+                      field does NOT reproduce the identity -- the sampling grid is pulled toward 0 at the
+                      edges and border pixels are dropped (scientific defect found in audit).
+        'corrected' : smooths *only* the displacement component ``I - G * u``. A zero displacement field
+                      now gives back the exact identity grid (up to floating point), restoring the desired
+                      invariant ``mu = 0  =>  T(x) = x``.
+    :return: torch.Tensor (N, H, W, 2)
+        Sampling grid ready for torch.nn.functional.grid_sample.
+    """
+    if transform_mode == 'legacy':
+        # Historical operator: G * (I - u). Kept bit-for-bit reproducible.
+        grids = grid_identity - grids
+        grids = gauss_filter(grids)
+    elif transform_mode == 'corrected':
+        # Corrected operator: I - G * u. The identity grid is never filtered.
+        grids = grid_identity - gauss_filter(grids)
+    else:
+        raise ValueError("transform_mode must be 'legacy' or 'corrected', got %r" % (transform_mode,))
+
+    return grids.permute(0, 2, 3, 1)
+
+
+def deform(images, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda=0.0,
+           transform_mode='legacy'):
     """Apply the learned flow field to a batch of images, optionally with a stochastic component.
 
     A purely deterministic warp F = UNet(x) is close to bijective and therefore re-encodes the biometric
@@ -119,6 +154,9 @@ def deform(images, perturbation_net, grid_identity, gauss_filter, mu, stochastic
     :param stochastic_lambda: float
         Convex mixing weight in [0, 1] between the predicted field and a random one. 0 reproduces the
         deterministic baseline exactly; the mixture stays within [-1, 1] because both terms do.
+    :param transform_mode: str
+        'legacy' or 'corrected'. See build_sampling_grid for the difference. Defaults to 'legacy' so that
+        all historical experiments remain bit-for-bit reproducible.
     :return: torch.Tensor
         The deformed images.
     """
@@ -139,16 +177,15 @@ def deform(images, perturbation_net, grid_identity, gauss_filter, mu, stochastic
         noise = torch.randn_like(grids).clamp(-1.0, 1.0)
         grids = (1.0 - stochastic_lambda) * grids + stochastic_lambda * noise
 
-    grids = grid_identity - budget * grids
-    # Smoothing happens after mixing so that the random component yields smooth deformations as well
-    grids = gauss_filter(grids)
-    grids = grids.permute(0, 2, 3, 1)
+    # Apply the budget scaling to the displacement field before smoothing.
+    scaled_grids = budget * grids
+    sampling_grid = build_sampling_grid(scaled_grids, grid_identity, gauss_filter, transform_mode)
 
-    return torch.nn.functional.grid_sample(images, grids, padding_mode='border', align_corners=True)
+    return torch.nn.functional.grid_sample(images, sampling_grid, padding_mode='border', align_corners=True)
 
 
 def pretrain(generator, training_loader, gauss_filter, grid_identity, mu, mse_loss, optimizer_g, epoch, n_epochs,
-             show_every_n_epochs, show_every_n_iters, save_path):
+             show_every_n_epochs, show_every_n_iters, save_path, transform_mode='legacy'):
     """This function is used to pre-train the flow field generator of the anonymization model.
 
     :param generator: torch.nn.Module
@@ -177,6 +214,8 @@ def pretrain(generator, training_loader, gauss_filter, grid_identity, mu, mse_lo
         tensorboard.
     :param save_path: str
         Path to the folder where the tensorboard files are stored.
+    :param transform_mode: str
+        'legacy' or 'corrected'. See build_sampling_grid. Defaults to 'legacy' for reproducible pre-training.
     :return loss: float
         Epoch-wise reconstruction loss.
     """
@@ -194,12 +233,11 @@ def pretrain(generator, training_loader, gauss_filter, grid_identity, mu, mse_lo
             grids = generator(inputs)
 
             # Constraints on grids
-            grids = grid_identity - mu * grids
-            grids = gauss_filter(grids)
-            grids = grids.permute(0, 2, 3, 1)
+            scaled_grids = mu * grids
+            sampling_grid = build_sampling_grid(scaled_grids, grid_identity, gauss_filter, transform_mode)
 
             # Compute reconstructed images by using the original input in conjunction with pixel locations from grids
-            outputs = torch.nn.functional.grid_sample(inputs, grids, padding_mode='border', align_corners=True)
+            outputs = torch.nn.functional.grid_sample(inputs, sampling_grid, padding_mode='border', align_corners=True)
         else:
             outputs = generator(inputs)
 
@@ -230,7 +268,7 @@ def pretrain(generator, training_loader, gauss_filter, grid_identity, mu, mse_lo
 
 
 def preval(generator, validation_loader, gauss_filter, grid_identity, mu, mse_loss, epoch, n_epochs, 
-           show_every_n_epochs, show_every_n_iters, save_path):
+           show_every_n_epochs, show_every_n_iters, save_path, transform_mode='legacy'):
     """This function is used to validate the flow field generator of the anonymization model while pre-training.
 
     :param generator: torch.nn.Module
@@ -257,6 +295,8 @@ def preval(generator, validation_loader, gauss_filter, grid_identity, mu, mse_lo
         tensorboard.
     :param save_path: str
         Path to the folder where the tensorboard files are stored.
+    :param transform_mode: str
+        'legacy' or 'corrected'. See build_sampling_grid. Defaults to 'legacy' for reproducible pre-training.
     :return loss: float
         Epoch-wise reconstruction loss.
     """
@@ -275,12 +315,12 @@ def preval(generator, validation_loader, gauss_filter, grid_identity, mu, mse_lo
                 grids = generator(inputs)
 
                 # Constraints on grids
-                grids = grid_identity - mu * grids
-                grids = gauss_filter(grids)
-                grids = grids.permute(0, 2, 3, 1)
+                scaled_grids = mu * grids
+                sampling_grid = build_sampling_grid(scaled_grids, grid_identity, gauss_filter, transform_mode)
 
                 # Compute reconstructed images by using the original input in conjunction with pixel locations from grids
-                outputs = torch.nn.functional.grid_sample(inputs, grids, padding_mode='border', align_corners=True)
+                outputs = torch.nn.functional.grid_sample(inputs, sampling_grid, padding_mode='border',
+                                                          align_corners=True)
             else:
                 outputs = generator(inputs)
 
@@ -309,7 +349,7 @@ def preval(generator, validation_loader, gauss_filter, grid_identity, mu, mse_lo
 def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, verification_loss, ac_loss_weight,
           ver_loss_weight, optimizer_g, optimizer_ac, optimizers_ver, criterion_ac, criterion_ver, epoch, n_epochs,
           show_every_n_epochs, show_every_n_iters, save_path, accumulation_steps=1, ver_active_per_step=1,
-          stochastic_lambda=0.0):
+          stochastic_lambda=0.0, transform_mode='legacy'):
     """This function is used to train the entire anonymization model.
 
     :param generator: torch.nn.Module
@@ -374,7 +414,7 @@ def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, 
         inputs1, inputs2, labels, labels_id = inputs1.cuda(), inputs2.cuda(), labels.cuda(), labels_id.cuda()
 
         if grid_identity is not None:
-            fakes_1 = deform(inputs1, generator, grid_identity, gauss_filter, mu, stochastic_lambda)
+            fakes_1 = deform(inputs1, generator, grid_identity, gauss_filter, mu, stochastic_lambda, transform_mode)
         else:
             fakes_1 = generator(inputs1)
 
@@ -464,7 +504,7 @@ def train(generator, training_loader, gauss_filter, grid_identity, mu, ac_loss, 
 
 def validate(generator, validation_loader, gauss_filter, grid_identity, mu, ac_loss, verification_loss, ac_loss_weight, 
              ver_loss_weight, epoch, n_epochs, show_every_n_epochs, show_every_n_iters, save_path,
-             stochastic_lambda=0.0):
+             stochastic_lambda=0.0, transform_mode='legacy'):
     """This function is used to validate the entire anonymization model.
 
     :param generator: torch.nn.Module
@@ -516,7 +556,8 @@ def validate(generator, validation_loader, gauss_filter, grid_identity, mu, ac_l
             inputs1, inputs2, labels = inputs1.cuda(), inputs2.cuda(), labels.cuda()
 
             if grid_identity is not None:
-                fakes_1 = deform(inputs1, generator, grid_identity, gauss_filter, mu, stochastic_lambda)
+                fakes_1 = deform(inputs1, generator, grid_identity, gauss_filter, mu, stochastic_lambda,
+                                 transform_mode)
             else:
                 fakes_1 = generator(inputs1)
 
@@ -556,7 +597,7 @@ def validate(generator, validation_loader, gauss_filter, grid_identity, mu, ac_l
 
 
 def train_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filter, mu, training_loader, criterion,
-              optimizer, epoch, n_epochs, stochastic_lambda=0.0):
+              optimizer, epoch, n_epochs, stochastic_lambda=0.0, transform_mode='legacy'):
     """This function is used to re-train the incorporated patient verification architecture with 
     deformed/perturbed/anonymized images.
 
@@ -599,8 +640,10 @@ def train_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_fil
 
         if perturbation_type == 'flow_field':
             # Each image is deformed with an independent draw, so scans of the same patient are decorrelated
-            inputs1 = deform(inputs1, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda)
-            inputs2 = deform(inputs2, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda)
+            inputs1 = deform(inputs1, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda,
+                             transform_mode)
+            inputs2 = deform(inputs2, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda,
+                             transform_mode)
 
         if perturbation_type == 'privacy_net':
             # Compute Privacy-Net output
@@ -639,7 +682,7 @@ def train_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_fil
 
 
 def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filter, mu, validation_loader,
-                 criterion, epoch, n_epochs, stochastic_lambda=0.0):
+                 criterion, epoch, n_epochs, stochastic_lambda=0.0, transform_mode='legacy'):
     """This function is used to validate the incorporated patient verification architecture with
     deformed/perturbed/anonymized images.
 
@@ -680,8 +723,9 @@ def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_
             inputs1, inputs2, labels = inputs1.cuda(), inputs2.cuda(), labels.cuda()
 
             if perturbation_type == 'flow_field':
-                inputs1 = deform(inputs1, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda)
-                inputs2 = deform(inputs2, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda)
+                inputs1 = deform(inputs1, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda, transform_mode)
+                inputs2 = deform(inputs2, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda,
+                                 transform_mode)
 
             if perturbation_type == 'privacy_net':
                 # Compute Privacy-Net output
@@ -715,7 +759,7 @@ def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_
 
 
 def test_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filter, mu, test_loader,
-             stochastic_lambda=0.0):
+             stochastic_lambda=0.0, transform_mode='legacy'):
     """This function is used to test the incorporated patient verification architecture after re-training with
     deformed/perturbed/anonymized images. This function represents a realistic attack scenario where a real image is
     attempted to be linked to an anonymized image.
@@ -763,7 +807,8 @@ def test_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_filt
             inputs1, inputs2, labels = inputs1.cuda(), inputs2.cuda(), labels.cuda()
 
             if perturbation_type == 'flow_field':
-                inputs1 = deform(inputs1, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda)
+                inputs1 = deform(inputs1, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda,
+                                 transform_mode)
 
             if perturbation_type == 'privacy_net':
                 # Compute Privacy-Net output
