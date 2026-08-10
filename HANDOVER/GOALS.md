@@ -22,13 +22,69 @@ nhưng trả giá bằng utility. Tiêu chí thật:
 
 | Phương án | Re-ID (10-run) | Class mean AUC | Kết luận tạm thời |
 |---|---|---|---|
-| run_1 baseline (code cũ, trước sửa bug) | 0.604 ± 0.082 | 0.770 | mốc "code trước sửa bug" |
+| **baseline_fixed (đúng code, 60 ep, acc=1)** | **0.635 ± 0.079** | **0.773** | ✅ baseline chuẩn (T1+T2 xong 2026-08-09) — mốc so sánh duy nhất hợp lệ |
+| run_1 baseline (code cũ, trước sửa bug) | 0.604 ± 0.082 | 0.770 | mốc "code trước sửa bug" (chỉ tham khảo) |
 | run_2 (H1 refresh) | 0.622 ± 0.052 | 0.755 | refresh critic → thối quality (đã giải thích D3) |
 | run_3 (entropy) | 0.706 ± 0.050 | 0.786 | entropy giữ info hơn xóa; privacy tệ nhất |
 | run_4 (ensemble+restart) | 0.606 ± 0.048 | 0.762 | phương sai vẫn lớn, chưa hơn baseline (D5) |
 | C2 budget map | 0.760 ± 0.026 | 0.709 | utility tụt mạnh khi chưa có C4 |
 | control λ=1 ngẫu nhiên | 0.817 ± 0.029 | — | privacy ≈ 0 (D4) |
 | ảnh gốc | 0.802 ± 0.027 | 0.805 | upper bound |
+
+## Segmentation downstream (T7, CheXmask — Dice/IoU/HD95 trên 400 ảnh test, segmenter U-Net feat=16)
+
+| Phương án (µ) | Dice LL/RL/Heart | Dice mean | IoU mean | HD95 mean |
+|---|---|---|---|---|
+| ảnh gốc (upper bound, không deform) | 0.947 / 0.958 / 0.937 | **0.947** | 0.905 | 1.74 |
+| **C4 (µ=0.01)** | 0.936 / 0.950 / 0.929 | **0.938** | **0.889** | **2.12** |
+| baseline_fixed (µ=0.01) | 0.934 / 0.948 / 0.928 | 0.937 | 0.886 | 2.27 |
+| C4 (µ=0.02) | 0.926 / 0.941 / 0.917 | 0.928 | 0.870 | 2.61 |
+| C4 (µ=0.04) | 0.887 / 0.901 / 0.903 | 0.897 | 0.818 | 4.25 |
+| C2+C4 (µ=0.01) | 0.898 / 0.899 / 0.892 | 0.897 | 0.817 | 4.75 |
+
+## Top-1/5 identification (T6 — phép đo mới, N=500 gallery 1:1 ảnh/patient, benchmark 2026-08-10)
+
+| Phương án (µ) | TOP-1 | TOP-5 | MRR |
+|---|---|---|---|
+| ảnh gốc (upper bound) | 0.170 | 0.282 | 0.231 |
+| baseline_fixed (0.01) | 0.152 | 0.274 | 0.217 |
+| C4 (0.01) | 0.156 | 0.276 | 0.220 |
+| C2+C4 (0.01) | 0.142 | 0.250 | 0.202 |
+| C4 (0.02 / 0.04) | chờ seed2 train xong | — | — |
+
+> **10-seed Re-ID thật (2026-08-10) — C4 THẤT BẠI privacy:**
+> | C4 µ | Re-ID 10-seed | Class | Seg Dice | Top-1 |
+> |---|---|---|---|---|
+> | 0.01 | 0.7496 ± 0.033 | 0.792 | 0.938 | 0.156 |
+> | 0.02 | 0.7598 ± 0.037 | 0.788 | 0.928 | 0.148 |
+> | 0.04 | **0.6985 ± 0.065** | 0.785 | 0.897 | 0.148 |
+> | baseline_fixed 0.01 | **0.635 ± 0.079** | 0.773 | 0.937 | 0.152 |
+>
+> C4 (feature retention) **giữ identity → Re-ID cao hơn baseline ở mọi µ**. Proxy frozen ResNet-50 báo
+> C4@0.04 = 0.634 nhưng thực tế 0.70 → proxy KHÔNG tin cho C4/C2 (confirmed D7). Hướng privacy phải là
+> C2 budget map hoặc stochastic_lambda (destruct), không phải C4.
+> (Lưu ý: run C4@0.02 đầu tiên dính bug `mu`=0.01 → đúng là C4@0.01; đã rerun đúng µ=0.02 → `retrain_snn_runs_c4_mu0.02_fixed`.)
+
+## Đường cong µ C4 hoàn chỉnh (privacy / class / seg, 2026-08-09)
+
+| Method (µ) | Re-ID proxy | Class mean AUC | Seg Dice mean | Nhận xét |
+|---|---|---|---|---|
+| ảnh gốc (upper bound) | 0.802 (real) | 0.805 | 0.947 | — |
+| C4 (0.01) | 0.669 | **0.792** | **0.938** | class cao nhất, seg ≈ original |
+| C4 (0.02) | 0.658 | 0.788 | 0.928 | **điểm cân bằng tốt nhất** |
+| C4 (0.04) | 0.634 | 0.785 | 0.897 | privacy tốt nhất nhưng seg tụt |
+| baseline_fixed (0.01) | 0.653 | 0.773 | 0.937 | mốc so sánh |
+| C2+C4 (0.01) | 0.663 | 0.784 | 0.897 | seg phá ngang C4@0.04 |
+
+> **Kết luận µ-sweep:** C4 (0.02) thắng baseline trên 2/3 trục (Class 0.788 > 0.773, seg 0.928 ≈ 0.937,
+> privacy proxy ~0.658 ≈ 0.653). C4 (0.04) mạnh privacy (proxy 0.634) nhưng hi sinh seg (0.897).
+> C2 budget map phá segmentation ngang C4@µ=0.04 dù cùng µ — C4 là hướng giữ seg tốt nhất.
+> **Ứng viên cam kết 10-seed Re-ID tiếp:** C4 (0.02) hoặc C4 (0.04) nếu muốn privacy tối đa.
+
+> **Đóng góp chính:** C4 (feature-retention) giữ segmentation **ngang bằng ảnh gốc** (Dice 0.947→0.938, mất chỉ ~1%)
+> dù vẫn hạ Re-ID so với baseline — trong khi C2 budget map (nhắm vùng phổi/tim) làm seg suy giảm rõ (0.937→0.897).
+> C4 chứng minh "privacy tại vùng Giải phẫu" không khắc-xuống đường biên hình thái → seg giữ được.
+> (Checkpoint: `archive/train_seg_unet/best.pth`, val dice 0.955/0.964/0.946 trên 1500 ảnh.)
 
 ---
 

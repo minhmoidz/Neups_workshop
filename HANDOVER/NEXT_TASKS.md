@@ -40,34 +40,20 @@
 
 ---
 
-## Ưu tiên 1 — Bản baseline đúng code (bắt buộc)
+## Ưu tiên 1 — Bản baseline đúng code (bắt buộc) ✅ XONG 2026-08-09
 
-### T1. Hoàn tất 10-seed SNN cho baseline_fixed (đang treo ở 4/10)
+### T1. Hoàn tất 10-seed SNN cho baseline_fixed ✅
 - Checkpoint: `archive/train_prichexy_net_baseline_fixed/generator_lowest_total_loss.pth`
   (1 adversary, `accumulation_steps=1`, 60 epochs — paper-faithful, đúng code sau khi sửa bug).
-- **Checkpoint này CÓ trong git (LFS)** khi bạn clone/pull repo — không cần retrain.
-  Các generator khác (`c2`, `run_1`, `run_2`, `run_3`, `run_4`) **không** trong repo, phải tự retrain
-  theo T9 nếu cần dùng.
-- Đã có: SNN eval seed 0–3 (4/10). Chạy tiếp 6 seed còn lại:
+- Kết quả (N_runs=10, `archive/retrain_snn_runs_baseline_fixed/summary.txt`):
+  **Re-ID AUC = 0.635 ± 0.079**, per-run [0.664, 0.690, 0.550, 0.723, 0.537, 0.531, 0.597, 0.693, 0.600, 0.763].
+- So với paper 0.577 ± 0.040 → nằm trong 1 std → **paper reproducible với code đã sửa bug**.
+- Lưu ý: cao hơn chút so với 0.604 (code bug). Sửa bug làm generator cập nhật đúng, không hạ thêm Re-ID;
+  khoảng cách còn lại với paper là do protocol/hyperparameter, không phải bug.
 
-```bash
-cd /home/minhtt/Neups_workshop   # hoặc đường dẫn repo của bạn (dùng venv: source .venv/bin/activate)
-python run_snn_multiseed.py --n_runs 6 \
-  --checkpoint ./archive/train_prichexy_net_baseline_fixed/generator_lowest_total_loss.pth \
-  --out_dir ./archive/retrain_snn_runs_baseline_fixed --start_seed 4
-```
-
-- Verify: `summary.txt` có `N_runs: 10`.
-- Ý nghĩa: con số Re-ID **thật sự so được với paper 0.577** (trước kia 0.604 là của mã có bug).
-  Nếu hội tụ về ~0.58–0.60 → xác nhận paper reproducible; nếu thấp hơn hẳn (≈0.55) → bug đúng
-  thủ phạm, và cách tái hiện trong paper cần nói rõ batch protocol.
-
-### T2. Classification eval cho baseline_fixed
-```bash
-python eval_classifier.py --config_path ./config_files/ --config config_eval_classifier_baseline_fixed.json
-```
-- Verify: `chexnet/results/test_baseline_fixed/aucs.csv` → mean AUC.
-- Cùng với T1 tạo ra cặp (privacy, utility) cho baseline sau-sửa — mới duy nhất có ý nghĩa tham chiếu.
+### T2. Classification eval cho baseline_fixed ✅
+- Kết quả: `chexnet/results/test_baseline_fixed/aucs.csv` → **mean AUC = 0.7732**.
+- **Baseline chuẩn: (Re-ID 0.635 ± 0.079, Class 0.773).** Đây là mốc so sánh duy nhất hợp lệ.
 
 ## Ưu tiên 2 (đánh giá các phụ-release ablation)
 
@@ -105,10 +91,12 @@ python eval_classifier.py --config_path ./config_files/ --config config_eval_cla
 
 ### T7. Segmentation Dice/IoU/HD95 trên CheXmask
 - Dataset: `data/chexmask/ChestX-Ray8.csv` (RLE phổi trái/phải + tim, CC-BY, có sẵn local).
-- Trạng thái: thư mục `segmentation/` mới chỉ có `_test_net.py` — **chưa có pipeline đo**.
-- Cần: (1) parse mask RLE → array; (2) chạy segmenter (CheXNet/U-Net đơn giản) trên ảnh gốc và ảnh
-  anonymized (cùng đo lường); (3) so đoán Dice/IoU/HD95.
-- Có thể song song với T5/T6 (chỉ cần generator ổn định; bộ mask đã có sẵn).
+- Trạng thái: ✅ **pipeline đã dựng + số đầu tiên có** (2026-08-09):
+  - Pipeline: `utils/segmask.py` (parse RLE), `chexnet/seg_dataset.py` (NIH fold + mask),
+    `networks/UNetSeg.py` (U-Net 3 class), `train_seg.py`, `eval_seg.py` (tái dùng `utils.deform`).
+  - Segmenter: `archive/train_seg_unet/best.pth`, val Dice 0.955/0.964/0.946 (1500 ảnh, feat=16).
+  - Kết quả: xem `HANDOVER/GOALS.md` bảng segmentation — C4 giữ Dice ≈ ảnh gốc, C2+C4 suy giảm rõ.
+- Chờ: chạy eval_seg cho candidate mu cuối + đo trên subset test lớn hơn nếu cần độ tin cậy.
 
 ## Kéo dài: tooling & rigorous
 - Giữ bộ regression test (T8): chạy `python test_grad_accum.py` trước mỗi baseline/ablation mới;

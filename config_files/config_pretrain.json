@@ -1,6 +1,6 @@
 {
 	"experiment_description": "pretrain_flow_field",
-	"image_path": "/data/images/",
+	"image_path": "/home/minhtt/datasets/nih/images/",
 
 	"generator_type": "flow_field",
 	"image_size": 256,

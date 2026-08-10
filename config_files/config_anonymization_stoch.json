@@ -1,6 +1,6 @@
 {
 	"experiment_description": "train_prichexy_net_stoch_lam050",
-	"image_path": "/data/images/",
+	"image_path": "/home/minhtt/datasets/nih/images/",
 	"seed": 42,
 
 	"ac_loss_weight": 1,

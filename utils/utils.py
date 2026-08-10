@@ -808,7 +808,7 @@ def make_zip(output_filename, source_dir, config_file):
 
     rel_root = os.path.abspath(os.path.join(source_dir, os.pardir))
     # exclude specific folders from .zip file generation
-    exclude_dirs = {'.git', '.idea', '__pycache__'}
+    exclude_dirs = {'.git', '.idea', '__pycache__', '.venv', 'venv', 'logs', 'archive'}
     # exclude specific files from .zip file generation
     exclude_files = {output_filename, '.gitignore'}
     with zipfile.ZipFile(output_filename, "w", zipfile.ZIP_DEFLATED) as zip_f:

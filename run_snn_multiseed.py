@@ -11,11 +11,13 @@ import subprocess
 import argparse
 
 
-def make_config(base_config, experiment_description, checkpoint, seed):
+def make_config(base_config, experiment_description, checkpoint, seed, mu=None):
     cfg = dict(base_config)
     cfg['experiment_description'] = experiment_description
     if checkpoint is not None:
         cfg['perturbation_model_file'] = checkpoint
+    if mu is not None:
+        cfg['mu'] = mu
     cfg['seed'] = seed
     return cfg
 
@@ -28,6 +30,8 @@ def main():
     parser.add_argument('--out_dir', required=True)
     parser.add_argument('--base_config', default='./config_files/config_retrainSNN.json')
     parser.add_argument('--start_seed', type=int, default=0)
+    parser.add_argument('--mu', type=float, default=None,
+                        help='Override the deformation strength in the base config.')
     args = parser.parse_args()
 
     with open(args.base_config, 'r') as f:
@@ -39,7 +43,7 @@ def main():
     for i in range(args.n_runs):
         seed = args.start_seed + i
         exp_name = 'retrain_snn_seed{}'.format(seed)
-        cfg = make_config(base_config, exp_name, args.checkpoint, seed)
+        cfg = make_config(base_config, exp_name, args.checkpoint, seed, mu=args.mu)
         cfg_path = os.path.join('config_files', exp_name + '.json')
         with open(cfg_path, 'w') as f:
             json.dump(cfg, f, indent=2)

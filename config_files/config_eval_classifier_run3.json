@@ -1,5 +1,5 @@
 {
-	"image_path": "/data/images/",
+	"image_path": "/home/minhtt/datasets/nih/images/",
 	"save_path": "./chexnet/results/test_run3/",
 	"classifier_checkpoint": "./networks/pretrained_classifier.pth",
 	"seed": 42,

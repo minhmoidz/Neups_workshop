@@ -1,6 +1,6 @@
 {
 	"experiment_description": "retrain_snn_randomwarp_control",
-	"image_path": "/data/images/",
+	"image_path": "/home/minhtt/datasets/nih/images/",
 	"seed": 42,
 
 	"perturbation_type": "flow_field",

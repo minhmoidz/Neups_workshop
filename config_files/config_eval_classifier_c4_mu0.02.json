@@ -1,0 +1,12 @@
+{
+  "image_path": "/home/minhtt/datasets/nih/images/",
+  "save_path": "./chexnet/results/test_c4_mu0.02/",
+  "classifier_checkpoint": "./networks/pretrained_classifier.pth",
+  "seed": 42,
+  "perturbation_type": "flow_field",
+  "perturbation_model_file": "./archive/train_prichexy_net_c4_mu0.02/generator_lowest_total_loss.pth",
+  "mu": 0.02,
+  "b": null,
+  "m": null,
+  "eps": null
+}
