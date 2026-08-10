@@ -1,4 +1,5 @@
 import os
+import json
 import random
 import pickle
 import zipfile
@@ -142,6 +143,73 @@ def build_sampling_grid(grids, grid_identity, gauss_filter, transform_mode='lega
     return grids.permute(0, 2, 3, 1)
 
 
+def resolve_transform_mode(value):
+    """Resolve a user-supplied transform_mode to a canonical value, defaulting to the historical 'legacy'.
+
+    Old configs that carry no ``transform_mode`` key must not be broken (Backward-compat guarantee):
+    they resolve to 'legacy', so historical runs remain bit-for-bit reproducible. The resolved value is
+    what gets recorded in the experiment provenance (see record_transform_mode_provenance).
+
+    :param value: str or None
+        User value, e.g. config.get('transform_mode', 'legacy').
+    :return: str
+        'legacy' or 'corrected'.
+    :raises ValueError: if the value is anything other than legacy/corrected/None.
+    """
+    mode = 'legacy' if value is None else str(value).strip().lower()
+    if mode not in ('legacy', 'corrected'):
+        raise ValueError("transform_mode must be 'legacy' or 'corrected' (or absent for default), got %r" % (value,))
+    return mode
+
+
+def record_transform_mode_provenance(mode, save_path, config=None):
+    """Persist the resolved transform_mode so experiments carry explicit operator provenance.
+
+    The resolved mode must be inspectable after the run without re-deriving it from code: the same
+    experiment description can be launched with either 'legacy' or 'corrected', and the archive must
+    state which one was actually used.
+
+    :param mode: str
+        Already-resolved mode ('legacy' or 'corrected').
+    :param save_path: str
+        Directory of the experiment (created if missing).
+    :param config: dict or None
+        Full experiment config; if given, a resolved copy with the explicit mode key is written.
+    """
+    if save_path:
+        os.makedirs(save_path, exist_ok=True)
+        with open(os.path.join(save_path, 'transform_mode.txt'), 'w') as f:
+            f.write('%s\n' % mode)
+        if config is not None:
+            resolved_config = dict(config)
+            resolved_config['transform_mode'] = mode
+            with open(os.path.join(save_path, 'resolved_config.json'), 'w') as f:
+                json.dump(resolved_config, f, indent=2, sort_keys=True)
+    print('[transform_mode] resolved mode for this run: %s' % mode)
+
+
+def compute_budget_map(grids, mu):
+    """Turn the raw generator output into a per-image deformation budget.
+
+    For a 2-channel flow the budget is the scalar ``mu``. For a 3-channel flow the third channel is a spatial
+    deformation budget that is renormalized so that its per-image mean equals ``mu``; a zero third channel gives
+    a uniform map (the baseline). This is the exact budget construction used inside ``deform``.
+
+    :param grids: torch.Tensor (N, 2|3, H, W)
+        Raw generator output.
+    :param mu: float
+        Target mean deformation budget.
+    :return: tuple (budget, flow)
+        budget: torch.Tensor (N, 1, H, W) or a scalar float; flow: torch.Tensor (N, 2, H, W). The displacement
+        field fed to ``build_sampling_grid`` is ``budget * flow``.
+    """
+    if grids.shape[1] == 3:
+        budget = 1.0 + grids[:, 2:3]
+        budget = mu * budget / budget.mean(dim=(1, 2, 3), keepdim=True).clamp_min(1e-6)
+        return budget, grids[:, :2]
+    return mu, grids
+
+
 def deform(images, perturbation_net, grid_identity, gauss_filter, mu, stochastic_lambda=0.0,
            transform_mode='legacy'):
     """Apply the learned flow field to a batch of images, optionally with a stochastic component.
@@ -163,22 +231,16 @@ def deform(images, perturbation_net, grid_identity, gauss_filter, mu, stochastic
 
     grids = perturbation_net(images)
 
-    if grids.shape[1] == 3:
-        # The third channel is a spatial deformation budget. It is renormalized so that its per-image mean
-        # equals mu, hence the total budget matches the uniform-mu baseline exactly and any gain can only come
-        # from how the budget is allocated. A zero third channel gives a uniform map, i.e. the baseline.
-        budget = 1.0 + grids[:, 2:3]
-        budget = mu * budget / budget.mean(dim=(1, 2, 3), keepdim=True).clamp_min(1e-6)
-        grids = grids[:, :2]
-    else:
-        budget = mu
+    # Budget construction is factored out so the budget-map semantics (mean == mu, spatial effect) can be
+    # unit-tested directly rather than only through the image output.
+    budget, flow = compute_budget_map(grids, mu)
 
     if stochastic_lambda > 0:
-        noise = torch.randn_like(grids).clamp(-1.0, 1.0)
-        grids = (1.0 - stochastic_lambda) * grids + stochastic_lambda * noise
+        noise = torch.randn_like(flow).clamp(-1.0, 1.0)
+        flow = (1.0 - stochastic_lambda) * flow + stochastic_lambda * noise
 
     # Apply the budget scaling to the displacement field before smoothing.
-    scaled_grids = budget * grids
+    scaled_grids = budget * flow
     sampling_grid = build_sampling_grid(scaled_grids, grid_identity, gauss_filter, transform_mode)
 
     return torch.nn.functional.grid_sample(images, sampling_grid, padding_mode='border', align_corners=True)

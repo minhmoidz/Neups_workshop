@@ -36,7 +36,8 @@ class AgentPretrain:
         self.learning_rate = self.config['learning_rate']
         self.max_epochs = self.config['max_epochs']
         self.mu = self.config['mu']
-        self.transform_mode = self.config.get('transform_mode', 'legacy')
+        self.transform_mode = utils.resolve_transform_mode(self.config.get('transform_mode', 'legacy'))
+        utils.record_transform_mode_provenance(self.transform_mode, self.SAVINGS_PATH, self.config)
 
         self.num_workers = 8
         self.pin_memory = True

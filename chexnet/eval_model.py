@@ -53,6 +53,9 @@ def make_pred_multilabel(data_transforms, model, image_path, save_path, perturba
     except BaseException:
         pass
 
+    # Explicit operator provenance in the saved metadata (BLOCKER 9).
+    utils.record_transform_mode_provenance(utils.resolve_transform_mode(transform_mode), save_path)
+
     BATCH_SIZE = 16
 
     # Set model to eval mode; required for proper predictions given use of batchnorm

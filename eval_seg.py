@@ -77,6 +77,9 @@ def main():
     parser.add_argument('--transform_mode', default='legacy', choices=['legacy', 'corrected'])
     args = parser.parse_args()
 
+    args.transform_mode = utils.resolve_transform_mode(args.transform_mode)
+    print('[transform_mode] resolved mode for this run: %s' % args.transform_mode)
+
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     chk = torch.load(args.checkpoint, weights_only=False, map_location='cpu')
     model = UNetSeg(in_channels=1, out_channels=3, init_features=32 if 'init_features' not in chk else chk['init_features']).to(device)

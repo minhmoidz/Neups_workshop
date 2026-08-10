@@ -53,6 +53,10 @@ def main():
 
     utils.seed_all(args.seed)
 
+    # Explicit operator provenance in the console header (BLOCKER 9).
+    args.transform_mode = utils.resolve_transform_mode(args.transform_mode)
+    print('[transform_mode] resolved mode for this run: %s' % args.transform_mode)
+
     extractor = build_extractor()
     mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).cuda()
     std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).cuda()

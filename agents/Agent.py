@@ -43,7 +43,9 @@ class Agent:
         self.accumulation_steps = self.config.get('accumulation_steps', 1)
         self.use_budget_map = self.config.get('use_budget_map', False)
         self.stochastic_lambda = self.config.get('stochastic_lambda', 0.0)
-        self.transform_mode = self.config.get('transform_mode', 'legacy')
+        self.transform_mode = utils.resolve_transform_mode(self.config.get('transform_mode', 'legacy'))
+        # Explicit operator provenance: resolved mode is written into the experiment archive and console header.
+        utils.record_transform_mode_provenance(self.transform_mode, self.SAVINGS_PATH, self.config)
         self.ac_pos_weight = self.config.get('ac_pos_weight', None)
         self.feature_loss_weight = self.config.get('feature_loss_weight', 0.0)
 

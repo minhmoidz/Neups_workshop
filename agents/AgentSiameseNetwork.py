@@ -37,7 +37,8 @@ class AgentSiameseNetwork:
         self.perturbation_model_file = self.config['perturbation_model_file']
         self.mu = self.config['mu']
         self.stochastic_lambda = self.config.get('stochastic_lambda', 0.0)
-        self.transform_mode = self.config.get('transform_mode', 'legacy')
+        self.transform_mode = utils.resolve_transform_mode(self.config.get('transform_mode', 'legacy'))
+        utils.record_transform_mode_provenance(self.transform_mode, self.SAVINGS_PATH, self.config)
 
         self.b = self.config['b']
         self.m = self.config['m']

@@ -153,3 +153,155 @@ changed.
 Run a one-epoch smoke comparison of `legacy` vs `corrected` on a real NHI-XR validation
 batch using `proxy_reid.py --transform_mode corrected` to quantify the border-effect
 component of the Re-ID signal before committing to a 10-seed rerun.
+
+---
+
+## 11. Scientific Review Remediation (STEP 1B)
+
+The scientific reviewer returned **FAIL** on the initial fix: the reviewer accepted the
+mathematics (`legacy: G*(I-u)`, `corrected: I-G*u`) but could not inspect the actual
+implementation artifacts and found several regression tests insufficiently
+discriminating. Every blocker is resolved below and documented with evidence in
+`research_agent/00F2_OPERATOR_REVIEW_EVIDENCE.md`.
+
+### 11.1 BLOCKER 1 — Make the implementation reviewable ✅
+
+The complete repair is now available as auditable artifacts:
+
+- `research_agent/00F_OPERATOR_REPAIR.md` — this report.
+- `research_agent/00F2_OPERATOR_REVIEW_EVIDENCE.md` — review evidence (full output).
+- `research_agent/STEP1_OPERATOR_REPAIR.diff` — full diff vs pre-repair commit `9eaa5fd`.
+- `test_operator_repair.py` — 13-test final suite (all green).
+- Dedicated STEP-1 commit: `83738bb`.
+- STEP-1B remediation commit hash: recorded in `00F2_OPERATOR_REVIEW_EVIDENCE.md` §1.
+
+`git status`, `git diff --stat`, `git diff`, and current commit hash are captured in
+`00F2_OPERATOR_REVIEW_EVIDENCE.md` §1.
+
+### 11.2 BLOCKER 2 — Resolve the μ=0 numerical question ✅
+
+The different image errors (`3.457e-05` vs `6.974e-06`) came from different test images and
+image-space float interpolation, NOT from a non-identity grid. The grid invariant is now
+tested **directly** with `torch.equal`:
+
+- **TEST 1** nonzero flow (`u=0.7`) + `μ=0`: `torch.equal(grid, identity)==True`,
+  max grid diff **0**, mean grid diff **0**.
+- **TEST 2** zero flow + `μ>0`: `torch.equal(grid, identity)==True`, max=mean=**0**.
+- **TEST 3** same image, case A (arbitrary flow+μ=0) vs case B (zero flow+μ>0):
+  both grids equal the identity grid **exactly** (max |A-B| = 0, max |A - Id| = 0).
+
+### 11.3 BLOCKER 3 — Verify pretrain / preval all use the shared operator ✅
+
+The three historical operator sites are `deform()` (`utils/utils.py`), `pretrain()`
+(`utils/utils.py`), `preval()` (`utils/utils.py`). All three now call the single
+`build_sampling_grid` helper. Verified two ways:
+
+1. **Source-level** (`test_shared_operator_all_three_sites`): `inspect.getsource` asserts
+   each of `deform`/`pretrain`/`preval` calls `build_sampling_grid(` and does NOT contain
+   the inline `gauss_filter(grids)` on the full displaced grid.
+2. **Behavioral**: `test10_pretrain_corrected_path` and `test11_preval_corrected_path`
+   construct the grid exactly as `pretrain`/`preval` do (`mu * flow` →
+   `build_sampling_grid(..., mode)`): identity at μ=0 (`torch.equal`), deforming at μ>0.
+
+### 11.4 BLOCKER 4 — Replace the constant-image test ✅
+
+The constant-image test is retained **only as a labeled smoke test** (finite / correct
+shape) and is explicitly flagged as *NOT evidence of correctness*. It is no longer used
+for any claim. The high-value tests added instead: source-pixel coverage (BLOCKER 5) and
+legacy/corrected interior-vs-border comparison (BLOCKER 6).
+
+### 11.5 BLOCKER 5 — Test the actual historical defect (source-pixel coverage) ✅
+
+New `_source_coverage` computes the accumulated bilinear sampling weight per source pixel
+for a given sampling grid at `μ=0`:
+
+- **corrected**: every source pixel is sampled — unsampled = **0 / 4096 (0.00%)**.
+- **legacy**: **736 / 4096 (17.97%)** source pixels receive zero/negligible weight — the
+  entire outer ring (~4 px, kernel radius) is dropped, exactly the audited defect.
+
+### 11.6 BLOCKER 6 — Strengthen non-zero-μ test (interior == , border !=) ✅
+
+Identical flow + `μ=0.05`, comparing `legacy` vs `corrected` **sampling grids**:
+
+- interior (strict, kernel radius margin): max grid diff **3.576e-07** (numerical zero).
+- border: max grid diff **6.516e-01** (clearly non-zero).
+
+This proves the fix removes *only* the unintended border term caused by `G*I != I` while
+preserving the intended interior deformation (which is identical under both operators).
+
+### 11.7 BLOCKER 7 — Strengthen budget-map test ✅
+
+Budget construction is factored into `compute_budget_map` (used by `deform`), so the
+semantics can be asserted directly (new `test8`/`test9`):
+
+1. `mean(budget) == μ` per image: measured `0.02` vs `μ=0.02`
+   (max |diff| = `1.863e-09`).
+2. Spatial effect used: peaked budget channel raises mean displacement in the band to
+   `9.407e-03` vs `5.862e-03` flat and `3.996e-03` outside the band (band > flat, band >
+   outside).
+3. `μ=0` with a non-trivial budget channel still yields the **exact** identity grid
+   (covered by TEST 1/2 path; the budget channel multiplies to zero effective
+   displacement).
+
+### 11.8 BLOCKER 8 — Verify legacy reproducibility (not just assert it) ✅
+
+- `test12`: runs the exact old inline equations `old = grid_identity - u`;
+  `old = gauss(old); old = old.permute(...)` against
+  `build_sampling_grid(..., 'legacy')` → `torch.equal == True`, max grid diff **0**.
+  Bit-for-bit equivalence is now verified, not claimed.
+- `test12b`: all 28 existing configs (none carry `transform_mode`) resolve to `'legacy'`;
+  an invalid value is rejected with `ValueError`.
+
+### 11.9 BLOCKER 9 — Mode provenance (legacy/corrected made explicit) ✅
+
+The resolved mode is now deterministic and recorded at runtime:
+
+- `utils.resolve_transform_mode(value)` — canonical resolution, default `'legacy'` for
+  missing keys, rejects anything else.
+- `utils.record_transform_mode_provenance(mode, save_path, config)` writes `transform_mode.txt` and a
+  `resolved_config.json` (full config + explicit `transform_mode`) into the experiment archive, and prints a
+  `[transform_mode] resolved mode for this run: ...` console header.
+- Wired into `Agent`, `AgentSiameseNetwork`, `AgentPretrain`, `chexnet/eval_model.py`
+  (result metadata), plus console headers in `eval_seg.py`, `proxy_reid.py`.
+- No mandatory config key was introduced → old configs keep resolving to `legacy` and
+  remain bit-for-bit reproducible, but the *resolved* mode is explicit in saved records.
+
+### 11.10 Updated automated suite — 13 required tests ✅
+
+`test_operator_repair.py`:
+
+| # | Test | What it verifies |
+|---|------|------------------|
+| 1 | arbitrary nonzero flow + μ=0 | exact identity **grid** (`torch.equal`) |
+| 2 | zero flow + μ>0 | exact identity **grid** (`torch.equal`) |
+| 3 | same-image μ=0 vs zero-flow | both construct the same identity grid |
+| 4 | legacy vs corrected coverage at μ=0 | legacy drops 17.97% source px, corrected 0% |
+| 5 | legacy vs corrected interior | equal to numerical zero (3.6e-7) |
+| 6 | legacy vs corrected border | clearly different (0.652) |
+| 7 | corrected μ>0 | deformation active, finite, correct shape |
+| 8 | budget `mean ≈ μ` | max |diff| = 1.9e-9 |
+| 9 | budget spatial effect | band > flat, band > outside |
+| 10 | pretrain corrected path | identity at μ=0, grid correct at μ>0 |
+| 11 | preval corrected path | identity at μ=0, grid correct at μ>0 |
+| 12 | old-inline == new legacy helper | `torch.equal`, max diff 0 |
+| 12b | old configs → legacy | 28/28 configs; invalid value rejected |
+| 13 | gradient-accumulation regression | still passes (unchanged) |
+
+### 11.11 Output
+
+```
+STEP 1B REVIEW REMEDIATION: PASS
+```
+
+(Full per-test output: `research_agent/00F2_OPERATOR_REVIEW_EVIDENCE.md` §8.)
+
+### 11.12 Files changed in remediation
+
+- `utils/utils.py` — `resolve_transform_mode`, `record_transform_mode_provenance`,
+  `compute_budget_map` (factored out of `deform`); `json` import.
+- `agents/Agent.py`, `agents/AgentSiameseNetwork.py`, `agents/AgentPretrain.py` —
+  resolve + record provenance.
+- `chexnet/eval_model.py`, `eval_seg.py`, `proxy_reid.py` — provenance header/metadata.
+- `test_operator_repair.py` — replaced with the 13-test suite above.
+- `research_agent/00F2_OPERATOR_REVIEW_EVIDENCE.md`, `research_agent/STEP1_OPERATOR_REPAIR.diff` — new.
+- `research_agent/00F_OPERATOR_REPAIR.md` — this remediation section.
