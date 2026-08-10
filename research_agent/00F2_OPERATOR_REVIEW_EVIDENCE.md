@@ -19,7 +19,7 @@
 ```
 STEP 1 (operator repair):                83738bb341e8ce920490d5c06c48c69fd8d47f09
 STEP 1B (review remediation):            18f6eb9a3e3e7a532da93f31393f3d0e27a52d86
-STEP 1B (evidence docs 00F/00F2):        ef2ff7a522a752368d01a731fd13a6f79f7cb7f7   <- current HEAD
+STEP 1B (evidence docs 00F/00F2):        b9f8fc48aa7ea62c6fd770b6e4b73c7d1408e2dc   <- current HEAD
 ```
 
 ### Auditable artifacts
@@ -297,7 +297,7 @@ cd /home/minhtt/Neups_workshop
 .venv/bin/python -c "import torch; print(torch.__version__)"
 
 # 1. Provenance
-git rev-parse HEAD                                   # ef2ff7a522a752368d01a731fd13a6f79f7cb7f7
+git rev-parse HEAD                                   # b9f8fc48aa7ea62c6fd770b6e4b73c7d1408e2dc
 git log --oneline -5
 git diff --stat 9eaa5fdf22ec08885a15d726c949de8404d522ea HEAD
 git diff 9eaa5fdf22ec08885a15d726c949de8404d522ea HEAD > research_agent/STEP1_OPERATOR_REPAIR.diff
