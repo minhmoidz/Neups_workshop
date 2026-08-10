@@ -17,26 +17,28 @@
 ### Dedicated commits
 
 ```
-STEP 1 (operator repair):        83738bb341e8ce920490d5c06c48c69fd8d47f09
-STEP 1B (review remediation):    18f6eb9a3e3e7a532da93f31393f3d0e27a52d86   <- current HEAD
+STEP 1 (operator repair):                83738bb341e8ce920490d5c06c48c69fd8d47f09
+STEP 1B (review remediation):            18f6eb9a3e3e7a532da93f31393f3d0e27a52d86
+STEP 1B (evidence docs 00F/00F2):        2d7c6acaa942c4afb7005e1e317eb0cb4c9402f3   <- current HEAD
 ```
 
 ### Auditable artifacts
 
-| Artifact | Location |
-|---|---|
-| Repair report | `research_agent/00F_OPERATOR_REPAIR.md` |
-| Review evidence | `research_agent/00F2_OPERATOR_REVIEW_EVIDENCE.md` (this file) |
-| Full diff vs pre-repair | `research_agent/STEP1_OPERATOR_REPAIR.diff` (vs `9eaa5fd`) |
-| Regression suite | `test_operator_repair.py` |
+| Artifact | Location | In git |
+|---|---|---|
+| Repair report | `research_agent/00F_OPERATOR_REPAIR.md` | yes |
+| Review evidence | `research_agent/00F2_OPERATOR_REVIEW_EVIDENCE.md` (this file) | yes |
+| Full diff vs pre-repair | `research_agent/STEP1_OPERATOR_REPAIR.diff` (vs `9eaa5fd`) | generated artifact, untracked |
+| Regression suite | `test_operator_repair.py` | yes |
 
-### `git status` (at HEAD `18f6eb9`, after all commits)
+### `git status` (at HEAD `2d7c6ac`, after all commits)
 
 ```
-On branch <current>
-nothing to commit, working tree clean
-(except untracked generated artifact research_agent/STEP1_OPERATOR_REPAIR.diff)
+?? research_agent/STEP1_OPERATOR_REPAIR.diff
 ```
+
+The only untracked file is the generated diff artifact (1309 lines); all source/test/doc
+changes are committed.
 
 ### `git diff --stat` (pre-repair → HEAD)
 
@@ -295,8 +297,8 @@ cd /home/minhtt/Neups_workshop
 .venv/bin/python -c "import torch; print(torch.__version__)"
 
 # 1. Provenance
-git rev-parse HEAD                                   # 18f6eb9a3e3e7a532da93f31393f3d0e27a52d86
-git log --oneline -3
+git rev-parse HEAD                                   # 2d7c6acaa942c4afb7005e1e317eb0cb4c9402f3
+git log --oneline -4
 git diff --stat 9eaa5fdf22ec08885a15d726c949de8404d522ea HEAD
 git diff 9eaa5fdf22ec08885a15d726c949de8404d522ea HEAD > research_agent/STEP1_OPERATOR_REPAIR.diff
 
