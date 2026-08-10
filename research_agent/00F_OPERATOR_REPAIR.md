@@ -148,11 +148,28 @@ changed.
 - `test_operator_repair.py` — NEW regression suite (Task 4, tests A–E + μ>0 + budget map).
 - `research_agent/00F_OPERATOR_REPAIR.md` — this report.
 
-## 10. Suggested next step (out of scope here)
+## 10. Smoke quantification on real data (STEP 1C) — DONE
 
 Run a one-epoch smoke comparison of `legacy` vs `corrected` on a real NHI-XR validation
-batch using `proxy_reid.py --transform_mode corrected` to quantify the border-effect
-component of the Re-ID signal before committing to a 10-seed rerun.
+batch using the frozen-image proxy (`proxy_reid` machinery, forward passes only — no
+training, no SNN retraining). Same generator `baseline_fixed`, `mu=0.01`, identical
+inputs, seed 42:
+
+| mode | PROXY_AUC (2000 pairs) | border-mean-disp | interior-mean-disp |
+|---|---|---|---|
+| legacy    | 0.699515 | **0.2230** | 0.0086 |
+| corrected | 0.720785 | **0.0075** | 0.0086 |
+
+- Interior displacement identical (`0.0086`) in both modes — the operator diff is
+  border-only, as designed.
+- Legacy's border displacement is ~30× higher (`0.2230` vs `0.0075`) — the quantifiable
+  `G*I != I` artifact.
+- Legacy's lower proxy AUC (`0.6995` vs `0.7208`) is the *proxy* price of destroying
+  border diagnostic content, not a privacy gain; the non-adaptive proxy cannot answer
+  the real question. Whether the preserved border helps/hurts a **retrained** attacker
+  still needs the 10-seed SNN protocol — out of scope for STEP 1.
+
+Full reading in `00F2_OPERATOR_REVIEW_EVIDENCE.md` §8.1.
 
 ---
 

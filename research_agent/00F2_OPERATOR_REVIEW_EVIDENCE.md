@@ -35,13 +35,11 @@ STEP 1B (review remediation):            18f6eb9a3e3e7a532da93f31393f3d0e27a52d8
 | Full diff vs pre-repair | `research_agent/STEP1_OPERATOR_REPAIR.diff` (vs `9eaa5fd`) | generated artifact, untracked |
 | Regression suite | `test_operator_repair.py` | yes |
 
-### `git status` (at HEAD `2d7c6ac`, after all commits)
+### `git status` (working tree, snapshot after all commits)
 
 ```
 ?? research_agent/STEP1_OPERATOR_REPAIR.diff
 ```
-
-### `git status` (working tree)
 
 The only untracked file is the generated diff artifact `research_agent/STEP1_OPERATOR_REPAIR.diff`;
 all source/test/doc changes are committed (see commit list above).
@@ -261,6 +259,41 @@ TEST constant-image smoke: passes (finite, correct shape) — NOT evidence of co
 
 STEP 1B REVIEW REMEDIATION: PASS
 ```
+
+---
+
+## 8.1 Smoke (STEP 1C): proxy re-ID on a real validation batch — legacy vs corrected
+
+Per the suggested next step (§10 of `00F_OPERATOR_REPAIR.md`), a smoke comparison of the
+two operators was run on **real NIH-ChestX-ray14 images** (validation split, 2000
+genuine/impostor pairs) with the frozen ImageNet ResNet-50 proxy, using the same
+`baseline_fixed` generator (`mu=0.01`, `stochastic_lambda=0.0`, identical inputs, seed 42).
+Forward passes only — **no training, no SNN retraining**.
+
+```
+SMOKE: proxy re-ID on validation set (real NIH-ChestX-ray14)
+generator: archive/train_prichexy_net_baseline_fixed/generator_lowest_total_loss.pth | mu=0.01 | lambda=0.0 | image_size=256
+[legacy]    n_pairs=2000 PROXY_AUC=0.699515 | border-mean-disp=0.2230 interior-mean-disp=0.0086
+[corrected] n_pairs=2000 PROXY_AUC=0.720785 | border-mean-disp=0.0075 interior-mean-disp=0.0086
+delta PROXY_AUC (legacy - corrected) = -0.021270
+SMOKE DONE
+```
+
+**Reading** (consistent with the audited defect and BLOCKER 5/6):
+
+- `interior-mean-disp` is identical (`0.0086`) for both modes — the operators differ
+  **only** at the border, exactly as designed.
+- `border-mean-disp` = `0.2230` (legacy) collapses to `0.0075` (corrected): the 30× higher
+  border displacement in legacy is the `G*I != I` artifact dragging the sampling grid
+  toward 0 and dropping the outer ring of source pixels.
+- Legacy shows a *lower* proxy AUC (`0.6995` vs `0.7208`). This is **not** evidence that
+  legacy is more private — the proxy feature-space measure is non-adaptive (D7) and the
+  legacy drop comes from destroying border diagnostic content, the very defect this repair
+  removes. The 0.021 gap is the *proxy* signature of the border artifact, and the real
+  question (does preserving the border help/hurt the *retrained* attacker) still requires a
+  10-seed SNN retrain, which remains out of scope.
+
+Smoke script: `/tmp/opencode/smoke_proxy_compare.py` (no repo files added).
 
 ---
 
