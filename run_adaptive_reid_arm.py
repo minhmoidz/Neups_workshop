@@ -47,6 +47,7 @@ from adaptive_reid import provenance
 from adaptive_reid import restarts
 from adaptive_reid import summary as summ
 from adaptive_reid import topk
+from adaptive_reid import weights as ar_weights
 from adaptive_reid import pipeline
 
 PAIR_TRAIN = 'image_pairs/image_pairs_training_10000.txt'
@@ -62,6 +63,18 @@ PROTOCOL_01B = 'research_agent/01B_PROTOCOL_AMENDMENT.md'
 FROZEN_TOPK_CSV = 'research_agent/topk_frozen_list.csv'
 
 SIGNATURE_FILENAME = 'run_signature.json'
+ARCHIVE_ROOT = 'archive'
+
+
+def attacker_checkpoint_path(seed):
+    """Path of the canonical attacker checkpoint for a seed (matches the agent's save).
+
+    The agent persists ``<experiment_description>_best_network.pth`` under
+    ``./archive/<experiment_description>/`` where ``experiment_description`` is
+    ``retrain_snn_seed{seed}`` for protocol attempts.
+    """
+    exp = 'retrain_snn_seed{}'.format(seed)
+    return os.path.join(ARCHIVE_ROOT, exp, exp + '_best_network.pth')
 
 
 def now_iso():
@@ -118,7 +131,8 @@ def reuse_completed_run(run_dir, signature, seed, args):
     Idempotency (R-4 / BLOCKER 2B): a run whose training diagnostics, run state, and
     run signature all exist AND whose signature matches the current (seed, config,
     protocol, artifacts) is reused instead of being re-trained. For real runs the
-    checkpoint must also exist. Returns None when the run must be (re)trained.
+    checkpoint must also exist AND be loadable. Returns None when the run must be
+    (re)trained.
     """
     diag_path = os.path.join(run_dir, diag.VALIDITY_FILENAME)
     runstate_path = os.path.join(run_dir, diag.RUNSTATE_FILENAME)
@@ -133,9 +147,10 @@ def reuse_completed_run(run_dir, signature, seed, args):
     if stored != signature:
         return None
     if not args.stub:
-        exp = 'retrain_snn_seed{}'.format(seed)
-        ck = os.path.join('archive', exp, exp + '_best_network.pth')
-        if not os.path.exists(ck):
+        ck = attacker_checkpoint_path(seed)
+        # A completed real run must have a loadable checkpoint, not merely a
+        # directory (STEP 2B.2: reuse must verify the persisted artifact set is real).
+        if not ar_weights.checkpoint_loadable(ck):
             return None
     return diag.read_json(diag_path)
 
@@ -244,9 +259,11 @@ def main():
             if reused is not None:
                 rec = reused
             else:
-                rec = _train_once(seed, exp, run_dir, start, args, cfg, pair_hashes)
+                rec = _train_once(seed, exp, run_dir, start, args, cfg, pair_hashes,
+                                  protocol_documents, frozen_artifacts)
         else:
-            rec = _train_once(seed, exp, run_dir, start, args, cfg, pair_hashes)
+            rec = _train_once(seed, exp, run_dir, start, args, cfg, pair_hashes,
+                              protocol_documents, frozen_artifacts)
         rec['run_end_timestamp'] = now_iso()
         diag.write_json(os.path.join(run_dir, diag.VALIDITY_FILENAME), rec)
 
@@ -313,23 +330,44 @@ def main():
     print('provenance:', os.path.join(args.out_dir, 'arm_provenance.json'))
 
 
-def _train_once(seed, exp, run_dir, start, args, cfg, pair_hashes):
+def _train_once(seed, exp, run_dir, start, args, cfg, pair_hashes,
+                protocol_documents=None, frozen_artifacts=None):
     """Launch the single training invocation for one seed and return its record.
+
+    STEP 2B.2: the real training loop (retrain_SNN.py -> AgentSiameseNetwork) now
+    persists its own training_diagnostics.json into ``run_dir`` when the config carries
+    ``training_diagnostics_path``, ``evaluate_test_after_training`` and the provenance
+    hashes. We pass exactly those keys so the diagnostics contain the real run's values
+    (loss curves, AUC/accuracy, best epochs, termination reason, NaN/Inf, parameter
+    hashes, checkpoint loadability, protocol/frozen hashes) and never any test metric.
 
     Raises RuntimeError instead of fabricating a record when a real run finishes without
     the protocol's machine-readable diagnostics file (no invented diagnostics).
     """
     if args.stub:
         return _stub_record(seed, start, run_dir, cfg, args, pair_hashes,
-                            ck_exists=args.stub and seed % 5 != 2)
+                            ck_exists=args.stub and seed % 5 != 2,
+                            protocol_documents=protocol_documents,
+                            frozen_artifacts=frozen_artifacts)
     scfg = dict(cfg)
     scfg['experiment_description'] = exp
     scfg['seed'] = seed
     scfg['transform_mode'] = args.transform_mode
     scfg['mu'] = args.mu
     scfg['stochastic_lambda'] = args.stochastic_lambda
+    scfg['evaluate_test_after_training'] = False
+    scfg['training_diagnostics_path'] = os.path.join(run_dir, diag.VALIDITY_FILENAME)
+    scfg['pair_train_path'] = PAIR_TRAIN
+    scfg['pair_validation_path'] = PAIR_VAL
+    scfg['pair_train_hash'] = pair_hashes.get(PAIR_TRAIN, '')
+    scfg['pair_validation_hash'] = pair_hashes.get(PAIR_VAL, '')
+    scfg['protocol_documents'] = protocol_documents or {}
+    scfg['frozen_artifacts'] = frozen_artifacts or {}
     if args.checkpoint:
         scfg['perturbation_model_file'] = args.checkpoint
+        scfg['generator_checkpoint_hash'] = diag.sha256_file(args.checkpoint) if os.path.exists(args.checkpoint) else ''
+    else:
+        scfg['generator_checkpoint_hash'] = ''
     cfg_path = os.path.join('config_files', exp + '.json')
     with open(cfg_path, 'w') as f:
         json.dump(scfg, f, indent=2)
@@ -338,16 +376,33 @@ def _train_once(seed, exp, run_dir, start, args, cfg, pair_hashes):
          '--config', exp + '.json'], cwd=os.getcwd())
     os.remove(cfg_path) if os.path.exists(cfg_path) else None
     if res.returncode != 0:
-        return _infra_record(seed, start, run_dir, cfg, args, pair_hashes)
+        return _infra_record(seed, start, run_dir, cfg, args, pair_hashes,
+                             protocol_documents=protocol_documents,
+                             frozen_artifacts=frozen_artifacts)
     diag_path = os.path.join(run_dir, diag.VALIDITY_FILENAME)
     if os.path.exists(diag_path):
         return diag.read_json(diag_path)
-    raise RuntimeError(
-        'real run for seed %d finished (rc=0) without %s; refusing to fabricate '
-        'training diagnostics' % (seed, diag.VALIDITY_FILENAME))
+    # rc==0 but no diagnostics file: the real training loop did not persist the
+    # protocol record. This is an objective execution failure, not a valid completed
+    # run - record infrastructure_failure rather than fabricate metrics or crash the
+    # whole arm (STEP 2B.2 task 6). The schedule then issues a replacement seed.
+    print('WARNING: seed %d rc=0 but no %s in %s; recording infrastructure failure'
+          % (seed, diag.VALIDITY_FILENAME, run_dir))
+    return _infra_record(seed, start, run_dir, cfg, args, pair_hashes,
+                         protocol_documents=protocol_documents,
+                         frozen_artifacts=frozen_artifacts)
 
 
-def _stub_record(seed, start, run_dir, cfg, args, pair_hashes, ck_exists=True):
+def _generator_hash(args):
+    """sha256 of the generator checkpoint actually used, or '' when absent."""
+    ck = getattr(args, 'checkpoint', None)
+    if ck and os.path.exists(ck):
+        return diag.sha256_file(ck)
+    return ''
+
+
+def _stub_record(seed, start, run_dir, cfg, args, pair_hashes, ck_exists=True,
+                 protocol_documents=None, frozen_artifacts=None):
     # deterministic stub: seed%5==2 marks infrastructure failure (no checkpoint)
     epochs = 8
     val_loss = [0.62 + (seed % 3) * 0.02] * epochs
@@ -361,7 +416,7 @@ def _stub_record(seed, start, run_dir, cfg, args, pair_hashes, ck_exists=True):
         attacker_seed=seed, transform_mode=args.transform_mode, mu=args.mu,
         stochastic_lambda=args.stochastic_lambda,
         generator_checkpoint_path=args.checkpoint or '',
-        generator_checkpoint_hash=pair_hashes.get(args.checkpoint or '', ''),
+        generator_checkpoint_hash=_generator_hash(args),
         pair_train_path=PAIR_TRAIN, pair_validation_path=PAIR_VAL,
         pair_train_hash=pair_hashes.get(PAIR_TRAIN, ''),
         pair_validation_hash=pair_hashes.get(PAIR_VAL, ''),
@@ -372,15 +427,17 @@ def _stub_record(seed, start, run_dir, cfg, args, pair_hashes, ck_exists=True):
         best_validation_auc=max(val_auc), best_validation_auc_epoch=int(np_val_auc(val_auc)),
         any_nan_inf=False, checkpoint_exists=ck_exists, checkpoint_loadable=ck_exists,
         weights_changed_from_initialization=ck_exists,
+        protocol_documents=protocol_documents or {}, frozen_artifacts=frozen_artifacts or {},
         run_start_timestamp=start, run_end_timestamp=now_iso())
 
 
-def _infra_record(seed, start, run_dir, cfg, args, pair_hashes):
+def _infra_record(seed, start, run_dir, cfg, args, pair_hashes,
+                  protocol_documents=None, frozen_artifacts=None):
     return diag.build_training_diagnostics(
         attacker_seed=seed, transform_mode=args.transform_mode, mu=args.mu,
         stochastic_lambda=args.stochastic_lambda,
         generator_checkpoint_path=args.checkpoint or '',
-        generator_checkpoint_hash=pair_hashes.get(args.checkpoint or '', ''),
+        generator_checkpoint_hash=_generator_hash(args),
         pair_train_path=PAIR_TRAIN, pair_validation_path=PAIR_VAL,
         pair_train_hash=pair_hashes.get(PAIR_TRAIN, ''),
         pair_validation_hash=pair_hashes.get(PAIR_VAL, ''),
@@ -391,6 +448,7 @@ def _infra_record(seed, start, run_dir, cfg, args, pair_hashes):
         best_validation_auc=0.0, best_validation_auc_epoch=-1,
         any_nan_inf=True, checkpoint_exists=False, checkpoint_loadable=False,
         weights_changed_from_initialization=False,
+        protocol_documents=protocol_documents or {}, frozen_artifacts=frozen_artifacts or {},
         run_start_timestamp=start, run_end_timestamp=now_iso())
 
 

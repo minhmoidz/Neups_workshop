@@ -6,6 +6,7 @@ before and after training, compared exactly.
 """
 
 import hashlib
+import os
 
 import torch
 
@@ -69,3 +70,20 @@ def initialized_weights_identical(net_a, net_b):
         if not torch.equal(a.cpu(), b.cpu()):
             return False
     return True
+
+
+def checkpoint_loadable(path):
+    """Return True iff a real PyTorch checkpoint at ``path`` can actually be loaded.
+
+    Must genuinely attempt the load (protocol R-2: ``checkpoint_loadable`` reflects
+    reality, not the schema). ``weights_only=False`` matches how the repo saves state
+    dicts (plain state_dict) and accepts older torch formats; loading is done on CPU so
+    the check does not need a GPU.
+    """
+    if not path or not os.path.exists(path):
+        return False
+    try:
+        state = torch.load(path, map_location='cpu', weights_only=False)
+        return isinstance(state, dict)
+    except Exception:
+        return False

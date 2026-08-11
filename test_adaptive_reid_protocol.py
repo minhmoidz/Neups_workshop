@@ -26,6 +26,9 @@ Covers (cross-referenced to the task Parts):
   N  R-9 final policy (patient-cluster withdrawn)   (Part 9 / amendment §6)
   O  legacy shared-operator regression              (Part 14)
   P  gradient-accumulation regression               (Part 14, CUDA skip-guarded)
+  Z2 STEP 2B.2 real training-diagnostics wiring     (real per-epoch arrays, no test
+     fields, best-epoch accounting, parameter-hash / checkpoint reality, health
+     consumes the persisted file, loadable-checkpoint reuse, infra never reused)
 """
 
 import json
@@ -747,6 +750,213 @@ def test_Z_runner_stub_end_to_end(tmp_path):
 
 
 # ----------------------------------------------------------------------------------
+# Z2. STEP 2B.2: real-run training-diagnostics wiring
+# ----------------------------------------------------------------------------------
+def _real_record(tmp_path, **overrides):
+    """Build + persist a REAL-style completed training record (schema-valid)."""
+    td = _td_path(tmp_path)
+    rec = diag.build_training_diagnostics(
+        attacker_seed=7, transform_mode='corrected', mu=0.01, stochastic_lambda=0.0,
+        generator_checkpoint_path='gen.pth', generator_checkpoint_hash='ghash',
+        pair_train_path=runner.PAIR_TRAIN, pair_validation_path=runner.PAIR_VAL,
+        pair_train_hash='thash', pair_validation_hash='vhash',
+        epochs_completed=6, termination_reason=C.TERMINATION_EARLY_STOPPING,
+        training_loss_per_epoch=[0.71, 0.55, 0.44, 0.38, 0.34, 0.31],
+        validation_loss_per_epoch=[0.70, 0.58, 0.50, 0.45, 0.43, 0.41],
+        validation_auc_per_epoch=[0.60, 0.65, 0.70, 0.73, 0.74, 0.74],
+        validation_accuracy_per_epoch=[0.61, 0.66, 0.71, 0.72, 0.73, 0.73],
+        best_validation_loss=0.41, best_validation_loss_epoch=5,
+        best_validation_auc=0.74, best_validation_auc_epoch=5,
+        any_nan_inf=False, checkpoint_exists=True, checkpoint_loadable=True,
+        weights_changed_from_initialization=True,
+        initial_parameter_hash='i' * 64, final_parameter_hash='f' * 64,
+        protocol_documents={runner.PROTOCOL_01: 'c'}, frozen_artifacts={runner.FROZEN_TOPK_CSV: 'e'},
+        run_start_timestamp='t0', run_end_timestamp='t1')
+    for k, v in overrides.items():
+        rec[k] = v
+    diag.persist_real_training_diagnostics(
+        os.path.join(td, 'training_diagnostics.json'), rec)
+    return rec
+
+
+def test_Z2_persists_real_per_epoch_arrays(tmp_path):
+    td = _td_path(tmp_path)
+    _real_record(tmp_path)
+    loaded = diag.read_json(os.path.join(td, 'training_diagnostics.json'))
+    assert diag.validate_training_diagnostics_schema(loaded) == []
+    assert loaded['epochs_completed'] == 6
+    assert len(loaded['training_loss_per_epoch']) == 6
+    assert len(loaded['validation_loss_per_epoch']) == 6
+    assert len(loaded['validation_auc_per_epoch']) == 6
+    assert len(loaded['validation_accuracy_per_epoch']) == 6
+    # persisted real file must contain NO test-derived field
+    assert not (diag.FORBIDDEN_DIAGNOSTICS_FIELDS & set(loaded))
+    print('Z2. real per-epoch arrays persisted, no test fields PASS')
+
+
+def test_Z2_health_classifies_persisted_real_record(tmp_path):
+    td = _td_path(tmp_path)
+    _real_record(tmp_path)
+    state, near = health.classify_run_health(
+        diag.read_json(os.path.join(td, 'training_diagnostics.json')))
+    assert state == C.VALID and near is False
+    print('Z2. health consumes persisted real training_diagnostics.json PASS')
+
+
+def test_Z2_epoch_cap_is_valid(tmp_path):
+    rec = _real_record(tmp_path, termination_reason=C.TERMINATION_EPOCH_CAP,
+                       best_validation_loss_epoch=5, best_validation_auc_epoch=5)
+    state, _ = health.classify_run_health(rec)
+    assert state == C.VALID
+    print('Z2. epoch-cap completed run is VALID PASS')
+
+
+def test_Z2_early_stop_with_patience_valid(tmp_path):
+    rec = _real_record(tmp_path, termination_reason=C.TERMINATION_EARLY_STOPPING)
+    state, _ = health.classify_run_health(rec)
+    assert state == C.VALID
+    print('Z2. early-stopped run (with weights updated) is VALID PASS')
+
+
+def test_Z2_nan_inf_real_run_is_invalid(tmp_path):
+    rec = _real_record(tmp_path, any_nan_inf=True)
+    state, _ = health.classify_run_health(rec)
+    assert state == C.NUMERICALLY_INVALID
+    print('Z2. NaN/Inf in real run -> NUMERICALLY_INVALID PASS')
+
+
+def test_Z2_near_chance_real_run_valid_not_excluded(tmp_path):
+    rec = _real_record(tmp_path, best_validation_loss=0.70, best_validation_loss_epoch=5,
+                       best_validation_auc=0.52, best_validation_auc_epoch=5)
+    state, near = health.classify_run_health(rec)
+    assert state == C.VALID and near is True
+    print('Z2. near-chance real attacker stays VALID + near_chance PASS')
+
+
+def test_Z2_initial_final_parameter_hash_consistency(tmp_path):
+    torch.manual_seed(0)
+    net = torch.nn.Sequential(torch.nn.Linear(4, 8), torch.nn.ReLU(), torch.nn.Linear(8, 1))
+    h0 = weights.parameters_hash(net)
+    # unchanged parameters -> identical hash -> weights_changed False
+    assert weights.parameters_hash(net) == h0
+    assert weights.weights_changed(h0, h0) is False
+    # a real optimizer step mutates the trainable weights
+    opt = torch.optim.SGD(net.parameters(), lr=0.5)
+    opt.zero_grad()
+    x = torch.randn(2, 4, requires_grad=False)
+    net(x).sum().backward()
+    opt.step()
+    h1 = weights.parameters_hash(net)
+    assert weights.weights_changed(h0, h1) is True
+    rec = _real_record(tmp_path, initial_parameter_hash=h0, final_parameter_hash=h1)
+    assert rec['weights_changed_from_initialization'] is True
+    # the diagnostics must reflect the real run: no step -> invalid (R-2)
+    rec2 = _real_record(tmp_path, initial_parameter_hash=h0, final_parameter_hash=h0,
+                        weights_changed_from_initialization=False)
+    state, _ = health.classify_run_health(rec2)
+    assert state == C.NUMERICALLY_INVALID
+    print('Z2. initial vs final parameter hash consistency (R-2) PASS')
+
+
+def test_Z2_checkpoint_loadability_reflects_reality(tmp_path):
+    p = os.path.join(_td_path(tmp_path), 'net.pth')
+    assert weights.checkpoint_loadable(p) is False  # does not exist
+    torch.save({'w': torch.zeros(2, 2)}, p)
+    assert weights.checkpoint_loadable(p) is True
+    with open(p, 'w') as f:
+        f.write('not a checkpoint')
+    assert weights.checkpoint_loadable(p) is False
+    print('Z2. checkpoint_loadable reflects reality (exists/loadable/corrupt) PASS')
+
+
+def test_Z2_runner_no_fabrication_and_infra_not_reused(tmp_path):
+    # rc==0 with no diagnostics file -> objective failure, NEVER invented metrics
+    import argparse
+    td = _td_path(tmp_path)
+    args = argparse.Namespace(transform_mode='corrected', mu=0.01, stochastic_lambda=0.0,
+                              checkpoint=None)
+    rec = runner._infra_record(9, 't0', td, {}, args, {}, {}, {})
+    state, _ = health.classify_run_health(rec)
+    assert state == C.NUMERICALLY_INVALID
+    assert rec['epochs_completed'] == 0
+    assert rec['termination_reason'] == C.TERMINATION_INFRASTRUCTURE
+    print('Z2. infra failure is NUMERICALLY_INVALID, not fabricated PASS')
+
+
+def test_Z2_real_reuse_requires_loadable_checkpoint(tmp_path):
+    import argparse
+    td = _td_path(tmp_path)
+    args = argparse.Namespace(arm_id='arm_x', transform_mode='corrected', mu=0.01,
+                              stochastic_lambda=0.0, checkpoint=None, stub=False,
+                              force=False)
+    cfg = {'learning_rate': 1e-4, 'batch_size': 16, 'max_epochs': 100,
+           'early_stopping': {'patience': 5}}
+    pair_hashes = {runner.PAIR_TRAIN: 'a', runner.PAIR_VAL: 'b'}
+    protocol_documents = {runner.PROTOCOL_01: 'c', runner.PROTOCOL_01B: 'd'}
+    frozen_artifacts = {runner.FROZEN_TOPK_CSV: 'e'}
+    sig = runner.run_signature(3, args, cfg, pair_hashes, protocol_documents, frozen_artifacts)
+
+    run_dir = os.path.join(td, 'runs', 'retrain_snn_seed3')
+    os.makedirs(run_dir, exist_ok=True)
+    rec = _real_record(tmp_path, attacker_seed=3)
+    diag.write_json(os.path.join(run_dir, diag.VALIDITY_FILENAME), rec)
+    diag.write_json(os.path.join(run_dir, diag.RUNSTATE_FILENAME),
+                    {'state': C.VALID, 'near_chance': False})
+    diag.write_json(os.path.join(run_dir, runner.SIGNATURE_FILENAME), sig)
+
+    # real mode requires the actual checkpoint to exist AND load (STEP 2B.2)
+    old_root = runner.ARCHIVE_ROOT
+    runner.ARCHIVE_ROOT = os.path.join(_td_path(tmp_path), 'archive')
+    try:
+        ck = runner.attacker_checkpoint_path(3)
+        assert runner.reuse_completed_run(run_dir, sig, 3, args) is None  # no checkpoint yet
+
+        archive_dir = os.path.dirname(ck)
+        os.makedirs(archive_dir, exist_ok=True)
+        torch.save({'w': torch.zeros(2, 2)}, ck)
+        loaded = runner.reuse_completed_run(run_dir, sig, 3, args)
+        assert loaded is not None and loaded['attacker_seed'] == 3
+
+        # corrupt the checkpoint -> must NOT reuse, must re-train
+        with open(ck, 'w') as f:
+            f.write('corrupt')
+        assert runner.reuse_completed_run(run_dir, sig, 3, args) is None
+
+        # a real-mode infra record is never reused as a completed run
+        rec_infra = runner._infra_record(3, 't0', td, {}, args, pair_hashes, {}, {})
+        diag.write_json(os.path.join(run_dir, diag.VALIDITY_FILENAME), rec_infra)
+        assert runner.reuse_completed_run(run_dir, sig, 3, args) is None
+    finally:
+        runner.ARCHIVE_ROOT = old_root
+    print('Z2. real reuse requires loadable checkpoint + infra never reused PASS')
+
+
+def test_Z2_partial_artifact_set_not_reused(tmp_path):
+    import argparse
+    td = _td_path(tmp_path)
+    args = argparse.Namespace(arm_id='arm_x', transform_mode='corrected', mu=0.01,
+                              stochastic_lambda=0.0, checkpoint=None, stub=True,
+                              force=False)
+    cfg = {'learning_rate': 1e-4, 'batch_size': 16, 'max_epochs': 100,
+           'early_stopping': {'patience': 5}}
+    pair_hashes = {runner.PAIR_TRAIN: 'a', runner.PAIR_VAL: 'b'}
+    protocol_documents = {runner.PROTOCOL_01: 'c', runner.PROTOCOL_01B: 'd'}
+    frozen_artifacts = {runner.FROZEN_TOPK_CSV: 'e'}
+    sig = runner.run_signature(3, args, cfg, pair_hashes, protocol_documents, frozen_artifacts)
+    run_dir = os.path.join(td, 'runs', 'retrain_snn_seed3')
+    os.makedirs(run_dir, exist_ok=True)
+    rec = _real_record(tmp_path)
+    diag.write_json(os.path.join(run_dir, diag.VALIDITY_FILENAME), rec)
+    diag.write_json(os.path.join(run_dir, runner.SIGNATURE_FILENAME), sig)
+    # run_state.json missing -> incomplete artifact set -> must (re)train
+    assert runner.reuse_completed_run(run_dir, sig, 3, args) is None
+    diag.write_json(os.path.join(run_dir, diag.RUNSTATE_FILENAME),
+                    {'state': C.VALID, 'near_chance': False})
+    assert runner.reuse_completed_run(run_dir, sig, 3, args) is not None
+    print('Z2. incomplete artifact set is NOT reused as a completed run PASS')
+
+
+# ----------------------------------------------------------------------------------
 if __name__ == '__main__':
     import sys
     import tempfile as _tf
@@ -791,6 +1001,17 @@ if __name__ == '__main__':
     test_P_diagnostics_json_hasno_test_mixin(_tf.TemporaryDirectory())
     test_stage_order_test_never_selects(_tf.TemporaryDirectory())
     test_Z_runner_stub_end_to_end(_tf.TemporaryDirectory())
+    test_Z2_persists_real_per_epoch_arrays(_tf.TemporaryDirectory())
+    test_Z2_health_classifies_persisted_real_record(_tf.TemporaryDirectory())
+    test_Z2_epoch_cap_is_valid(_tf.TemporaryDirectory())
+    test_Z2_early_stop_with_patience_valid(_tf.TemporaryDirectory())
+    test_Z2_nan_inf_real_run_is_invalid(_tf.TemporaryDirectory())
+    test_Z2_near_chance_real_run_valid_not_excluded(_tf.TemporaryDirectory())
+    test_Z2_initial_final_parameter_hash_consistency(_tf.TemporaryDirectory())
+    test_Z2_checkpoint_loadability_reflects_reality(_tf.TemporaryDirectory())
+    test_Z2_runner_no_fabrication_and_infra_not_reused(_tf.TemporaryDirectory())
+    test_Z2_real_reuse_requires_loadable_checkpoint(_tf.TemporaryDirectory())
+    test_Z2_partial_artifact_set_not_reused(_tf.TemporaryDirectory())
 
     print('\nSTEP 2B + STEP 2B.1 REMEDIATION TEST SUITE: PASS')
     sys.exit(0)

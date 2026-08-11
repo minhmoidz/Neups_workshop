@@ -1,4 +1,6 @@
+import os
 import time
+import math
 import copy
 from sklearn import metrics
 
@@ -52,6 +54,14 @@ class AgentSiameseNetwork:
 
         self.num_workers = 16
         self.pin_memory = True
+
+        # STEP 2B.2: real-run diagnostics wiring. All keys are optional so legacy
+        # configs (plain retrain_SNN.py) remain bit-for-bit unchanged: diagnostics are
+        # only persisted when a path is supplied by the protocol runner.
+        from adaptive_reid import diagnostics as arm_diag
+        self.training_diagnostics_path = self.config.get('training_diagnostics_path')
+        self.evaluate_test_after_training = self.config.get('evaluate_test_after_training', True)
+        self.run_start_timestamp = arm_diag.utcnow_iso()
 
         # Define the identity grid and the 
         if self.perturbation_type == 'flow_field':
@@ -110,26 +120,67 @@ class AgentSiameseNetwork:
                                                        batch_size=self.batch_size, shuffle=False, 
                                                        num_workers=self.num_workers, pin_memory=self.pin_memory, 
                                                        b=self.b, m=self.m, eps=self.eps, image_path=self.IMAGE_PATH)
-        self.test_loader = utils.get_data_loader(phase='testing', experimental_step='retrainSNN', 
-                                                 image_size=self.image_size, n_channels=self.n_channels, 
-                                                 batch_size=self.batch_size, shuffle=False, 
-                                                 num_workers=self.num_workers, pin_memory=self.pin_memory,
-                                                 b=self.b, m=self.m, eps=self.eps, image_path=self.IMAGE_PATH)
+        self.test_loader = None
+        if self.evaluate_test_after_training:
+            self.test_loader = utils.get_data_loader(phase='testing', experimental_step='retrainSNN',
+                                                     image_size=self.image_size, n_channels=self.n_channels,
+                                                     batch_size=self.batch_size, shuffle=False,
+                                                     num_workers=self.num_workers, pin_memory=self.pin_memory,
+                                                     b=self.b, m=self.m, eps=self.eps, image_path=self.IMAGE_PATH)
 
     def training_validation(self):
-        # Training and validation loop
+        """Training and validation loop.
+
+        STEP 2B.2: for protocol-run real attacker attempts this method additionally
+        persists ``training_diagnostics.json`` (see ``adaptive_reid.diagnostics``) with
+        per-epoch training/validation loss, validation AUC + accuracy, best-epoch
+        accounting, termination reason, NaN/Inf state, and parameter-hash state. All
+        values come from this actual run; nothing is fabricated. When no
+        ``training_diagnostics_path`` is configured (legacy ``retrain_SNN.py``), the
+        historical behaviour is preserved bit-for-bit.
+        """
+        from adaptive_reid import diagnostics as arm_diag
+        from adaptive_reid import weights as arm_weights
+        from adaptive_reid import constants as arm_const
+
+        initial_parameter_hash = arm_weights.parameters_hash(self.net)
+
+        training_losses = []
+        validation_losses = []
+        validation_aucs = []
+        validation_accs = []
+        any_nan_inf = False
+        best_validation_auc = -1.0
+        best_validation_auc_epoch = -1
+        best_validation_loss_epoch = -1
+        termination_reason = arm_const.TERMINATION_EPOCH_CAP
+
         for epoch in range(self.start_epoch, self.max_epochs):
             start_time = time.time()
 
-            training_loss = utils.train_snn(self.perturbation_type, self.net, self.perturbation_net, self.grid_identity, 
-                                            self.gauss_filter, self.mu, self.training_loader, self.loss, self.optimizer, 
+            training_loss = utils.train_snn(self.perturbation_type, self.net, self.perturbation_net, self.grid_identity,
+                                            self.gauss_filter, self.mu, self.training_loader, self.loss, self.optimizer,
                                             epoch, self.max_epochs, stochastic_lambda=self.stochastic_lambda,
                                             transform_mode=self.transform_mode)
-            validation_loss = utils.validate_snn(self.perturbation_type, self.net, self.perturbation_net, 
-                                                 self.grid_identity, self.gauss_filter, self.mu, self.validation_loader, 
-                                                 self.loss, epoch, self.max_epochs,
-                                                 stochastic_lambda=self.stochastic_lambda,
-                                                 transform_mode=self.transform_mode)
+            val_result = utils.validate_snn(self.perturbation_type, self.net, self.perturbation_net,
+                                            self.grid_identity, self.gauss_filter, self.mu, self.validation_loader,
+                                            self.loss, epoch, self.max_epochs,
+                                            stochastic_lambda=self.stochastic_lambda,
+                                            transform_mode=self.transform_mode, return_metrics=True)
+            validation_loss, val_metrics = val_result
+            validation_auc = val_metrics['auc']
+            validation_acc = val_metrics['accuracy']
+
+            training_losses.append(float(training_loss))
+            validation_losses.append(float(validation_loss))
+            validation_aucs.append(float(validation_auc))
+            validation_accs.append(float(validation_acc))
+
+            if not (math.isfinite(float(training_loss))
+                    and math.isfinite(float(validation_loss))
+                    and math.isfinite(float(validation_auc))
+                    and math.isfinite(float(validation_acc))):
+                any_nan_inf = True
 
             self.loss_dict['training'].append(training_loss)
             self.loss_dict['validation'].append(validation_loss)
@@ -141,6 +192,11 @@ class AgentSiameseNetwork:
             if validation_loss < self.best_loss:
                 self.best_loss = validation_loss
                 self.best_net = copy.deepcopy(self.net)
+                best_validation_loss_epoch = epoch
+
+            if validation_auc > best_validation_auc:
+                best_validation_auc = validation_auc
+                best_validation_auc_epoch = epoch
 
             torch.save(self.best_net.state_dict(), self.SAVINGS_PATH + self.config[
                 'experiment_description'] + '_best_network.pth')
@@ -149,9 +205,86 @@ class AgentSiameseNetwork:
             utils.plot_loss_curves_snn(self.loss_dict, self.SAVINGS_PATH, self.config['experiment_description'])
 
             if self.es.step(validation_loss):
+                termination_reason = arm_const.TERMINATION_EARLY_STOPPING
                 break
 
         print('Finished Training!')
+
+        if self.training_diagnostics_path:
+            self._persist_training_diagnostics(
+                arm_diag=arm_diag, arm_weights=arm_weights,
+                initial_parameter_hash=initial_parameter_hash,
+                training_losses=training_losses,
+                validation_losses=validation_losses,
+                validation_aucs=validation_aucs,
+                validation_accs=validation_accs,
+                any_nan_inf=any_nan_inf,
+                best_validation_auc=best_validation_auc,
+                best_validation_auc_epoch=best_validation_auc_epoch,
+                best_validation_loss_epoch=best_validation_loss_epoch,
+                termination_reason=termination_reason)
+
+    def _persist_training_diagnostics(self, *, arm_diag, arm_weights, initial_parameter_hash,
+                                      training_losses, validation_losses, validation_aucs,
+                                      validation_accs, any_nan_inf, best_validation_auc,
+                                      best_validation_auc_epoch, best_validation_loss_epoch,
+                                      termination_reason):
+        """        Build + write the real training-diagnostics record for this actual run.
+
+        Only called when the protocol runner supplies ``training_diagnostics_path``.
+        All execution-health values (parameter hashes, checkpoint loadability,
+        termination reason, NaN/Inf) are computed from this real run.
+        """
+        checkpoint_path = self.SAVINGS_PATH + self.config['experiment_description'] + '_best_network.pth'
+        checkpoint_exists = os.path.exists(checkpoint_path)
+        checkpoint_loadable = arm_weights.checkpoint_loadable(checkpoint_path)
+        final_parameter_hash = arm_weights.parameters_hash(self.net)
+        weights_changed = arm_weights.weights_changed(initial_parameter_hash, final_parameter_hash)
+
+        epochs_completed = len(training_losses)
+        # Canonical checkpoint selection is LOWEST VALIDATION LOSS; the best loss and
+        # its epoch are exactly what drove self.best_net, not a recomputation.
+        best_validation_loss = float(self.best_loss) if validation_losses else float('inf')
+        best_validation_loss_epoch = (best_validation_loss_epoch
+                                      if validation_losses and best_validation_loss_epoch >= 0
+                                      else -1)
+        best_validation_auc = (best_validation_auc
+                               if validation_aucs and best_validation_auc_epoch >= 0 else 0.0)
+        best_validation_auc_epoch = best_validation_auc_epoch if validation_aucs else -1
+
+        record = arm_diag.build_training_diagnostics(
+            attacker_seed=int(self.config.get('seed', 0)),
+            transform_mode=self.transform_mode,
+            mu=float(self.mu),
+            stochastic_lambda=float(self.stochastic_lambda),
+            generator_checkpoint_path=str(self.perturbation_model_file),
+            generator_checkpoint_hash=str(self.config.get('generator_checkpoint_hash', '')),
+            pair_train_path=str(self.config.get('pair_train_path', '')),
+            pair_validation_path=str(self.config.get('pair_validation_path', '')),
+            pair_train_hash=str(self.config.get('pair_train_hash', '')),
+            pair_validation_hash=str(self.config.get('pair_validation_hash', '')),
+            epochs_completed=epochs_completed,
+            termination_reason=termination_reason,
+            training_loss_per_epoch=training_losses,
+            validation_loss_per_epoch=validation_losses,
+            validation_auc_per_epoch=validation_aucs,
+            validation_accuracy_per_epoch=validation_accs,
+            best_validation_loss=best_validation_loss,
+            best_validation_loss_epoch=best_validation_loss_epoch,
+            best_validation_auc=best_validation_auc,
+            best_validation_auc_epoch=best_validation_auc_epoch,
+            any_nan_inf=any_nan_inf,
+            checkpoint_exists=checkpoint_exists,
+            checkpoint_loadable=checkpoint_loadable,
+            weights_changed_from_initialization=weights_changed,
+            initial_parameter_hash=initial_parameter_hash,
+            final_parameter_hash=final_parameter_hash,
+            protocol_documents=dict(self.config.get('protocol_documents', {}) or {}),
+            frozen_artifacts=dict(self.config.get('frozen_artifacts', {}) or {}),
+            run_start_timestamp=str(self.run_start_timestamp),
+            run_end_timestamp=arm_diag.utcnow_iso(),
+        )
+        arm_diag.persist_real_training_diagnostics(self.training_diagnostics_path, record)
     
     def testing_evaluation(self):
         # Testing phase
@@ -201,6 +334,12 @@ class AgentSiameseNetwork:
         print('Confidence interval for the AUC score: ' + str(confidence_lower) + ' - ' + str(confidence_upper))
     
     def run(self):
-        # Call training/validation and testing loop successively
+        # Call training/validation and testing loop successively.
         self.training_validation()
-        self.testing_evaluation()
+        # STEP 2B.2 (protocol): the frozen pipeline evaluates the TEST split only in
+        # Stage E (after representative selection is frozen). The runner therefore sets
+        # `evaluate_test_after_training: False` so a protocol attacker attempt trains +
+        # validates but never touches the test split here. Legacy callers keep the
+        # historical behaviour (default True).
+        if self.evaluate_test_after_training:
+            self.testing_evaluation()

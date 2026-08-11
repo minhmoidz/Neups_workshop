@@ -11,6 +11,7 @@ training/validation fields below.
 
 import hashlib
 import json
+import math
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -78,8 +79,20 @@ def build_training_diagnostics(
     weights_changed_from_initialization: bool,
     run_start_timestamp: str,
     run_end_timestamp: str,
+    protocol_documents: Optional[Dict[str, str]] = None,
+    frozen_artifacts: Optional[Dict[str, str]] = None,
+    initial_parameter_hash: str = '',
+    final_parameter_hash: str = '',
 ) -> Dict[str, Any]:
-    """Assemble the canonical training-diagnostics record (no test fields)."""
+    """Assemble the canonical training-diagnostics record (no test fields).
+
+    :param protocol_documents: {path: sha256} of the frozen authoritative protocol
+        documents (R-12: 01_ADAPTIVE_REID_PROTOCOL.md, 01B_PROTOCOL_AMENDMENT.md).
+    :param frozen_artifacts: {path: sha256} of other frozen inputs (e.g. Top-k list).
+    :param initial_parameter_hash: sha256 of the trainable parameters at the start of
+        training (R-2: weight-update state). Empty string when not applicable (stub).
+    :param final_parameter_hash: sha256 of the trainable parameters after training.
+    """
     return {
         'attacker_seed': attacker_seed,
         'transform_mode': str(transform_mode),
@@ -105,6 +118,10 @@ def build_training_diagnostics(
         'checkpoint_exists': bool(checkpoint_exists),
         'checkpoint_loadable': bool(checkpoint_loadable),
         'weights_changed_from_initialization': bool(weights_changed_from_initialization),
+        'initial_parameter_hash': str(initial_parameter_hash),
+        'final_parameter_hash': str(final_parameter_hash),
+        'protocol_documents': {str(p): str(h) for p, h in (protocol_documents or {}).items()},
+        'frozen_artifacts': {str(p): str(h) for p, h in (frozen_artifacts or {}).items()},
         'run_start_timestamp': str(run_start_timestamp),
         'run_end_timestamp': str(run_end_timestamp),
     }
@@ -125,3 +142,65 @@ def read_json(path: str) -> Dict[str, Any]:
 VALIDITY_FILENAME = 'training_diagnostics.json'
 RUNSTATE_FILENAME = 'run_state.json'
 TESTMETRICS_FILENAME = 'test_metrics.json'
+
+# Fields that a training-diagnostics record MUST carry. Kept in sync with the
+# classifier's required keys so the persisted real-run file can be consumed by
+# classify_run_health without any transformation.
+REQUIRED_DIAGNOSTICS_FIELDS = frozenset({
+    'attacker_seed', 'transform_mode', 'mu', 'stochastic_lambda',
+    'generator_checkpoint_path', 'generator_checkpoint_hash',
+    'pair_train_path', 'pair_validation_path',
+    'pair_train_hash', 'pair_validation_hash',
+    'epochs_completed', 'termination_reason',
+    'training_loss_per_epoch', 'validation_loss_per_epoch',
+    'validation_auc_per_epoch', 'validation_accuracy_per_epoch',
+    'best_validation_loss', 'best_validation_loss_epoch',
+    'best_validation_auc', 'best_validation_auc_epoch',
+    'any_nan_inf', 'checkpoint_exists', 'checkpoint_loadable',
+    'weights_changed_from_initialization',
+    'run_start_timestamp', 'run_end_timestamp',
+})
+
+# Fields that a training-diagnostics record MUST NOT carry (test-derived data).
+FORBIDDEN_DIAGNOSTICS_FIELDS = frozenset({
+    'test_auc', 'test_predictions', 'test_labels', 'test_metrics',
+})
+
+
+def validate_training_diagnostics_schema(record: Any) -> List[str]:
+    """Return a list of schema violations (empty list == valid).
+
+    Checks that every required field is present and that no test-derived field leaked
+    into the training-diagnostics record (R-8 / R-11).
+    """
+    violations = []
+    if not isinstance(record, dict):
+        return ['training diagnostics record must be a dict, got %s' % type(record).__name__]
+    missing = sorted(REQUIRED_DIAGNOSTICS_FIELDS - set(record))
+    for field in missing:
+        violations.append('missing required field %r' % field)
+    leaked = sorted(FORBIDDEN_DIAGNOSTICS_FIELDS & set(record))
+    for field in leaked:
+        violations.append('forbidden test-derived field %r must not be present' % field)
+    return violations
+
+
+def assert_valid_diagnostics_schema(record: Any) -> None:
+    violations = validate_training_diagnostics_schema(record)
+    if violations:
+        raise ValueError('training diagnostics schema violated: %s' % '; '.join(violations))
+
+
+def is_finite_series(values) -> bool:
+    return all(isinstance(v, (int, float)) and math.isfinite(float(v)) for v in values)
+
+
+def persist_real_training_diagnostics(path: str, record: Dict[str, Any]) -> None:
+    """Write a REAL training-diagnostics record after schema validation (no stubs).
+
+    Real-run persistence must never emit a record that violates the schema or mixes in
+    test-derived fields. Stub/synthetic records must be written through the runner's
+    stub builder instead, so they can never be confused with real diagnostics (R-11).
+    """
+    assert_valid_diagnostics_schema(record)
+    write_json(path, record)
