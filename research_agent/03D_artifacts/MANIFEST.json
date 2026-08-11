@@ -1,0 +1,323 @@
+{
+  "arm_id": "baseline_corrected_confirmatory",
+  "copying_timestamp": "2026-08-11T17:01:30+00:00",
+  "files": [
+    {
+      "byte_size": 2292,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/arm_provenance.json",
+      "sha256": "3825abddea147392e8f4499d8176f8970bb236197d6686f350d4354958792257",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/arm_provenance.json"
+    },
+    {
+      "byte_size": 2250,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/arm_provenance_stageD.json",
+      "sha256": "184f6228ed2766c1b552d69dc496715509ed94cded656daaeae03f153d2e6646",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/arm_provenance_stageD.json"
+    },
+    {
+      "byte_size": 621,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/arm_summary.json",
+      "sha256": "c84741554a42a9852f4f89a39ce9c1d2e2cf6579f610c10a08a5e5ab654087cb",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/arm_summary.json"
+    },
+    {
+      "byte_size": 383,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/arm_summary_stageD.json",
+      "sha256": "0f69f397b7a1d5a0a80dd928bc4275533568ecd8f30f4fc0a2ba12635c802826",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/arm_summary_stageD.json"
+    },
+    {
+      "byte_size": 712,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/attacker_checkpoint_paths.json",
+      "sha256": "a132b53fc631a363ee0920bd825445038ab2c5b10db6dbb5583f16a8e3f413dd",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/attacker_checkpoint_paths.json"
+    },
+    {
+      "byte_size": 2908,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed0/training_diagnostics.json",
+      "sha256": "46fe65967bfa9f920abe2f9e3e173fd0cd4a746b37813fd81f16180518a6f67b",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_0/training_diagnostics.json"
+    },
+    {
+      "byte_size": 72,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed0/run_state.json",
+      "sha256": "bb8c9354a89c58e7bac368ce925e1846ac5594101b6417d5d1d227124eca5594",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_0/run_state.json"
+    },
+    {
+      "byte_size": 634,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed0/test_metrics.json",
+      "sha256": "6538b796c74d937b20b1f735c9f5b6f3eaeee7800710e5f59ababfa3732138f8",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_0/test_metrics.json"
+    },
+    {
+      "byte_size": 1070,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed0/run_signature.json",
+      "sha256": "ac49722a8eae8f5a7d260d95ffe12cc83a47e350f2b8749b3ca5d0d82ee2a9bd",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_0/run_signature.json"
+    },
+    {
+      "byte_size": 2759,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed1/training_diagnostics.json",
+      "sha256": "7da6434b271554030d6beb178a745cbb752a636f8bf4135a7db388a8bc44d93f",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_1/training_diagnostics.json"
+    },
+    {
+      "byte_size": 72,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed1/run_state.json",
+      "sha256": "bb8c9354a89c58e7bac368ce925e1846ac5594101b6417d5d1d227124eca5594",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_1/run_state.json"
+    },
+    {
+      "byte_size": 643,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed1/test_metrics.json",
+      "sha256": "c837c4434ac4f03a5cc6c6d690950eb552439bed4eeac4696da73092969d1f8d",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_1/test_metrics.json"
+    },
+    {
+      "byte_size": 1070,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed1/run_signature.json",
+      "sha256": "030532c8c14da5b5f7330102900a6f8dd6eed617879d28ae7434f19a16b50c64",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_1/run_signature.json"
+    },
+    {
+      "byte_size": 2766,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed2/training_diagnostics.json",
+      "sha256": "c152732861e2272815e3cbc8489fd644527dc71d0954db9830fb42bb33563f6e",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_2/training_diagnostics.json"
+    },
+    {
+      "byte_size": 72,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed2/run_state.json",
+      "sha256": "bb8c9354a89c58e7bac368ce925e1846ac5594101b6417d5d1d227124eca5594",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_2/run_state.json"
+    },
+    {
+      "byte_size": 635,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed2/test_metrics.json",
+      "sha256": "49ec048598a5e1c8f15bf5fe522acce969ddbdc5ebc7030a86cf565671c66d2d",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_2/test_metrics.json"
+    },
+    {
+      "byte_size": 1070,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed2/run_signature.json",
+      "sha256": "e90e2126c4da69399e04c42c9d28df217b560e44ae9edf7eaff15f23f9c9fb1a",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_2/run_signature.json"
+    },
+    {
+      "byte_size": 2893,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed3/training_diagnostics.json",
+      "sha256": "26e96205675747d1927b555db5547f1555529c428387f1f26153039fecd148bb",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_3/training_diagnostics.json"
+    },
+    {
+      "byte_size": 72,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed3/run_state.json",
+      "sha256": "bb8c9354a89c58e7bac368ce925e1846ac5594101b6417d5d1d227124eca5594",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_3/run_state.json"
+    },
+    {
+      "byte_size": 635,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed3/test_metrics.json",
+      "sha256": "3a2cd2d5c99f46f5dd399e59208070a03dd5246b8d522606fefe1edf4745c905",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_3/test_metrics.json"
+    },
+    {
+      "byte_size": 1070,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed3/run_signature.json",
+      "sha256": "11109bd5c399a9cc318609d0aa334dcb606355f734dac624d65b1da1d50c65bb",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_3/run_signature.json"
+    },
+    {
+      "byte_size": 2819,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed4/training_diagnostics.json",
+      "sha256": "93adb99c5650c00e3e6726d21eb6b1c4eb6fd4f846158869429e169193026fd3",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_4/training_diagnostics.json"
+    },
+    {
+      "byte_size": 72,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed4/run_state.json",
+      "sha256": "bb8c9354a89c58e7bac368ce925e1846ac5594101b6417d5d1d227124eca5594",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_4/run_state.json"
+    },
+    {
+      "byte_size": 643,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed4/test_metrics.json",
+      "sha256": "b2df549e42bfc5b8a8f63b2424220b15bd8d02eeae0037a0f31ceebbbe25e7f1",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_4/test_metrics.json"
+    },
+    {
+      "byte_size": 1070,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed4/run_signature.json",
+      "sha256": "778eb91a885d4d4eabf007edbac41907de9201937e0fc98a7788151e110b3785",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_4/run_signature.json"
+    },
+    {
+      "byte_size": 2846,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed5/training_diagnostics.json",
+      "sha256": "26e628ff40238aa2312dbd6363d642fb474d35cefd64b72e27f20bf63286cf8a",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_5/training_diagnostics.json"
+    },
+    {
+      "byte_size": 72,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed5/run_state.json",
+      "sha256": "bb8c9354a89c58e7bac368ce925e1846ac5594101b6417d5d1d227124eca5594",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_5/run_state.json"
+    },
+    {
+      "byte_size": 643,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed5/test_metrics.json",
+      "sha256": "4e3415a56d80927a4b6a3d74465e2c4e63dabf1a5c72679683ad78b2584642d1",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_5/test_metrics.json"
+    },
+    {
+      "byte_size": 1070,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed5/run_signature.json",
+      "sha256": "29242e20cb769aeaa7ecd8721496b1fec99eab596dcc81ff939dfb3c8381ed9f",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_5/run_signature.json"
+    },
+    {
+      "byte_size": 2891,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed6/training_diagnostics.json",
+      "sha256": "b8d2a1c5046566226f2984543dc67a00844d0f6031bd40acca334dec0c3a590e",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_6/training_diagnostics.json"
+    },
+    {
+      "byte_size": 72,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed6/run_state.json",
+      "sha256": "bb8c9354a89c58e7bac368ce925e1846ac5594101b6417d5d1d227124eca5594",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_6/run_state.json"
+    },
+    {
+      "byte_size": 632,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed6/test_metrics.json",
+      "sha256": "71caa7b80d63fd1d9b333e2b220bdd92a03bf405ba776b83b62e10f7e9a3d7fb",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_6/test_metrics.json"
+    },
+    {
+      "byte_size": 1070,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed6/run_signature.json",
+      "sha256": "ba1b739a7f165998d97894e138d13923f47c6189d425f2bc7bf9ad7ac72270c7",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_6/run_signature.json"
+    },
+    {
+      "byte_size": 2672,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed7/training_diagnostics.json",
+      "sha256": "cf98dfff9ab524ff3b01b943fab9325940158d8fba48ecd1e2c7bc5d54e4fcfc",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_7/training_diagnostics.json"
+    },
+    {
+      "byte_size": 72,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed7/run_state.json",
+      "sha256": "bb8c9354a89c58e7bac368ce925e1846ac5594101b6417d5d1d227124eca5594",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_7/run_state.json"
+    },
+    {
+      "byte_size": 635,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed7/test_metrics.json",
+      "sha256": "121e37701e51ff60e617585a52735616fcea2531c9123fe72f5dd89d86fb222a",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_7/test_metrics.json"
+    },
+    {
+      "byte_size": 1070,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed7/run_signature.json",
+      "sha256": "ada1c491055c671273287cd9046ecf377a5c47ed456b9509f4a7bda432f2e78d",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_7/run_signature.json"
+    },
+    {
+      "byte_size": 2877,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed8/training_diagnostics.json",
+      "sha256": "1d5eba35d5e34d99448908fe25b934055b98baa105a94a450f517df5c4899ddb",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_8/training_diagnostics.json"
+    },
+    {
+      "byte_size": 72,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed8/run_state.json",
+      "sha256": "bb8c9354a89c58e7bac368ce925e1846ac5594101b6417d5d1d227124eca5594",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_8/run_state.json"
+    },
+    {
+      "byte_size": 635,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed8/test_metrics.json",
+      "sha256": "423446f27acc7b3eaae75e9a3cabac705583bb9bdc9e65c8c18bc8d58a34ac20",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_8/test_metrics.json"
+    },
+    {
+      "byte_size": 1070,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed8/run_signature.json",
+      "sha256": "2569c2a21bc78f2dd769e7d8c93034a318e2464facb409b15cc241607f0e7264",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_8/run_signature.json"
+    },
+    {
+      "byte_size": 2755,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed9/training_diagnostics.json",
+      "sha256": "f69c26a159929ea85b1f4b97e731fe69a5a7074b7f6da711f1e753501b6b0882",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_9/training_diagnostics.json"
+    },
+    {
+      "byte_size": 72,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed9/run_state.json",
+      "sha256": "bb8c9354a89c58e7bac368ce925e1846ac5594101b6417d5d1d227124eca5594",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_9/run_state.json"
+    },
+    {
+      "byte_size": 635,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed9/test_metrics.json",
+      "sha256": "902c48a90270c51c523296282c5c60fb4491f52da0c9c420d8988a95ccd6e634",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_9/test_metrics.json"
+    },
+    {
+      "byte_size": 1070,
+      "original_path": "archive/adaptive_reid_baseline_corrected_confirmatory/runs/retrain_snn_seed9/run_signature.json",
+      "sha256": "8eb3a2a2678769d592adf3ff052e74e031a400761fe2a0677d229498c0473641",
+      "sha256_match_original": true,
+      "tracked_copy_path": "research_agent/03D_artifacts/seed_9/run_signature.json"
+    }
+  ],
+  "preservation_commit_placeholder": "bc82bde8bbf3ef938170ddfe30d23594a2942f4f",
+  "step3b_execution_commit": "1c54435846af6f0ca30ef668464032e727b5aed6"
+}

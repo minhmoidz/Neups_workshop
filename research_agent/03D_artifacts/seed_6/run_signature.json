@@ -1,0 +1,25 @@
+{
+  "arm_id": "baseline_corrected_confirmatory",
+  "attacker_seed": 6,
+  "config": {
+    "batch_size": 16,
+    "early_stopping": 5,
+    "learning_rate": 0.0001,
+    "max_epochs": 100
+  },
+  "frozen_artifacts": {
+    "research_agent/topk_frozen_list.csv": "4ebb6e15786b7c25eb4220521e5d70cf03ceb8f7ca480581dd89ef3945b24d44"
+  },
+  "generator_checkpoint_hash": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+  "generator_checkpoint_path": "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+  "mu": 0.01,
+  "pair_train_hash": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
+  "pair_validation_hash": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7",
+  "protocol_documents": {
+    "research_agent/01B_PROTOCOL_AMENDMENT.md": "05fcc9fd4cb4181acd9f40603707cd259987a0d1d3750d0f3463fc1fe78b0865",
+    "research_agent/01_ADAPTIVE_REID_PROTOCOL.md": "c3aa381ea2136d89d03f6a409a36edd2e1cb5d8f4986b3ae3846028f61cd6741"
+  },
+  "stochastic_lambda": 0.0,
+  "stub": false,
+  "transform_mode": "corrected"
+}

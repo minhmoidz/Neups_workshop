@@ -1,0 +1,16 @@
+{
+  "attacker_seed": 7,
+  "evaluation_timestamp": "2026-08-11T16:15:01+00:00",
+  "generator_checkpoint_hash": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+  "generator_checkpoint_path": "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+  "mu": 0.01,
+  "n_pairs": 5000,
+  "pair_test_hash": "87e528308507ada349d478d0c16e85f858dba8fb613abbca4857ffc437490fe2",
+  "pair_test_path": "image_pairs/image_pairs_testing_5000.txt",
+  "stochastic_lambda": 0.0,
+  "stub": false,
+  "synthetic": false,
+  "test_auc": 0.71749968,
+  "transform_mode": "corrected",
+  "valid_for_scientific_reporting": true
+}

@@ -1,0 +1,12 @@
+{
+  "0": "archive/retrain_snn_seed0/retrain_snn_seed0_best_network.pth",
+  "1": "archive/retrain_snn_seed1/retrain_snn_seed1_best_network.pth",
+  "2": "archive/retrain_snn_seed2/retrain_snn_seed2_best_network.pth",
+  "3": "archive/retrain_snn_seed3/retrain_snn_seed3_best_network.pth",
+  "4": "archive/retrain_snn_seed4/retrain_snn_seed4_best_network.pth",
+  "5": "archive/retrain_snn_seed5/retrain_snn_seed5_best_network.pth",
+  "6": "archive/retrain_snn_seed6/retrain_snn_seed6_best_network.pth",
+  "7": "archive/retrain_snn_seed7/retrain_snn_seed7_best_network.pth",
+  "8": "archive/retrain_snn_seed8/retrain_snn_seed8_best_network.pth",
+  "9": "archive/retrain_snn_seed9/retrain_snn_seed9_best_network.pth"
+}

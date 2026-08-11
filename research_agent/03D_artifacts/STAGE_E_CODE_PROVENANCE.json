@@ -1,0 +1,8 @@
+{
+  "committed_version_equals_disk_version": true,
+  "git_commit_first_introduced": "bd57f2b33d4a3deba167768a296f81635a0dd6e1",
+  "note": "Driver was created and run (stages A-D + real Stage E) at execution commit 1c54435 but was first committed to git at bd57f2b AFTER the run. The committed blob is byte-identical to the file on disk (sha256 e9f578dac...). The persisted test_metrics.json files were written by the first Stage-E invocation (log 3b_stageE.log, 16:13-16:15 UTC); the final arm_provenance/arm_summary were re-emitted by the idempotent second invocation (3b_stageE2.log, 16:25:21 UTC) which reused the existing test_metrics.json (0 new test evaluations).",
+  "path": "run_3b_confirmatory.py",
+  "sha256": "e9f578dac91c8e8f080faceba360f13c92622dabb81079a5c2e08219e2e0b5b6",
+  "step3b_execution_commit_recorded_in_arm_provenance": "1c54435846af6f0ca30ef668464032e727b5aed6"
+}

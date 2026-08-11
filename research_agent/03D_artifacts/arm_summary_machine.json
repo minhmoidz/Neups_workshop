@@ -1,0 +1,29 @@
+{
+  "contains_stub_or_synthetic_metrics": false,
+  "max_test_auc": 0.8036620800000001,
+  "mean_test_auc": 0.7391939919999999,
+  "median_test_auc": 0.7221833599999999,
+  "n_attempted": 10,
+  "n_near_chance": 0,
+  "n_numerically_invalid": 0,
+  "n_stub_or_synthetic_test_metrics": 0,
+  "n_valid": 10,
+  "representative_attacker_seed": 4,
+  "scientific_summary_available": true,
+  "source_arm_id": "baseline_corrected_confirmatory",
+  "source_bundle": "research_agent/03D_artifacts/",
+  "source_commit": "1c54435846af6f0ca30ef668464032e727b5aed6",
+  "std_test_auc": 0.04984744373953724,
+  "test_auc_values": [
+    0.7846912,
+    0.7779812800000001,
+    0.72106304,
+    0.66013752,
+    0.7233036799999999,
+    0.8036620800000001,
+    0.71028,
+    0.71749968,
+    0.80315408,
+    0.69016736
+  ]
+}

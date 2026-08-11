@@ -1,0 +1,15 @@
+{
+  "contains_stub_or_synthetic_metrics": false,
+  "max_test_auc": null,
+  "mean_test_auc": null,
+  "median_test_auc": null,
+  "n_attempted": 10,
+  "n_near_chance": 0,
+  "n_numerically_invalid": 0,
+  "n_stub_or_synthetic_test_metrics": 0,
+  "n_valid": 10,
+  "representative_attacker_seed": 4,
+  "scientific_summary_available": false,
+  "std_test_auc": null,
+  "test_auc_values": []
+}

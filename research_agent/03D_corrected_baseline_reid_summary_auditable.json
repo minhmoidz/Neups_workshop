@@ -1,0 +1,17 @@
+{
+  "arm_id": "baseline_corrected_confirmatory",
+  "artifact_manifest_path": "research_agent/03D_artifacts/MANIFEST.json",
+  "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+  "machine_summary_path": "research_agent/03D_artifacts/arm_summary_machine.json",
+  "max_test_auc_source": 0.8036620800000001,
+  "mean_test_auc_source": 0.7391939919999999,
+  "median_test_auc_source": 0.7221833599999999,
+  "n_attempted": 10,
+  "n_near_chance": 0,
+  "n_valid": 10,
+  "representative_attacker_seed": 4,
+  "scientific_summary_available_source": true,
+  "stage_e_code_sha256": "e9f578dac91c8e8f080faceba360f13c92622dabb81079a5c2e08219e2e0b5b6",
+  "std_test_auc_source": 0.04984744373953724,
+  "test_pair_hash": "87e528308507ada349d478d0c16e85f858dba8fb613abbca4857ffc437490fe2"
+}
