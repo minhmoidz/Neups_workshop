@@ -370,17 +370,26 @@ def test12_legacy_helper_bitforbit_first_old_inline():
 
 
 def test12b_old_configs_resolve_legacy():
-    """12b. Existing configs without transform_mode resolve to legacy (backward compatibility)."""
+    """12b. Existing configs without transform_mode resolve to legacy (backward compatibility).
+
+    The STEP 3A1 corrected baseline config is the single intentional exception: it carries
+    an explicit ``transform_mode: "corrected"`` and must resolve to ``corrected``.
+    """
     config_dir = os.path.join(os.path.dirname(__file__), 'config_files')
-    checked = 0
+    checked_legacy = 0
+    checked_corrected = 0
     for name in sorted(os.listdir(config_dir)):
         if not name.endswith('.json'):
             continue
         with open(os.path.join(config_dir, name)) as f:
             cfg = json.load(f)
+        if cfg.get('transform_mode') == 'corrected':
+            assert U.resolve_transform_mode(cfg['transform_mode']) == 'corrected'
+            checked_corrected += 1
+            continue
         mode = U.resolve_transform_mode(cfg.get('transform_mode'))
         assert mode == 'legacy', f'{name}: expected legacy default, got {mode}'
-        checked += 1
+        checked_legacy += 1
     # Invalid value must raise (typo protection).
     try:
         U.resolve_transform_mode('korrected')
@@ -388,8 +397,8 @@ def test12b_old_configs_resolve_legacy():
         pass
     else:
         raise AssertionError('resolve_transform_mode must reject invalid values')
-    print(f'TEST 12b default-legacy: {checked} configs all resolve to \'legacy\' (none carry transform_mode); '
-          f'invalid value rejected')
+    print(f'TEST 12b default-legacy: {checked_legacy} configs (no transform_mode key) all resolve to \'legacy\'; '
+          f'{checked_corrected} corrected config resolves to \'corrected\'; invalid value rejected')
 
 
 # --- gradient-accumulation regression (BLOCKER 13 list item) -------------- #
