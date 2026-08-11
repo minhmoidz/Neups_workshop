@@ -1,23 +1,31 @@
-"""Patient-clustered bootstrap (STEP 2B Part 9, R-9).
+"""Uncertainty / bootstrap policy (STEP 2B Part 9, R-9 — FINAL).
 
 Pair-file schema (verified by inspection of image_pairs/*):
     each line:  <image1> <image2> <label>
     label 1 (positive): both images carry the SAME patient identity.
     label 0 (negative): the two images carry TWO DIFFERENT patient identities.
 
-Patient-cluster (identity) bootstrap resamples at the level of patient identities and
-re-weights/among resampled clusters. A positive pair belongs unambiguously to exactly
-one patient cluster. A negative pair spans TWO clusters, so its membership under a
-cluster resample is ambiguous: the frozen protocol does not specify how such a pair is
-assigned when patient clusters are resampled.
+The verification data are therefore DYADIC: a negative pair has no unique one-way
+patient-cluster membership, so a naive patient-cluster bootstrap would duplicate or
+ambiguously assign negative-pair observations.
 
-Per the frozen protocol, in a case of scientific ambiguity we DO NOT guess: R-9 is
-reported BLOCKED FOR SCIENTIFIC CLARIFICATION, and this module documents the exact
-ambiguity. The historical pair-level bootstrap is retained only as a
-pair-sampling diagnostic (clearly labelled).
+Final ruling (01B amendment §6, protocol §12.2 / R-9):
+    - the patient-clustered bootstrap proposal is WITHDRAWN;
+    - primary uncertainty for privacy claims is the distribution over independently
+      trained attacker restarts (mean, sample SD ddof=1, unpaired Welch);
+    - the existing PAIR-LEVEL bootstrap may remain only as a clearly labelled secondary
+      diagnostic for the validation-selected representative attacker:
+
+          PAIR-SAMPLING DIAGNOSTIC — NOT PATIENT-LEVEL UNCERTAINTY
+
+    - NO patient-cluster resampling implementation exists in this module. If a pair
+      bootstrap is ever used it must carry the label above.
 """
 
 from typing import Dict, List, Tuple
+
+PAIR_BOOTSTRAP_LABEL = 'PAIR-SAMPLING DIAGNOSTIC — NOT PATIENT-LEVEL UNCERTAINTY'
+R9_FINAL_STATUS = 'WITHDRAWN_PATIENT_CLUSTER_BOOTSTRAP'
 
 
 def parse_patient_ids(fname_pair_row) -> Tuple[str, str]:
@@ -73,59 +81,29 @@ def patient_cluster_bootstrap_is_ambiguous(pairs_path: str) -> bool:
 
     The schema may be un-ambiguous ONLY if every pair involves at most one patient
     identity. Our verified schema has negative pairs spanning two identities, so this
-    returns True for the frozen pair files.
+    returns True for the frozen pair files. This is the reason the estimator was
+    withdrawn rather than guessed (R-9 / amendment §6).
     """
     stats = compute_patient_statistics(pairs_path)
     return stats['negative_pairs_span_two_patients'] > 0
 
 
-def report_R9_ambiguity(pairs_path: str) -> Dict:
-    """Produce the R-9 BLOCKED documentation record.
+def report_R9_final_policy(pairs_path: str) -> Dict:
+    """Produce the R-9 FINAL policy documentation record.
 
-    :return: dict describing the exact ambiguity, so it can be persisted with the arm.
+    :return: dict describing why the patient-cluster bootstrap is withdrawn and how any
+        pair-level bootstrap must be labelled, so it can be persisted with the arm.
     """
     stats = compute_patient_statistics(pairs_path)
     return {
-        'R9_status': 'BLOCKED_FOR_SCIENTIFIC_CLARIFICATION',
-        'ambiguity': (
-            'Negative pairs span two patient identities; the frozen protocol does not '
-            'define how such a pair is assigned when patient clusters are resampled. '
-            'No clustering rule invented here.'),
+        'R9_status': R9_FINAL_STATUS,
+        'withdrawn_because': (
+            'Verification pairs are dyadic: negative pairs span two patient identities, '
+            'so a naive patient-cluster bootstrap would duplicate or ambiguously assign '
+            'negative-pair observations and must not be described as patient-level '
+            'uncertainty (01B amendment §6; protocol §12.2).'),
         'pair_statistics': stats,
-        'pair_bootstrap_retained_as': 'pair_sampling_diagnostic',
+        'primary_uncertainty': 'distribution over independently trained attacker restarts',
+        'restart_sd_ddof': 1,
+        'pair_bootstrap_label': PAIR_BOOTSTRAP_LABEL,
     }
-
-
-class PatientClusterResampler:
-    """Explicit patient-cluster resampling core.
-
-    The cluster membership rule for a pair is defined explicitly by the caller through
-    ``pair_to_clusters``. This class does NOT invent a rule; for the frozen pair files
-    it will refuse to resample unless the caller resolves the negative-pair ambiguity.
-    """
-
-    def __init__(self, pair_to_clusters):
-        """
-        :param pair_to_clusters: callable (image1, image2, label) -> tuple of patient
-            cluster ids that the pair belongs to. For a positive pair this is a single
-            id; the caller decides the rule for negative pairs.
-        """
-        self.pair_to_clusters = pair_to_clusters
-
-    def resample(self, rows, rng, n_clusters_to_draw):
-        """Resample a patient-cluster-level bootstrap sample of pair rows.
-
-        :param rows: list of (image1, image2, label) rows.
-        :param rng: numpy RandomState.
-        :param n_clusters_to_draw: number of patient clusters to draw with replacement.
-        :return: list of pairs whose clusters intersect the drawn cluster set, scaled
-            as a diagnostic count (resource-efficient: returns indices).
-        """
-        cluster_ids = set()
-        for row in rows:
-            cluster_ids.update(self.pair_to_clusters(*row))
-        cluster_ids = sorted(cluster_ids)
-        drawn = {c for c in rng.choice(cluster_ids, size=n_clusters_to_draw, replace=True)}
-        kept = [i for i, row in enumerate(rows) if drawn & set(self.pair_to_clusters(*row))]
-        weights = [len(drawn) for _ in kept]  # diagnostic weighting placeholder
-        return kept, weights

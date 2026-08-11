@@ -1,27 +1,38 @@
-"""STEP 2B regression suite for the frozen adaptive re-ID protocol.
+"""STEP 2B + STEP 2B.1 remediation regression suite.
 
 Covers (cross-referenced to the task Parts):
   A  validation AUC/accuracy correctness            (Part 1, metrics)
+  A2 accuracy boundary is sigmoid(logit)>=0.5      (BLOCKER 1; logits -3..2 case)
   B  numerically invalid classification             (Part 3)
   C  near-chance is VALID, not excluded             (Part 3)
   D  weight-update detection                        (Part 4)
+  D2 exactly one training invocation per seed       (BLOCKER 2; no re-train in later stages)
+  D3 idempotent reuse of completed runs             (BLOCKER 2B; run signature)
   E  confirmatory seed schedule                     (Part 5)
+  E2 confirmatory ascending replacement on final    (BLOCKER 2A; seeds 0..9 then 10,11,...)
+     invalid-only state
+  E3 stub markers + non-stub test eval raises       (BLOCKER 3; R-11)
   F  screening seed schedule                        (Part 5)
   G  replacement only on NUMERICALLY_INVALID        (Part 5)
   H  representative selection on validation only    (Part 6)
   I  no test-derived inputs accepted                (Parts 3, 6, 13)
   J  mean/SD/median/max include near-chance attacks (Part 8)
+  J2 sample SD uses ddof=1                          (AMENDMENT 1; [0.50,.52,.60,.70])
+  J3 summary refuses synthetic/stub metrics         (BLOCKER 3; R-11)
   K  provenance contains required fields            (Part 12)
+  K2 provenance carries protocol + frozen hashes    (AMENDMENT 2 / R-7 / R-12)
   L  determinism checker                            (Part 11)
   M  Top-k frozen-list construction                 (Part 10)
-  N  patient-cluster bootstrap (R-9) status         (Part 9)
+  N  R-9 final policy (patient-cluster withdrawn)   (Part 9 / amendment §6)
   O  legacy shared-operator regression              (Part 14)
-  P  gradient-accumulation regression               (Part 14)
+  P  gradient-accumulation regression               (Part 14, CUDA skip-guarded)
 """
 
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 
 import numpy as np
@@ -33,8 +44,11 @@ from adaptive_reid import diagnostics as diag
 from adaptive_reid import health, metrics, weights, restarts, selection
 from adaptive_reid import summary as summ
 from adaptive_reid import determinism, provenance, bootstrap, topk
+from adaptive_reid import pipeline as pl_mod
 
 from adaptive_reid import constants as C
+
+import run_adaptive_reid_arm as runner
 
 
 def _mini_mlp(seed):
@@ -79,6 +93,31 @@ def test_A_invalid_inputs_fail_loudly():
     except ValueError:
         pass
     print('A. invalid inputs fail loudly PASS')
+
+
+def test_A2_accuracy_boundary_is_sigmoid_logit():
+    # BLOCKER 1 regression: accuracy must use the 0.5 PROBABILITY boundary
+    # (sigmoid(logit) >= 0.5, equivalently logit >= 0.0), never raw-logit 0.5.
+    logits = np.array([-3.0, -0.2, 0.2, 0.3, 0.6, 2.0])
+    labels = np.array([0, 0, 1, 1, 1, 1])
+    acc = metrics.compute_accuracy_from_logits(logits, labels)
+    assert acc == 1.0, acc
+    # the old buggy rule (raw logits > 0.5) gives 4/6 on the same inputs
+    buggy = float(np.mean((logits > 0.5).astype(np.int64) == labels))
+    assert abs(buggy - 4 / 6) < 1e-12
+    # exact boundary: sigmoid(0.0) == 0.5 counts as the positive class
+    assert metrics.compute_accuracy_from_logits([0.0], [1]) == 1.0
+    assert metrics.compute_accuracy_from_logits([-1e-9], [0]) == 1.0
+    assert metrics.compute_accuracy_from_logits([0.0], [0]) == 0.0
+    print('A2. accuracy boundary == sigmoid(logit)>=0.5 (BLOCKER 1) PASS')
+
+
+def test_A2_validate_snn_routes_logits_accuracy():
+    # The live validation path must route logits through the logits-aware estimator.
+    import inspect
+    src = inspect.getsource(U.validate_snn)
+    assert 'validation_metrics_from_logits' in src
+    print('A2. validate_snn uses logits-aware accuracy (BLOCKER 1) PASS')
 
 
 # ----------------------------------------------------------------------------------
@@ -214,6 +253,112 @@ def test_G_replacement_never_for_near_chance():
 
 
 # ----------------------------------------------------------------------------------
+# D2 / D3 / E2 / E3. STEP 2B.1 remediation: single training, idempotent reuse,
+# invalid-only ascending replacement, and no fabricated test metrics.
+# ----------------------------------------------------------------------------------
+def test_D2_single_training_invocation_per_seed():
+    calls = []
+
+    def worker(seed):
+        calls.append(seed)
+        aucs = {0: [0.60], 1: [0.65], 2: [0.70]}
+        return {'attacker_seed': seed, 'state': C.VALID, 'near_chance': False,
+                'diagnostics': {'attacker_seed': seed},
+                'validation_record': {'attacker_seed': seed,
+                                      'validation_auc_per_epoch': aucs.get(seed, [0.60]),
+                                      'validation_loss_per_epoch': [0.4],
+                                      'validation_accuracy_per_epoch': [0.7]}}
+
+    attempts = restarts.run_schedule(restarts.ScreeningSchedule(), worker)
+    assert calls == [0, 1, 2]
+    n_after_schedule = len(calls)
+    assert n_after_schedule == 3
+    # Later stages (B/C/D) must NOT invoke the training worker again (BLOCKER 2).
+    pl = pl_mod.ArmPipeline(train_validate_and_persist=worker, evaluate_test=None)
+    pl.stage_b_classify(attempts)
+    rep = pl.stage_c_select_representative(attempts)
+    pl.stage_d_persist_representative(attempts, rep, {})
+    assert len(calls) == 3, 'a later stage re-trained a restart (BLOCKER 2): %s' % calls
+    print('D2. exactly one training invocation per seed (BLOCKER 2) PASS')
+
+
+def test_E2_confirmatory_ascending_replacement_on_invalid_only():
+    lookup = {s: C.VALID for s in range(15)}
+    lookup[5] = C.NUMERICALLY_INVALID
+    lookup[8] = C.NUMERICALLY_INVALID
+
+    def worker(seed):
+        return {'attacker_seed': seed, 'state': lookup[seed], 'near_chance': False,
+                'diagnostics': None, 'validation_record': None}
+
+    attempts = restarts.run_schedule(restarts.ConfirmatorySchedule(), worker)
+    seeds = [a['attacker_seed'] for a in attempts]
+    assert seeds[:10] == list(range(10)), seeds
+    # two NUMERICALLY_INVALID initial seeds are replaced strictly ascending: 10, 11
+    assert seeds == list(range(10)) + [10, 11], seeds
+    assert sum(1 for a in attempts if a['state'] == C.VALID) == 10
+    print('E2. confirmatory ascending replacement, invalid-only, final-state (BLOCKER 2A) PASS')
+
+
+def test_D3_idempotent_reuse_of_completed_run(tmp_path):
+    import argparse
+    td = _td_path(tmp_path)
+    args = argparse.Namespace(arm_id='arm_x', transform_mode='corrected', mu=0.01,
+                              stochastic_lambda=0.0, checkpoint=None, stub=True,
+                              force=False)
+    cfg = {'learning_rate': 1e-4, 'batch_size': 16, 'max_epochs': 100,
+           'early_stopping': {'patience': 5}}
+    pair_hashes = {runner.PAIR_TRAIN: 'a', runner.PAIR_VAL: 'b'}
+    protocol_documents = {runner.PROTOCOL_01: 'c', runner.PROTOCOL_01B: 'd'}
+    frozen_artifacts = {runner.FROZEN_TOPK_CSV: 'e'}
+    sig = runner.run_signature(3, args, cfg, pair_hashes, protocol_documents, frozen_artifacts)
+
+    run_dir = os.path.join(td, 'runs', 'retrain_snn_seed3')
+    os.makedirs(run_dir, exist_ok=True)
+    # nothing present -> must train
+    assert runner.reuse_completed_run(run_dir, sig, 3, args) is None
+
+    rec = diag.build_training_diagnostics(
+        attacker_seed=3, transform_mode='corrected', mu=0.01, stochastic_lambda=0.0,
+        generator_checkpoint_path='', generator_checkpoint_hash='',
+        pair_train_path=runner.PAIR_TRAIN, pair_validation_path=runner.PAIR_VAL,
+        pair_train_hash='a', pair_validation_hash='b',
+        epochs_completed=8, termination_reason=C.TERMINATION_EARLY_STOPPING,
+        training_loss_per_epoch=[0.6] * 8, validation_loss_per_epoch=[0.62] * 8,
+        validation_auc_per_epoch=[0.55] * 8, validation_accuracy_per_epoch=[0.55] * 8,
+        best_validation_loss=0.62, best_validation_loss_epoch=0,
+        best_validation_auc=0.55, best_validation_auc_epoch=0,
+        any_nan_inf=False, checkpoint_exists=True, checkpoint_loadable=True,
+        weights_changed_from_initialization=True,
+        run_start_timestamp='t0', run_end_timestamp='t1')
+    diag.write_json(os.path.join(run_dir, diag.VALIDITY_FILENAME), rec)
+    diag.write_json(os.path.join(run_dir, diag.RUNSTATE_FILENAME),
+                    {'state': C.VALID, 'near_chance': False})
+    diag.write_json(os.path.join(run_dir, runner.SIGNATURE_FILENAME), sig)
+
+    loaded = runner.reuse_completed_run(run_dir, sig, 3, args)
+    assert loaded is not None and loaded['attacker_seed'] == 3
+    # changing any signed input (here: protocol doc hash) invalidates reuse
+    sig2 = dict(sig)
+    sig2['protocol_documents'] = {runner.PROTOCOL_01: 'CHANGED', runner.PROTOCOL_01B: 'd'}
+    assert runner.reuse_completed_run(run_dir, sig2, 3, args) is None
+    print('D3. idempotent reuse + signature invalidation (BLOCKER 2B) PASS')
+
+
+def test_E3_stub_markers_and_nonstub_not_implemented():
+    m = runner.stub_test_metrics(4)
+    assert m['stub'] is True and m['synthetic'] is True
+    assert m['valid_for_scientific_reporting'] is False
+    try:
+        runner.require_real_test_eval(False)
+        raise AssertionError('non-stub Stage E must raise NotImplementedError')
+    except NotImplementedError:
+        pass
+    runner.require_real_test_eval(True)  # stub path is allowed
+    print('E3. stub markers + non-stub NotImplementedError (BLOCKER 3) PASS')
+
+
+# ----------------------------------------------------------------------------------
 # H / I. representative selection on validation only
 # ----------------------------------------------------------------------------------
 def _validation_record(seed, auc_series):
@@ -302,6 +447,48 @@ def test_J_aggregation_includes_near_chance():
     print('J. mean/median/max include near-chance attacks PASS')
 
 
+def test_J2_sample_sd_uses_ddof1():
+    attempts = []
+    for i, auc in enumerate([0.50, 0.52, 0.60, 0.70]):
+        attempts.append({'attacker_seed': i, 'state': C.VALID, 'near_chance': False,
+                         'test_metrics': {'auc': auc}, 'is_representative': False})
+    s = summ.summarize_arm(attempts)
+    arr = np.asarray([0.50, 0.52, 0.60, 0.70])
+    assert abs(s['std_test_auc'] - arr.std(ddof=1)) < 1e-12
+    assert abs(s['std_test_auc'] - arr.std(ddof=0)) > 1e-12
+    # n == 1 -> sample SD undefined (None), never NaN emitted as a finished number
+    s1 = summ.summarize_arm([{'attacker_seed': 0, 'state': C.VALID, 'near_chance': False,
+                              'test_metrics': {'auc': 0.5}, 'is_representative': True}])
+    assert s1['std_test_auc'] is None
+    print('J2. restart SD uses ddof=1 sample SD (AMENDMENT 1) PASS')
+
+
+def test_J3_summary_refuses_synthetic_metrics():
+    attempts = [
+        {'attacker_seed': 0, 'state': C.VALID, 'near_chance': False,
+         'test_metrics': {'auc': 0.90, 'stub': True, 'synthetic': True,
+                          'valid_for_scientific_reporting': False},
+         'is_representative': True},
+        {'attacker_seed': 1, 'state': C.VALID, 'near_chance': False,
+         'test_metrics': {'auc': 0.91, 'valid_for_scientific_reporting': False},
+         'is_representative': False},
+    ]
+    s = summ.summarize_arm(attempts)
+    assert s['contains_stub_or_synthetic_metrics'] is True
+    assert s['n_stub_or_synthetic_test_metrics'] == 2
+    assert s['mean_test_auc'] is None and s['median_test_auc'] is None
+    assert s['max_test_auc'] is None and s['std_test_auc'] is None
+    assert s['test_auc_values'] == []
+    assert s['scientific_summary_available'] is False
+    # mixed: one real + one synthetic -> only the real one enters the aggregates
+    attempts[1]['test_metrics'] = {'auc': 0.60}
+    s2 = summ.summarize_arm(attempts)
+    assert s2['mean_test_auc'] == 0.60
+    assert s2['max_test_auc'] == 0.60
+    assert s2['n_stub_or_synthetic_test_metrics'] == 1
+    print('J3. summary refuses synthetic/stub metrics (BLOCKER 3 / R-11) PASS')
+
+
 # ----------------------------------------------------------------------------------
 # K. provenance fields
 # ----------------------------------------------------------------------------------
@@ -323,12 +510,34 @@ def test_K_provenance_required_fields():
                 'pair_validation_path', 'pair_test_path', 'pair_train_hash',
                 'pair_validation_hash', 'pair_test_hash', 'representative_attacker_seed',
                 'representative_selection_criterion', 'run_states', 'near_chance_flags',
-                'run_start_timestamp', 'run_end_timestamp', 'schedule_name']
+                'run_start_timestamp', 'run_end_timestamp', 'schedule_name',
+                'protocol_documents', 'frozen_artifacts']
     for field in required:
         assert field in p, field
     # legacy vs corrected cannot be confused
     assert p['transform_mode'] == 'corrected'
+    assert p['protocol_documents'] == {}
+    assert p['frozen_artifacts'] == {}
     print('K. provenance required fields + mode granted PASS')
+
+
+def test_K2_provenance_protocol_and_frozen_hashes():
+    p = provenance.build_arm_provenance(
+        arm_id='arm_corrected_mu0.01', git_commit='abc', transform_mode='corrected',
+        generator_checkpoint_path='ck.pth', generator_checkpoint_hash='a' * 64,
+        mu=0.01, stochastic_lambda=0.0, attacker_architecture='ResNet-50 Siamese',
+        attacker_hyperparameters={'lr': 1e-4, 'batch_size': 16},
+        attacker_seeds_attempted=[0, 1, 2], pair_train_path='t',
+        pair_validation_path='v', pair_test_path='e', pair_train_hash='b',
+        pair_validation_hash='c', pair_test_hash='d',
+        representative_attacker_seed=1, representative_selection_criterion='median',
+        run_states={0: 'VALID'}, near_chance_flags={0: False},
+        run_start_timestamp='t0', run_end_timestamp='t1', schedule_name='confirmatory',
+        protocol_documents={'01.md': 'h1', '01B.md': 'h2'},
+        frozen_artifacts={'topk_frozen_list.csv': 'h3'})
+    assert p['protocol_documents'] == {'01.md': 'h1', '01B.md': 'h2'}
+    assert p['frozen_artifacts'] == {'topk_frozen_list.csv': 'h3'}
+    print('K2. provenance carries protocol + frozen artifact hashes (AMENDMENT 2 / R-12) PASS')
 
 
 # ----------------------------------------------------------------------------------
@@ -373,7 +582,7 @@ def test_M_topk_frozen_list_build(tmp_path):
 
 
 # ----------------------------------------------------------------------------------
-# N. patient-cluster bootstrap (R-9)
+# N. R-9 FINAL: patient-cluster bootstrap withdrawn; pair bootstrap label (amendment §6)
 # ----------------------------------------------------------------------------------
 def _td_path(tmp_path):
     """Unwrap pytest tmp_path or tempfile.TemporaryDirectory into a str path."""
@@ -382,7 +591,7 @@ def _td_path(tmp_path):
     return str(tmp_path)
 
 
-def test_N_R9_ambiguity_detected(tmp_path):
+def test_N_R9_final_policy(tmp_path):
     pairs = os.path.join(_td_path(tmp_path), 'pairs.txt')
     os.makedirs(os.path.dirname(pairs), exist_ok=True)
     with open(pairs, 'w') as f:
@@ -390,10 +599,17 @@ def test_N_R9_ambiguity_detected(tmp_path):
         f.write('0001_000.png 0001_001.png 1.0\n')
         f.write('0002_000.png 0003_000.png 0.0\n')
     assert bootstrap.patient_cluster_bootstrap_is_ambiguous(pairs) is True
-    rec = bootstrap.report_R9_ambiguity(pairs)
-    assert rec['R9_status'] == 'BLOCKED_FOR_SCIENTIFIC_CLARIFICATION'
+    rec = bootstrap.report_R9_final_policy(pairs)
+    assert rec['R9_status'] == bootstrap.R9_FINAL_STATUS
+    assert 'WITHDRAWN' in rec['R9_status']
     assert rec['pair_statistics']['negative_pairs_span_two_patients'] == 1
-    print('N. R-9 ambiguity documented, not guessed PASS')
+    assert rec['restart_sd_ddof'] == 1
+    assert rec['pair_bootstrap_label'] == bootstrap.PAIR_BOOTSTRAP_LABEL
+    assert 'PAIR-SAMPLING DIAGNOSTIC' in bootstrap.PAIR_BOOTSTRAP_LABEL
+    assert 'NOT PATIENT-LEVEL UNCERTAINTY' in bootstrap.PAIR_BOOTSTRAP_LABEL
+    # no patient-cluster resampling implementation exists
+    assert not hasattr(bootstrap, 'PatientClusterResampler')
+    print('N. R-9 final policy: patient-cluster withdrawn, pair label fixed PASS')
 
 
 def test_N_pair_schema_statistics(tmp_path):
@@ -425,7 +641,10 @@ def test_O_shared_operator_still_routes_via_build_sampling_grid():
 
 
 def test_P_gradient_accumulation_regression_imports_and_helpers():
-    # quick smoke: recompute the accumulate vs doubled-batch identity torch-level
+    # CUDA-only regression; on a CPU-only machine it must PASS by skipping.
+    if not torch.cuda.is_available():
+        print('P. gradient-accumulation regression SKIPPED (no CUDA)')
+        return
     from test_grad_accum import test_grad_accumulation_matches_doubled_batch as t
     t()
     print('P. gradient-accumulation regression PASS')
@@ -496,6 +715,38 @@ def attempt_has_rep(attempts, seed):
 
 
 # ----------------------------------------------------------------------------------
+# Z. Runner end-to-end (stub): staging, provenance hashes, stub-marked test metrics
+# ----------------------------------------------------------------------------------
+def test_Z_runner_stub_end_to_end(tmp_path):
+    out = os.path.join(_td_path(tmp_path), 'arm_s')
+    cmd = [sys.executable, 'run_adaptive_reid_arm.py', '--mode', 'screening',
+           '--arm_id', 'arm_stub', '--mu', '0.01', '--transform_mode', 'corrected',
+           '--out_dir', out, '--stub', '--stage', 'a_e']
+    res = subprocess.run(cmd, capture_output=True, text=True, cwd=os.getcwd())
+    assert res.returncode == 0, res.stdout + res.stderr
+    prov = diag.read_json(os.path.join(out, 'arm_provenance.json'))
+    # AMENDMENT 2: authoritative protocol docs + frozen Top-k CSV hashed into provenance
+    assert runner.PROTOCOL_01 in prov['protocol_documents']
+    assert prov['protocol_documents'][runner.PROTOCOL_01]
+    assert runner.PROTOCOL_01B in prov['protocol_documents']
+    assert prov['protocol_documents'][runner.PROTOCOL_01B]
+    assert runner.FROZEN_TOPK_CSV in prov['frozen_artifacts']
+    assert prov['frozen_artifacts'][runner.FROZEN_TOPK_CSV]
+    # BLOCKER 3: synthetic stub metrics never reach scientific summary fields
+    arm_summary = diag.read_json(os.path.join(out, 'arm_summary.json'))
+    assert arm_summary['contains_stub_or_synthetic_metrics'] is True
+    assert arm_summary['mean_test_auc'] is None
+    assert arm_summary['max_test_auc'] is None
+    assert arm_summary['scientific_summary_available'] is False
+    # every attempt carries a run signature (idempotent-reuse groundwork)
+    for seed in (0, 1, 2, 3):
+        sig_path = os.path.join(out, 'runs', 'retrain_snn_seed%d' % seed,
+                                runner.SIGNATURE_FILENAME)
+        assert os.path.exists(sig_path), sig_path
+    print('Z. runner stub end-to-end (a_e) PASS')
+
+
+# ----------------------------------------------------------------------------------
 if __name__ == '__main__':
     import sys
     import tempfile as _tf
@@ -507,6 +758,8 @@ if __name__ == '__main__':
     test_A_perfect_reversed_and_ties_auc()
     test_A_accuracy_correct()
     test_A_invalid_inputs_fail_loudly()
+    test_A2_accuracy_boundary_is_sigmoid_logit()
+    test_A2_validate_snn_routes_logits_accuracy()
     test_B_numerically_invalid_conditions()
     test_C_near_chance_is_valid_flag_not_exclusion()
     test_D_unchanged_vs_step()
@@ -514,6 +767,10 @@ if __name__ == '__main__':
     test_F_screening_seeds_and_cap()
     test_G_replacement_only_on_invalid_and_ascending()
     test_G_replacement_never_for_near_chance()
+    test_D2_single_training_invocation_per_seed()
+    test_E2_confirmatory_ascending_replacement_on_invalid_only()
+    test_D3_idempotent_reuse_of_completed_run(_tf.TemporaryDirectory())
+    test_E3_stub_markers_and_nonstub_not_implemented()
     test_H_representative_closest_to_median()
     test_H_tie_break_smaller_seed()
     test_H_even_count_median()
@@ -521,15 +778,19 @@ if __name__ == '__main__':
     test_I_health_accepts_no_test_argument()
     test_I_diagnostics_file_has_no_test_field()
     test_J_aggregation_includes_near_chance()
+    test_J2_sample_sd_uses_ddof1()
+    test_J3_summary_refuses_synthetic_metrics()
     test_K_provenance_required_fields()
+    test_K2_provenance_protocol_and_frozen_hashes()
     test_L_determinism_checker()
     test_M_topk_frozen_list_build(_tf.TemporaryDirectory())
-    test_N_R9_ambiguity_detected(_tf.TemporaryDirectory())
+    test_N_R9_final_policy(_tf.TemporaryDirectory())
     test_N_pair_schema_statistics(_tf.TemporaryDirectory())
     test_O_shared_operator_still_routes_via_build_sampling_grid()
     test_P_gradient_accumulation_regression_imports_and_helpers()
     test_P_diagnostics_json_hasno_test_mixin(_tf.TemporaryDirectory())
     test_stage_order_test_never_selects(_tf.TemporaryDirectory())
+    test_Z_runner_stub_end_to_end(_tf.TemporaryDirectory())
 
-    print('\nSTEP 2B PROTOCOL TEST SUITE: PASS')
+    print('\nSTEP 2B + STEP 2B.1 REMEDIATION TEST SUITE: PASS')
     sys.exit(0)

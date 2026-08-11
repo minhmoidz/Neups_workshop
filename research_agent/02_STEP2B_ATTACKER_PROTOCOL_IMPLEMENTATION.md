@@ -2,6 +2,11 @@
 
 > Status: **DONE (PASS WITH R-9 BLOCKED)** — 2026-08-11.
 > Infrastructure + tests only. No training / no 10-attacker runs / no method experiments.
+>
+> **STEP 2B.1 Scientific-Review Remediation: DONE** — see §18 below. All four
+> blockers + both amendments + test-infrastructure items resolved. The authoritative
+> protocol documents and the frozen Top-k list are now tracked in the repository and
+> hashed into every arm's provenance.
 
 ---
 
@@ -221,22 +226,23 @@ above.
 
 ## 16. Remaining ambiguities / blockers
 
-**R-9 — patient-cluster bootstrap: BLOCKED FOR SCIENTIFIC CLARIFICATION.**
+**RESOLVED by STEP 2B.1 remediation** — see §18.
 
-- Pair schema: negative pairs span two patient identities; the frozen protocol does not
-  define the cluster-membership rule for such pairs under patient-cluster resampling.
-- No clustering rule was invented. A clean, unambiguous patient-cluster bootstrap is not
-  implementable from the current pair schema without a scientific decision.
-- All other parts (validation metrics, diagnostics, health/run-state, schedules, staged
-  pipeline, representative selection, aggregation, determinism, Top-k, provenance,
-  anti-leakage) are implemented and tested.
-- Therefore the overall step status is **PASS WITH R-9 BLOCKED** (a single blocked
-  subtask per the protocol's own escape hatch).
+- The STEP 2B scientific review (2026-08-11) resolved the only open item: **R-9**.
+  The patient-cluster bootstrap proposal is **withdrawn** (01B amendment §6) because the
+  verification data are dyadic and negative pairs span two identities. Primary uncertainty
+  is the distribution over independently trained attacker restarts; the pair-level
+  bootstrap remains only as a clearly labelled
+  `PAIR-SAMPLING DIAGNOSTIC — NOT PATIENT-LEVEL UNCERTAINTY`.
+- Four blockers and two amendments found by the review are fixed (validation-accuracy
+  boundary, exactly-once training, no fabricated test metrics, ddof=1, protocol/frozen
+  artifacts in provenance, CUDA skip guards). See §18 and
+  `02D_STEP2B_REMEDIATION_EVIDENCE.md`.
 
 ## 17. Exact reproduction commands
 
 ```bash
-# STEP 2B regression suite (CPU; the grad-accum sub-test needs a GPU/CUDA)
+# STEP 2B + STEP 2B.1 remediation regression suite (CPU; grad-accum needs a GPU/CUDA)
 python test_adaptive_reid_protocol.py
 
 # Pre-existing STEP 1 regressions
@@ -254,3 +260,98 @@ python run_adaptive_reid_arm.py --mode confirmatory --arm_id arm_corrected_mu0.0
     --checkpoint ./archive/.../generator_lowest_total_loss.pth \
     --transform_mode corrected --mu 0.01 --out_dir ./archive/adaptive_reid_arms/... --stage a_d
 ```
+
+## 18. Scientific-Review Remediation (STEP 2B.1)
+
+The review re-examined the STEP 2B implementation against the authoritative frozen
+documents (`research_agent/01_ADAPTIVE_REID_PROTOCOL.md`,
+`research_agent/01B_PROTOCOL_AMENDMENT.md`) now present in the workspace. Every finding
+was accepted; the fixes are described in detail with tests in
+`02D_STEP2B_REMEDIATION_EVIDENCE.md` and the code changes in `STEP2B1_REMEDIATION.diff`.
+
+### BLOCKER 1 — validation accuracy thresholded raw logits at 0.5
+
+The Siamese pair head emits **logits**; the old code computed accuracy as `logits > 0.5`,
+which is not the canonical `p = sigmoid(logit) >= 0.5` (≡ `logit >= 0.0`) boundary
+(protocol R-1). Fixed by routing `validate_snn` metrics through
+`adaptive_reid.metrics.validation_metrics_from_logits` / `compute_accuracy_from_logits`.
+Regression: on logits `[-3.0, -0.2, 0.2, 0.3, 0.6, 2.0]` with labels `[0,0,1,1,1,1]` the
+corrected accuracy is **1.0** whereas the old rule gave **4/6**. Validation ROC-AUC is
+unchanged (rank-based).
+
+### BLOCKER 2 — each attacker restart was trained twice
+
+`main()` first let `restarts.run_schedule(..., train_and_report)` train every seed, then
+called `pipeline.stage_a_train_all(attempts)`, which re-invoked the same training worker
+on every seed. Fixed by removing the redundant `stage_a_train_all` call: the scheduler is
+now the **only** driver of training and reads each run's final health state to issue
+replacement seeds. Regression `test_D2_single_training_invocation_per_seed` asserts that
+stages B/C/D never re-train.
+
+### BLOCKER 2A — replacement policy
+
+Replacement occurs **only** for `NUMERICALLY_INVALID` runs, based on the final persisted
+record; a completed `VALID_NEAR_CHANCE` run is never replaced; replacement seeds proceed
+strictly ascending (10, 11, 12, …). Regression `test_E2_confirmatory_ascending_replacement_on_invalid_only`
+verifies initial seeds 0–9, two invalids at 5 and 8 replaced by 10 and 11, exactly 10
+valid runs.
+
+### BLOCKER 2B — idempotent reuse
+
+A completed run is reused (never re-trained) when its persisted `training_diagnostics.json`,
+`run_state.json`, and `run_signature.json` all exist and the signature matches the current
+(seed, config, protocol hashes, frozen-artifact hashes); real runs additionally require
+the checkpoint. `--force` is the explicit override. Regression
+`test_D3_idempotent_reuse_of_completed_run` covers reuse and signature invalidation.
+
+### BLOCKER 3 — fabricated stub test AUC could enter scientific results
+
+The old Stage E emitted `{'auc': 0.55 + 0.02*(seed % 4)}` unconditionally. Now:
+- non-stub Stage E raises **`NotImplementedError`** (no fabricated AUC is ever produced);
+- stub metrics carry `stub: true`, `synthetic: true`,
+  `valid_for_scientific_reporting: false`;
+- `summary.summarize_arm` excludes such metrics from the scientific
+  mean/median/max/SD and, if only synthetic metrics exist, leaves them `None` and sets
+  `scientific_summary_available: false`. Regressions `test_E3_...` and `test_J3_...`.
+
+### AMENDMENT 1 — sample SD `ddof=1`
+
+`summarize_arm` now reports the sample standard deviation (`ddof=1`) per protocol
+§6.3/§12/R-10; `n < 2` yields `None` (undefined), never a NaN surfaced as a result.
+Regression `test_J2_sample_sd_uses_ddof1` uses `[0.50, 0.52, 0.60, 0.70]`.
+
+### AMENDMENT 2 — protocol documents and frozen artifacts tracked + hashed
+
+The three authoritative files are now in the repository:
+- `research_agent/01_ADAPTIVE_REID_PROTOCOL.md`
+- `research_agent/01B_PROTOCOL_AMENDMENT.md`
+- `research_agent/topk_frozen_list.csv`
+
+`provenance.build_arm_provenance` writes `protocol_documents` and `frozen_artifacts`
+(sha256), and the runner populates them on every arm (R-7/R-12). Regressions
+`test_K2_...` and the end-to-end `test_Z_runner_stub_end_to_end`.
+
+### R-9 — scientifically resolved (no implementation)
+
+The patient-cluster bootstrap is **withdrawn** (amendment §6). `adaptive_reid/bootstrap.py`
+now documents the dyadic-schema reason, defines the
+`PAIR-SAMPLING DIAGNOSTIC — NOT PATIENT-LEVEL UNCERTAINTY` label, and contains **no**
+patient-cluster resampling implementation (the `PatientClusterResampler` class was
+removed). Regression `test_N_R9_final_policy`.
+
+### Test infrastructure — CUDA skip guards
+
+`test_grad_accum.py` and the grad-accum sub-check in `test_adaptive_reid_protocol.py` are
+now guarded so that on a CPU-only host they PASS by skipping (plain-script prints
+`[SKIP]`; pytest would skip), while on CUDA they run fully.
+
+### Verified results (this remediation pass)
+
+```
+STEP 2B + STEP 2B.1 REMEDIATION TEST SUITE: PASS   (36 checks)
+STEP 1B REVIEW REMEDIATION: PASS                   (test_operator_repair.py)
+ALL GRADIENT-ACCUMULATION REGRESSION TESTS PASSED  (test_grad_accum.py)
+LIVE validate_snn backward-compat + logits-aware metrics: PASS
+```
+
+**STEP 2B.1 REMEDIATION: PASS**

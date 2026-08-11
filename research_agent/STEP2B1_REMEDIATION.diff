@@ -1,0 +1,1163 @@
+diff --git a/adaptive_reid/__init__.py b/adaptive_reid/__init__.py
+index a8b6f80..70b7cb5 100644
+--- a/adaptive_reid/__init__.py
++++ b/adaptive_reid/__init__.py
+@@ -7,8 +7,9 @@ Implements the frozen 01/01B adaptive re-ID protocol:
+     - weights-updated detection
+     - restart driver (screening 3 / confirmatory 10)
+     - staged pipeline (A-E) with no test-derived representative selection
+-    - final arm summary aggregation
+-    - patient-clustered bootstrap (R-9; blocked on ambiguity, never guessed)
++    - final arm summary aggregation (sample SD ddof=1; stub/synthetic metrics blocked)
++    - pair-bootstrap policy (R-9 FINAL: patient-cluster estimator withdrawn; pair-level
++      bootstrap allowed only as a PAIR-SAMPLING DIAGNOSTIC, not patient-level uncertainty)
+     - Top-k frozen gallery/probe infrastructure
+     - per-arm determinism check
+     - provenance record
+diff --git a/adaptive_reid/bootstrap.py b/adaptive_reid/bootstrap.py
+index e8a1576..3e2b49e 100644
+--- a/adaptive_reid/bootstrap.py
++++ b/adaptive_reid/bootstrap.py
+@@ -1,24 +1,32 @@
+-"""Patient-clustered bootstrap (STEP 2B Part 9, R-9).
++"""Uncertainty / bootstrap policy (STEP 2B Part 9, R-9 — FINAL).
+ 
+ Pair-file schema (verified by inspection of image_pairs/*):
+     each line:  <image1> <image2> <label>
+     label 1 (positive): both images carry the SAME patient identity.
+     label 0 (negative): the two images carry TWO DIFFERENT patient identities.
+ 
+-Patient-cluster (identity) bootstrap resamples at the level of patient identities and
+-re-weights/among resampled clusters. A positive pair belongs unambiguously to exactly
+-one patient cluster. A negative pair spans TWO clusters, so its membership under a
+-cluster resample is ambiguous: the frozen protocol does not specify how such a pair is
+-assigned when patient clusters are resampled.
++The verification data are therefore DYADIC: a negative pair has no unique one-way
++patient-cluster membership, so a naive patient-cluster bootstrap would duplicate or
++ambiguously assign negative-pair observations.
+ 
+-Per the frozen protocol, in a case of scientific ambiguity we DO NOT guess: R-9 is
+-reported BLOCKED FOR SCIENTIFIC CLARIFICATION, and this module documents the exact
+-ambiguity. The historical pair-level bootstrap is retained only as a
+-pair-sampling diagnostic (clearly labelled).
++Final ruling (01B amendment §6, protocol §12.2 / R-9):
++    - the patient-clustered bootstrap proposal is WITHDRAWN;
++    - primary uncertainty for privacy claims is the distribution over independently
++      trained attacker restarts (mean, sample SD ddof=1, unpaired Welch);
++    - the existing PAIR-LEVEL bootstrap may remain only as a clearly labelled secondary
++      diagnostic for the validation-selected representative attacker:
++
++          PAIR-SAMPLING DIAGNOSTIC — NOT PATIENT-LEVEL UNCERTAINTY
++
++    - NO patient-cluster resampling implementation exists in this module. If a pair
++      bootstrap is ever used it must carry the label above.
+ """
+ 
+ from typing import Dict, List, Tuple
+ 
++PAIR_BOOTSTRAP_LABEL = 'PAIR-SAMPLING DIAGNOSTIC — NOT PATIENT-LEVEL UNCERTAINTY'
++R9_FINAL_STATUS = 'WITHDRAWN_PATIENT_CLUSTER_BOOTSTRAP'
++
+ 
+ def parse_patient_ids(fname_pair_row) -> Tuple[str, str]:
+     """Patient identity = the numeric prefix before the first '_' in an NIH file name."""
+@@ -73,59 +81,29 @@ def patient_cluster_bootstrap_is_ambiguous(pairs_path: str) -> bool:
+ 
+     The schema may be un-ambiguous ONLY if every pair involves at most one patient
+     identity. Our verified schema has negative pairs spanning two identities, so this
+-    returns True for the frozen pair files.
++    returns True for the frozen pair files. This is the reason the estimator was
++    withdrawn rather than guessed (R-9 / amendment §6).
+     """
+     stats = compute_patient_statistics(pairs_path)
+     return stats['negative_pairs_span_two_patients'] > 0
+ 
+ 
+-def report_R9_ambiguity(pairs_path: str) -> Dict:
+-    """Produce the R-9 BLOCKED documentation record.
++def report_R9_final_policy(pairs_path: str) -> Dict:
++    """Produce the R-9 FINAL policy documentation record.
+ 
+-    :return: dict describing the exact ambiguity, so it can be persisted with the arm.
++    :return: dict describing why the patient-cluster bootstrap is withdrawn and how any
++        pair-level bootstrap must be labelled, so it can be persisted with the arm.
+     """
+     stats = compute_patient_statistics(pairs_path)
+     return {
+-        'R9_status': 'BLOCKED_FOR_SCIENTIFIC_CLARIFICATION',
+-        'ambiguity': (
+-            'Negative pairs span two patient identities; the frozen protocol does not '
+-            'define how such a pair is assigned when patient clusters are resampled. '
+-            'No clustering rule invented here.'),
++        'R9_status': R9_FINAL_STATUS,
++        'withdrawn_because': (
++            'Verification pairs are dyadic: negative pairs span two patient identities, '
++            'so a naive patient-cluster bootstrap would duplicate or ambiguously assign '
++            'negative-pair observations and must not be described as patient-level '
++            'uncertainty (01B amendment §6; protocol §12.2).'),
+         'pair_statistics': stats,
+-        'pair_bootstrap_retained_as': 'pair_sampling_diagnostic',
++        'primary_uncertainty': 'distribution over independently trained attacker restarts',
++        'restart_sd_ddof': 1,
++        'pair_bootstrap_label': PAIR_BOOTSTRAP_LABEL,
+     }
+-
+-
+-class PatientClusterResampler:
+-    """Explicit patient-cluster resampling core.
+-
+-    The cluster membership rule for a pair is defined explicitly by the caller through
+-    ``pair_to_clusters``. This class does NOT invent a rule; for the frozen pair files
+-    it will refuse to resample unless the caller resolves the negative-pair ambiguity.
+-    """
+-
+-    def __init__(self, pair_to_clusters):
+-        """
+-        :param pair_to_clusters: callable (image1, image2, label) -> tuple of patient
+-            cluster ids that the pair belongs to. For a positive pair this is a single
+-            id; the caller decides the rule for negative pairs.
+-        """
+-        self.pair_to_clusters = pair_to_clusters
+-
+-    def resample(self, rows, rng, n_clusters_to_draw):
+-        """Resample a patient-cluster-level bootstrap sample of pair rows.
+-
+-        :param rows: list of (image1, image2, label) rows.
+-        :param rng: numpy RandomState.
+-        :param n_clusters_to_draw: number of patient clusters to draw with replacement.
+-        :return: list of pairs whose clusters intersect the drawn cluster set, scaled
+-            as a diagnostic count (resource-efficient: returns indices).
+-        """
+-        cluster_ids = set()
+-        for row in rows:
+-            cluster_ids.update(self.pair_to_clusters(*row))
+-        cluster_ids = sorted(cluster_ids)
+-        drawn = {c for c in rng.choice(cluster_ids, size=n_clusters_to_draw, replace=True)}
+-        kept = [i for i, row in enumerate(rows) if drawn & set(self.pair_to_clusters(*row))]
+-        weights = [len(drawn) for _ in kept]  # diagnostic weighting placeholder
+-        return kept, weights
+\ No newline at end of file
+diff --git a/adaptive_reid/metrics.py b/adaptive_reid/metrics.py
+index 4f6b956..9f83a08 100644
+--- a/adaptive_reid/metrics.py
++++ b/adaptive_reid/metrics.py
+@@ -63,15 +63,55 @@ def compute_auc(scores, labels):
+ 
+ 
+ def compute_accuracy(scores, labels, threshold=0.5):
+-    """Binary accuracy at the canonical 0.5 threshold on probability-scale scores."""
++    """Binary accuracy at the canonical 0.5 threshold on probability-scale scores.
++
++    ``scores`` are expected on the PROBABILITY scale (0..1). For logits use
++    :func:`compute_accuracy_from_logits`.
++    """
+     scores, labels = check_aligned(scores, labels)
+     preds = (scores > threshold).astype(np.int64)
+     return float(np.mean(preds == labels))
+ 
+ 
++def logistic_sigmoid(logits):
++    """Numerically-stable sigmoid (logit -> probability) as float64 ndarray."""
++    arr = np.asarray(logits, dtype=np.float64)
++    clipped = np.clip(arr, -60.0, 60.0)
++    return 1.0 / (1.0 + np.exp(-clipped))
++
++
++def compute_accuracy_from_logits(logits, labels, threshold=0.5):
++    """Accuracy with the correct 0.5 PROBABILITY boundary applied to logits.
++
++    The canonical binary decision is ``p = sigmoid(logit) >= threshold``, which at the
++    canonical threshold 0.5 is exactly ``logit >= 0.0``. Thresholding the raw logits at
++    0.5 instead is a protocol violation (R-1): it silently moves the operating point.
++    """
++    probs = logistic_sigmoid(continuous_scores(logits))
++    labels = binary_truth(labels)
++    if probs.shape[0] != labels.shape[0]:
++        raise ValueError("logits and labels length mismatch: %d vs %d" %
++                         (probs.shape[0], labels.shape[0]))
++    preds = (probs >= threshold).astype(np.int64)
++    return float(np.mean(preds == labels))
++
++
+ def validation_metrics(scores, labels, threshold=0.5):
+-    """Return {'auc': float, 'accuracy': float} for a validation partition."""
++    """Return {'auc': float, 'accuracy': float} for scores on the PROBABILITY scale."""
+     return {
+         'auc': compute_auc(scores, labels),
+         'accuracy': compute_accuracy(scores, labels, threshold=threshold),
++    }
++
++
++def validation_metrics_from_logits(logits, labels, threshold=0.5):
++    """Validation metrics for raw pair-head LOGITS (the Siamese output scale).
++
++    ROC-AUC is invariant to any monotone transform, so it is computed directly on the
++    logits (continuous scores). Accuracy applies the correct sigmoid-probability
++    boundary via :func:`compute_accuracy_from_logits`.
++    """
++    return {
++        'auc': compute_auc(logits, labels),
++        'accuracy': compute_accuracy_from_logits(logits, labels, threshold=threshold),
+     }
+\ No newline at end of file
+diff --git a/adaptive_reid/provenance.py b/adaptive_reid/provenance.py
+index 3228010..0c4f423 100644
+--- a/adaptive_reid/provenance.py
++++ b/adaptive_reid/provenance.py
+@@ -36,9 +36,17 @@ def build_arm_provenance(
+     run_start_timestamp: str,
+     run_end_timestamp: str,
+     schedule_name: str,
++    protocol_documents: Optional[Dict[str, str]] = None,
++    frozen_artifacts: Optional[Dict[str, str]] = None,
+     extra: Optional[Dict[str, Any]] = None,
+ ) -> Dict[str, Any]:
+-    """Assemble the canonical per-arm provenance record."""
++    """Assemble the canonical per-arm provenance record.
++
++    :param protocol_documents: {path: sha256} of the authoritative frozen protocol
++        documents (R-12: 01_ADAPTIVE_REID_PROTOCOL.md, 01B_PROTOCOL_AMENDMENT.md).
++    :param frozen_artifacts: {path: sha256} of other frozen inputs, e.g. the Top-k
++        gallery/probe list (R-7).
++    """
+     record = {
+         'arm_id': arm_id,
+         'git_commit': git_commit,
+@@ -63,6 +71,8 @@ def build_arm_provenance(
+         'run_start_timestamp': str(run_start_timestamp),
+         'run_end_timestamp': str(run_end_timestamp),
+         'schedule_name': str(schedule_name),
++        'protocol_documents': {str(p): str(h) for p, h in (protocol_documents or {}).items()},
++        'frozen_artifacts': {str(p): str(h) for p, h in (frozen_artifacts or {}).items()},
+     }
+     if extra:
+         record.update(extra)
+diff --git a/adaptive_reid/summary.py b/adaptive_reid/summary.py
+index 5a0298a..5d42e36 100644
+--- a/adaptive_reid/summary.py
++++ b/adaptive_reid/summary.py
+@@ -1,7 +1,13 @@
+-"""Final arm summary aggregation (STEP 2B Part 8).
++"""Final arm summary aggregation (STEP 2B Part 8, STEP 2B.1 remediation).
+ 
+ Aggregates over EXACTLY the numerically valid completed attacks. Near-chance runs are
+ never dropped, and no "successful attacks only" mean is computed.
++
++STEP 2B.1 changes:
++- restart SD uses the SAMPLE standard deviation (``ddof=1``) per protocol §6.3/§12/R-10;
++- stub/synthetic test metrics (``valid_for_scientific_reporting is False``) can never
++  enter the scientific mean/median/max; if only synthetic metrics are present those
++  fields stay None and the summary is flagged (R-11).
+ """
+ 
+ import numpy as np
+@@ -9,6 +15,16 @@ import numpy as np
+ from . import constants as C
+ 
+ 
++def _test_metrics_of(a):
++    """Return (scientific_auc_or_None, synthetic_bool) for one attempt."""
++    tm = a.get('test_metrics')
++    if tm is None or 'auc' not in tm:
++        return None, False
++    if tm.get('valid_for_scientific_reporting', True):
++        return float(tm['auc']), False
++    return None, True
++
++
+ def summarize_arm(attempts):
+     """Summarize an arm from a list of per-attempt outcome dicts.
+ 
+@@ -21,10 +37,13 @@ def summarize_arm(attempts):
+     valid = [a for a in attempts if a['state'] == C.VALID]
+ 
+     test_aucs = []
++    n_synthetic = 0
+     for a in valid:
+-        tm = a.get('test_metrics')
+-        if tm is not None and 'auc' in tm:
+-            test_aucs.append(float(tm['auc']))
++        auc, synthetic = _test_metrics_of(a)
++        if auc is not None:
++            test_aucs.append(auc)
++        if synthetic:
++            n_synthetic += 1
+ 
+     summary = {
+         'n_attempted': len(attempts),
+@@ -32,6 +51,8 @@ def summarize_arm(attempts):
+         'n_valid': len(valid),
+         'n_near_chance': sum(1 for a in valid if a['near_chance']),
+         'test_auc_values': test_aucs,
++        'n_stub_or_synthetic_test_metrics': n_synthetic,
++        'contains_stub_or_synthetic_metrics': n_synthetic > 0,
+     }
+ 
+     if not test_aucs:
+@@ -41,15 +62,17 @@ def summarize_arm(attempts):
+             'median_test_auc': None,
+             'max_test_auc': None,
+             'representative_attacker_seed': None,
++            'scientific_summary_available': False,
+         })
+         return summary
+ 
+     arr = np.asarray(test_aucs, dtype=np.float64)
+     summary.update({
+         'mean_test_auc': float(arr.mean()),
+-        'std_test_auc': float(arr.std(ddof=0)),
++        'std_test_auc': float(arr.std(ddof=1)) if arr.size >= 2 else None,
+         'median_test_auc': float(np.median(arr)),
+         'max_test_auc': float(arr.max()),
++        'scientific_summary_available': True,
+     })
+     # representative seed from the arm provenance (set during Stage D)
+     reps = [a['attacker_seed'] for a in valid if a.get('is_representative')]
+diff --git a/run_adaptive_reid_arm.py b/run_adaptive_reid_arm.py
+index 39decf0..6faf7d0 100644
+--- a/run_adaptive_reid_arm.py
++++ b/run_adaptive_reid_arm.py
+@@ -11,13 +11,23 @@ Determinism guarantee: seeds are taken from the schedule (ascending, internal),
+ chosen by the user after seeing outcomes. Test evaluation is ALWAYS deferred to Stage E,
+ which is gated behind a --stage flag so representativeness is frozen first.
+ 
++STEP 2B.1 remediation invariants:
++    - EXACTLY ONE training invocation per seed. The scheduler (restarts.run_schedule)
++      decides which seed to attempt, invokes the training worker once, and reads the
++      final health state to decide replacements. No later stage re-trains.
++    - Idempotent reuse: a completed (seed, config, protocol, artifacts) run is reused,
++      never re-trained, unless --force is given.
++    - No fabricated test metrics: a real (non-stub) Stage E has no implementation yet and
++      raises NotImplementedError instead of emitting a made-up AUC. Stub outputs are
++      explicitly marked stub/synthetic/valid_for_scientific_reporting=false (R-11).
++
+ Usage (production, AFTER the strict stop is lifted):
+     python run_adaptive_reid_arm.py --mode confirmatory \
+         --arm_id arm_corrected_mu0.01 \
+         --checkpoint ./archive/.../generator_lowest_total_loss.pth \
+         --transform_mode corrected --mu 0.01 \
+         --out_dir ./archive/adaptive_reid_arms/arm_corrected_mu0.01 \
+-        --stage a_d_or_e
++        --stage a_d
+ 
+ Use --stub to run the full staged pipeline on generated (non-trained) records; this is
+ the wrapper the test suite calls to verify stage-ordering without a GPU run.
+@@ -26,7 +36,6 @@ the wrapper the test suite calls to verify stage-ordering without a GPU run.
+ import argparse
+ import json
+ import os
+-import shutil
+ import subprocess
+ import sys
+ from datetime import datetime, timezone
+@@ -36,9 +45,7 @@ from adaptive_reid import diagnostics as diag
+ from adaptive_reid import health
+ from adaptive_reid import provenance
+ from adaptive_reid import restarts
+-from adaptive_reid import selection
+ from adaptive_reid import summary as summ
+-from adaptive_reid import weights as wts
+ from adaptive_reid import topk
+ from adaptive_reid import pipeline
+ 
+@@ -48,6 +55,14 @@ PAIR_TEST = 'image_pairs/image_pairs_testing_5000.txt'
+ 
+ CONFIG_TEMPLATE = './config_files/config_retrainSNN.json'
+ 
++# Authoritative frozen artifacts (R-12 / amendment §2). These files are SOURCE OF
++# TRUTH: they are never regenerated by this driver, only hashed into provenance.
++PROTOCOL_01 = 'research_agent/01_ADAPTIVE_REID_PROTOCOL.md'
++PROTOCOL_01B = 'research_agent/01B_PROTOCOL_AMENDMENT.md'
++FROZEN_TOPK_CSV = 'research_agent/topk_frozen_list.csv'
++
++SIGNATURE_FILENAME = 'run_signature.json'
++
+ 
+ def now_iso():
+     return datetime.now(timezone.utc).isoformat(timespec='seconds')
+@@ -68,12 +83,90 @@ def hashes_for(paths):
+     return out
+ 
+ 
++def protocol_and_frozen_hashes():
++    protocol_documents = hashes_for([PROTOCOL_01, PROTOCOL_01B])
++    frozen_artifacts = hashes_for([FROZEN_TOPK_CSV])
++    return protocol_documents, frozen_artifacts
++
++
++def run_signature(seed, args, cfg, pair_hashes, protocol_documents, frozen_artifacts):
++    """Deterministic identity of one restart attempt (used for idempotent reuse)."""
++    return {
++        'arm_id': args.arm_id,
++        'attacker_seed': int(seed),
++        'transform_mode': args.transform_mode,
++        'mu': float(args.mu),
++        'stochastic_lambda': float(getattr(args, 'stochastic_lambda', 0.0)),
++        'generator_checkpoint_path': args.checkpoint,
++        'pair_train_hash': pair_hashes.get(PAIR_TRAIN, ''),
++        'pair_validation_hash': pair_hashes.get(PAIR_VAL, ''),
++        'config': {
++            'learning_rate': cfg.get('learning_rate'),
++            'batch_size': cfg.get('batch_size'),
++            'max_epochs': cfg.get('max_epochs'),
++            'early_stopping': cfg.get('early_stopping'),
++        },
++        'protocol_documents': protocol_documents,
++        'frozen_artifacts': frozen_artifacts,
++        'stub': bool(args.stub),
++    }
++
++
++def reuse_completed_run(run_dir, signature, seed, args):
++    """Return the persisted training diagnostics iff a completed, matching run exists.
++
++    Idempotency (R-4 / BLOCKER 2B): a run whose training diagnostics, run state, and
++    run signature all exist AND whose signature matches the current (seed, config,
++    protocol, artifacts) is reused instead of being re-trained. For real runs the
++    checkpoint must also exist. Returns None when the run must be (re)trained.
++    """
++    diag_path = os.path.join(run_dir, diag.VALIDITY_FILENAME)
++    runstate_path = os.path.join(run_dir, diag.RUNSTATE_FILENAME)
++    sig_path = os.path.join(run_dir, SIGNATURE_FILENAME)
++    if not (os.path.exists(diag_path) and os.path.exists(runstate_path)
++            and os.path.exists(sig_path)):
++        return None
++    try:
++        stored = diag.read_json(sig_path)
++    except Exception:
++        return None
++    if stored != signature:
++        return None
++    if not args.stub:
++        exp = 'retrain_snn_seed{}'.format(seed)
++        ck = os.path.join('archive', exp, exp + '_best_network.pth')
++        if not os.path.exists(ck):
++            return None
++    return diag.read_json(diag_path)
++
++
++def stub_test_metrics(seed):
++    """Deterministic synthetic Stage-E metric, EXPLICITLY marked non-scientific (R-11)."""
++    return {
++        'auc': 0.5 + 0.01 * (seed % 7),
++        'stub': True,
++        'synthetic': True,
++        'valid_for_scientific_reporting': False,
++        'note': 'STUB SYNTHETIC smoke metric - not a measured privacy result',
++    }
++
++
++def require_real_test_eval(stub):
++    """Refuse to fabricate test AUC: only a stub may emit synthetic metrics (R-11)."""
++    if not stub:
++        raise NotImplementedError(
++            'STAGE E real test evaluation is not implemented in STEP 2B.1. '
++            'Refusing to fabricate a test AUC. Either run with --stub (synthetic, '
++            'marked non-scientific) or implement the real frozen-test evaluation.')
++
++
+ def write_arm_provenance(arm_id, out_dir, summary, attempts, args, cfg, pair_hashes,
+                          t0, t1, commit):
+     run_states = {a['attacker_seed']: a['state'] for a in attempts}
+     near_flags = {a['attacker_seed']: a['near_chance'] for a in attempts}
+     seeds_attempted = [a['attacker_seed'] for a in attempts]
+     rep = summary.get('representative_attacker_seed')
++    protocol_documents, frozen_artifacts = protocol_and_frozen_hashes()
+     record = provenance.build_arm_provenance(
+         arm_id=arm_id, git_commit=commit, transform_mode=args.transform_mode,
+         generator_checkpoint_path=args.checkpoint,
+@@ -94,7 +187,8 @@ def write_arm_provenance(arm_id, out_dir, summary, attempts, args, cfg, pair_has
+         representative_attacker_seed=rep,
+         representative_selection_criterion='best-validation-AUC closest to median, tie=smaller seed',
+         run_states=run_states, near_chance_flags=near_flags,
+-        run_start_timestamp=t0, run_end_timestamp=t1, schedule_name=args.mode)
++        run_start_timestamp=t0, run_end_timestamp=t1, schedule_name=args.mode,
++        protocol_documents=protocol_documents, frozen_artifacts=frozen_artifacts)
+     diag.write_json(os.path.join(out_dir, 'arm_provenance.json'), record)
+     return record
+ 
+@@ -114,7 +208,11 @@ def main():
+                              "(NO test eval). 'a_e' additionally runs Stage E test eval.")
+     parser.add_argument('--stub', action='store_true',
+                         help='Generate stub records instead of launching retrain_SNN.exe '
+-                             '(no GPU, for tests/CI).')
++                             '(no GPU, for tests/CI). Stub test metrics are explicitly '
++                             'marked synthetic and can never enter a scientific summary.')
++    parser.add_argument('--force', action='store_true',
++                        help='Re-train even if a matching completed run is present '
++                             '(explicit override of idempotent reuse).')
+     args = parser.parse_args()
+ 
+     os.makedirs(args.out_dir, exist_ok=True)
+@@ -124,47 +222,31 @@ def main():
+         cfg = json.load(f)
+ 
+     pair_hashes = hashes_for([PAIR_TRAIN, PAIR_VAL, PAIR_TEST])
++    protocol_documents, frozen_artifacts = protocol_and_frozen_hashes()
+ 
+     commit = git_commit()
+     schedule = (restarts.ScreeningSchedule() if args.mode == 'screening'
+                 else restarts.ConfirmatorySchedule())
+ 
++    # ---- Stage A + B worker: EXACTLY ONE training invocation per seed attempt ----
+     def train_and_report(seed):
+         exp = 'retrain_snn_seed{}'.format(seed)
+         run_dir = os.path.join(args.out_dir, 'runs', exp)
+         os.makedirs(run_dir, exist_ok=True)
+         start = now_iso()
+ 
+-        if not args.stub:
+-            scfg = dict(cfg)
+-            scfg['experiment_description'] = exp
+-            scfg['seed'] = seed
+-            scfg['transform_mode'] = args.transform_mode
+-            scfg['mu'] = args.mu
+-            scfg['stochastic_lambda'] = args.stochastic_lambda
+-            if args.checkpoint:
+-                scfg['perturbation_model_file'] = args.checkpoint
+-            cfg_path = os.path.join('config_files', exp + '.json')
+-            with open(cfg_path, 'w') as f:
+-                json.dump(scfg, f, indent=2)
+-            res = subprocess.run(
+-                [sys.executable, 'retrain_SNN.py', '--config_path', './config_files/',
+-                 '--config', exp + '.json'], cwd=os.getcwd())
+-            if res.returncode != 0:
+-                os.remove(cfg_path) if os.path.exists(cfg_path) else None
+-                return _infra_record(seed, start, run_dir, cfg, args, pair_hashes)
+-            os.remove(cfg_path) if os.path.exists(cfg_path) else None
+-            # pull the persisted diagnostics saved by the real run if present
+-            diag_path = os.path.join(run_dir, diag.VALIDITY_FILENAME)
+-            # fall back to a minimal record carrying termination/checkpoint facts
+-            ck = os.path.join('archive', exp, exp + '_best_network.pth')
+-            rec = _stub_record(seed, start, run_dir, cfg, args, pair_hashes,
+-                               ck_exists=os.path.exists(ck))
+-            if os.path.exists(diag_path):
+-                rec = diag.read_json(diag_path)
++        signature = run_signature(seed, args, cfg, pair_hashes,
++                                  protocol_documents, frozen_artifacts)
++        diag.write_json(os.path.join(run_dir, SIGNATURE_FILENAME), signature)
++
++        if not args.force:
++            reused = reuse_completed_run(run_dir, signature, seed, args)
++            if reused is not None:
++                rec = reused
++            else:
++                rec = _train_once(seed, exp, run_dir, start, args, cfg, pair_hashes)
+         else:
+-            rec = _stub_record(seed, start, run_dir, cfg, args, pair_hashes,
+-                               ck_exists=args.stub and seed % 5 != 2)
++            rec = _train_once(seed, exp, run_dir, start, args, cfg, pair_hashes)
+         rec['run_end_timestamp'] = now_iso()
+         diag.write_json(os.path.join(run_dir, diag.VALIDITY_FILENAME), rec)
+ 
+@@ -179,20 +261,22 @@ def main():
+ 
+     def evaluate_test(seed):
+         # Stage E: evaluate the frozen TEST pairs exactly once for this completed attacker.
++        require_real_test_eval(args.stub)
+         run_dir = os.path.join(args.out_dir, 'runs', 'retrain_snn_seed{}'.format(seed))
+-        # stub metrics for now (real integration happens post-STEP-2B when running arms);
+-        # real implementation loads the run_state and evaluates test_loader.
+-        metrics = {'auc': 0.55 + 0.02 * (seed % 4), 'note': 'not-run-in-STEP-2B'}
++        metrics = stub_test_metrics(seed)
+         diag_path = os.path.join(run_dir, diag.TESTMETRICS_FILENAME)
+         diag.write_json(diag_path, {**metrics, 'evaluation_timestamp': now_iso()})
+         return metrics
+ 
++    # The scheduler trains each attempted seed exactly once (Stage A) and, from the
++    # final health state, issues ascending replacement seeds (Stage B loop).
+     attempts = restarts.run_schedule(schedule, train_and_report)
+ 
+     pl = pipeline.ArmPipeline(
+         train_validate_and_persist=lambda seed: train_and_report(seed),
+         evaluate_test=evaluate_test if args.stage == 'a_e' else None)
+-    pl.stage_a_train_all(attempts)
++    # NOTE: stage_a_train_all is intentionally NOT called here - it would re-train every
++    # restart (BLOCKER 2). The schedule already trained each seed exactly once.
+     pl.stage_b_classify(attempts)
+     rep_seed = pl.stage_c_select_representative(attempts)
+     mark = {}
+@@ -210,10 +294,15 @@ def main():
+                                 pair_hashes, t0, t1, commit)
+     diag.write_json(os.path.join(args.out_dir, 'arm_summary.json'), summary)
+ 
+-    # Frozen Top-k metadata is built once and shared by every arm.
++    # Frozen Top-k metadata is reused from the authoritative tracked file, never
++    # regenerated. Fall back to deterministic construction only if it is absent.
+     try:
+-        frozen = topk.build_frozen_topk_list(n_patients=C.TOPK_N_PATIENTS,
+-                                             seed=C.TOPK_SELECTION_SEED)
++        frozen_path = FROZEN_TOPK_CSV
++        if os.path.exists(frozen_path):
++            frozen = topk.load_frozen_topk_list(frozen_path)
++        else:
++            frozen = topk.build_frozen_topk_list(n_patients=C.TOPK_N_PATIENTS,
++                                                 seed=C.TOPK_SELECTION_SEED)
+         topk.save_frozen_topk_list(os.path.join(args.out_dir, topk.FROZEN_LIST_FILENAME), frozen)
+     except Exception as e:  # metadata missing -> report, do not guess
+         print('Top-k list build skipped:', e)
+@@ -224,6 +313,40 @@ def main():
+     print('provenance:', os.path.join(args.out_dir, 'arm_provenance.json'))
+ 
+ 
++def _train_once(seed, exp, run_dir, start, args, cfg, pair_hashes):
++    """Launch the single training invocation for one seed and return its record.
++
++    Raises RuntimeError instead of fabricating a record when a real run finishes without
++    the protocol's machine-readable diagnostics file (no invented diagnostics).
++    """
++    if args.stub:
++        return _stub_record(seed, start, run_dir, cfg, args, pair_hashes,
++                            ck_exists=args.stub and seed % 5 != 2)
++    scfg = dict(cfg)
++    scfg['experiment_description'] = exp
++    scfg['seed'] = seed
++    scfg['transform_mode'] = args.transform_mode
++    scfg['mu'] = args.mu
++    scfg['stochastic_lambda'] = args.stochastic_lambda
++    if args.checkpoint:
++        scfg['perturbation_model_file'] = args.checkpoint
++    cfg_path = os.path.join('config_files', exp + '.json')
++    with open(cfg_path, 'w') as f:
++        json.dump(scfg, f, indent=2)
++    res = subprocess.run(
++        [sys.executable, 'retrain_SNN.py', '--config_path', './config_files/',
++         '--config', exp + '.json'], cwd=os.getcwd())
++    os.remove(cfg_path) if os.path.exists(cfg_path) else None
++    if res.returncode != 0:
++        return _infra_record(seed, start, run_dir, cfg, args, pair_hashes)
++    diag_path = os.path.join(run_dir, diag.VALIDITY_FILENAME)
++    if os.path.exists(diag_path):
++        return diag.read_json(diag_path)
++    raise RuntimeError(
++        'real run for seed %d finished (rc=0) without %s; refusing to fabricate '
++        'training diagnostics' % (seed, diag.VALIDITY_FILENAME))
++
++
+ def _stub_record(seed, start, run_dir, cfg, args, pair_hashes, ck_exists=True):
+     # deterministic stub: seed%5==2 marks infrastructure failure (no checkpoint)
+     epochs = 8
+@@ -287,4 +410,4 @@ def np_val_auc(a):
+ 
+ 
+ if __name__ == '__main__':
+-    main()
+\ No newline at end of file
++    main()
+diff --git a/test_adaptive_reid_protocol.py b/test_adaptive_reid_protocol.py
+index fec1180..226e5a7 100644
+--- a/test_adaptive_reid_protocol.py
++++ b/test_adaptive_reid_protocol.py
+@@ -1,27 +1,38 @@
+-"""STEP 2B regression suite for the frozen adaptive re-ID protocol.
++"""STEP 2B + STEP 2B.1 remediation regression suite.
+ 
+ Covers (cross-referenced to the task Parts):
+   A  validation AUC/accuracy correctness            (Part 1, metrics)
++  A2 accuracy boundary is sigmoid(logit)>=0.5      (BLOCKER 1; logits -3..2 case)
+   B  numerically invalid classification             (Part 3)
+   C  near-chance is VALID, not excluded             (Part 3)
+   D  weight-update detection                        (Part 4)
++  D2 exactly one training invocation per seed       (BLOCKER 2; no re-train in later stages)
++  D3 idempotent reuse of completed runs             (BLOCKER 2B; run signature)
+   E  confirmatory seed schedule                     (Part 5)
++  E2 confirmatory ascending replacement on final    (BLOCKER 2A; seeds 0..9 then 10,11,...)
++     invalid-only state
++  E3 stub markers + non-stub test eval raises       (BLOCKER 3; R-11)
+   F  screening seed schedule                        (Part 5)
+   G  replacement only on NUMERICALLY_INVALID        (Part 5)
+   H  representative selection on validation only    (Part 6)
+   I  no test-derived inputs accepted                (Parts 3, 6, 13)
+   J  mean/SD/median/max include near-chance attacks (Part 8)
++  J2 sample SD uses ddof=1                          (AMENDMENT 1; [0.50,.52,.60,.70])
++  J3 summary refuses synthetic/stub metrics         (BLOCKER 3; R-11)
+   K  provenance contains required fields            (Part 12)
++  K2 provenance carries protocol + frozen hashes    (AMENDMENT 2 / R-7 / R-12)
+   L  determinism checker                            (Part 11)
+   M  Top-k frozen-list construction                 (Part 10)
+-  N  patient-cluster bootstrap (R-9) status         (Part 9)
++  N  R-9 final policy (patient-cluster withdrawn)   (Part 9 / amendment §6)
+   O  legacy shared-operator regression              (Part 14)
+-  P  gradient-accumulation regression               (Part 14)
++  P  gradient-accumulation regression               (Part 14, CUDA skip-guarded)
+ """
+ 
+ import json
+ import os
+ import shutil
++import subprocess
++import sys
+ import tempfile
+ 
+ import numpy as np
+@@ -33,9 +44,12 @@ from adaptive_reid import diagnostics as diag
+ from adaptive_reid import health, metrics, weights, restarts, selection
+ from adaptive_reid import summary as summ
+ from adaptive_reid import determinism, provenance, bootstrap, topk
++from adaptive_reid import pipeline as pl_mod
+ 
+ from adaptive_reid import constants as C
+ 
++import run_adaptive_reid_arm as runner
++
+ 
+ def _mini_mlp(seed):
+     torch.manual_seed(seed)
+@@ -81,6 +95,31 @@ def test_A_invalid_inputs_fail_loudly():
+     print('A. invalid inputs fail loudly PASS')
+ 
+ 
++def test_A2_accuracy_boundary_is_sigmoid_logit():
++    # BLOCKER 1 regression: accuracy must use the 0.5 PROBABILITY boundary
++    # (sigmoid(logit) >= 0.5, equivalently logit >= 0.0), never raw-logit 0.5.
++    logits = np.array([-3.0, -0.2, 0.2, 0.3, 0.6, 2.0])
++    labels = np.array([0, 0, 1, 1, 1, 1])
++    acc = metrics.compute_accuracy_from_logits(logits, labels)
++    assert acc == 1.0, acc
++    # the old buggy rule (raw logits > 0.5) gives 4/6 on the same inputs
++    buggy = float(np.mean((logits > 0.5).astype(np.int64) == labels))
++    assert abs(buggy - 4 / 6) < 1e-12
++    # exact boundary: sigmoid(0.0) == 0.5 counts as the positive class
++    assert metrics.compute_accuracy_from_logits([0.0], [1]) == 1.0
++    assert metrics.compute_accuracy_from_logits([-1e-9], [0]) == 1.0
++    assert metrics.compute_accuracy_from_logits([0.0], [0]) == 0.0
++    print('A2. accuracy boundary == sigmoid(logit)>=0.5 (BLOCKER 1) PASS')
++
++
++def test_A2_validate_snn_routes_logits_accuracy():
++    # The live validation path must route logits through the logits-aware estimator.
++    import inspect
++    src = inspect.getsource(U.validate_snn)
++    assert 'validation_metrics_from_logits' in src
++    print('A2. validate_snn uses logits-aware accuracy (BLOCKER 1) PASS')
++
++
+ # ----------------------------------------------------------------------------------
+ # B / C. run health + near-chance
+ # ----------------------------------------------------------------------------------
+@@ -213,6 +252,112 @@ def test_G_replacement_never_for_near_chance():
+     print('G. near-chance run never replaced PASS')
+ 
+ 
++# ----------------------------------------------------------------------------------
++# D2 / D3 / E2 / E3. STEP 2B.1 remediation: single training, idempotent reuse,
++# invalid-only ascending replacement, and no fabricated test metrics.
++# ----------------------------------------------------------------------------------
++def test_D2_single_training_invocation_per_seed():
++    calls = []
++
++    def worker(seed):
++        calls.append(seed)
++        aucs = {0: [0.60], 1: [0.65], 2: [0.70]}
++        return {'attacker_seed': seed, 'state': C.VALID, 'near_chance': False,
++                'diagnostics': {'attacker_seed': seed},
++                'validation_record': {'attacker_seed': seed,
++                                      'validation_auc_per_epoch': aucs.get(seed, [0.60]),
++                                      'validation_loss_per_epoch': [0.4],
++                                      'validation_accuracy_per_epoch': [0.7]}}
++
++    attempts = restarts.run_schedule(restarts.ScreeningSchedule(), worker)
++    assert calls == [0, 1, 2]
++    n_after_schedule = len(calls)
++    assert n_after_schedule == 3
++    # Later stages (B/C/D) must NOT invoke the training worker again (BLOCKER 2).
++    pl = pl_mod.ArmPipeline(train_validate_and_persist=worker, evaluate_test=None)
++    pl.stage_b_classify(attempts)
++    rep = pl.stage_c_select_representative(attempts)
++    pl.stage_d_persist_representative(attempts, rep, {})
++    assert len(calls) == 3, 'a later stage re-trained a restart (BLOCKER 2): %s' % calls
++    print('D2. exactly one training invocation per seed (BLOCKER 2) PASS')
++
++
++def test_E2_confirmatory_ascending_replacement_on_invalid_only():
++    lookup = {s: C.VALID for s in range(15)}
++    lookup[5] = C.NUMERICALLY_INVALID
++    lookup[8] = C.NUMERICALLY_INVALID
++
++    def worker(seed):
++        return {'attacker_seed': seed, 'state': lookup[seed], 'near_chance': False,
++                'diagnostics': None, 'validation_record': None}
++
++    attempts = restarts.run_schedule(restarts.ConfirmatorySchedule(), worker)
++    seeds = [a['attacker_seed'] for a in attempts]
++    assert seeds[:10] == list(range(10)), seeds
++    # two NUMERICALLY_INVALID initial seeds are replaced strictly ascending: 10, 11
++    assert seeds == list(range(10)) + [10, 11], seeds
++    assert sum(1 for a in attempts if a['state'] == C.VALID) == 10
++    print('E2. confirmatory ascending replacement, invalid-only, final-state (BLOCKER 2A) PASS')
++
++
++def test_D3_idempotent_reuse_of_completed_run(tmp_path):
++    import argparse
++    td = _td_path(tmp_path)
++    args = argparse.Namespace(arm_id='arm_x', transform_mode='corrected', mu=0.01,
++                              stochastic_lambda=0.0, checkpoint=None, stub=True,
++                              force=False)
++    cfg = {'learning_rate': 1e-4, 'batch_size': 16, 'max_epochs': 100,
++           'early_stopping': {'patience': 5}}
++    pair_hashes = {runner.PAIR_TRAIN: 'a', runner.PAIR_VAL: 'b'}
++    protocol_documents = {runner.PROTOCOL_01: 'c', runner.PROTOCOL_01B: 'd'}
++    frozen_artifacts = {runner.FROZEN_TOPK_CSV: 'e'}
++    sig = runner.run_signature(3, args, cfg, pair_hashes, protocol_documents, frozen_artifacts)
++
++    run_dir = os.path.join(td, 'runs', 'retrain_snn_seed3')
++    os.makedirs(run_dir, exist_ok=True)
++    # nothing present -> must train
++    assert runner.reuse_completed_run(run_dir, sig, 3, args) is None
++
++    rec = diag.build_training_diagnostics(
++        attacker_seed=3, transform_mode='corrected', mu=0.01, stochastic_lambda=0.0,
++        generator_checkpoint_path='', generator_checkpoint_hash='',
++        pair_train_path=runner.PAIR_TRAIN, pair_validation_path=runner.PAIR_VAL,
++        pair_train_hash='a', pair_validation_hash='b',
++        epochs_completed=8, termination_reason=C.TERMINATION_EARLY_STOPPING,
++        training_loss_per_epoch=[0.6] * 8, validation_loss_per_epoch=[0.62] * 8,
++        validation_auc_per_epoch=[0.55] * 8, validation_accuracy_per_epoch=[0.55] * 8,
++        best_validation_loss=0.62, best_validation_loss_epoch=0,
++        best_validation_auc=0.55, best_validation_auc_epoch=0,
++        any_nan_inf=False, checkpoint_exists=True, checkpoint_loadable=True,
++        weights_changed_from_initialization=True,
++        run_start_timestamp='t0', run_end_timestamp='t1')
++    diag.write_json(os.path.join(run_dir, diag.VALIDITY_FILENAME), rec)
++    diag.write_json(os.path.join(run_dir, diag.RUNSTATE_FILENAME),
++                    {'state': C.VALID, 'near_chance': False})
++    diag.write_json(os.path.join(run_dir, runner.SIGNATURE_FILENAME), sig)
++
++    loaded = runner.reuse_completed_run(run_dir, sig, 3, args)
++    assert loaded is not None and loaded['attacker_seed'] == 3
++    # changing any signed input (here: protocol doc hash) invalidates reuse
++    sig2 = dict(sig)
++    sig2['protocol_documents'] = {runner.PROTOCOL_01: 'CHANGED', runner.PROTOCOL_01B: 'd'}
++    assert runner.reuse_completed_run(run_dir, sig2, 3, args) is None
++    print('D3. idempotent reuse + signature invalidation (BLOCKER 2B) PASS')
++
++
++def test_E3_stub_markers_and_nonstub_not_implemented():
++    m = runner.stub_test_metrics(4)
++    assert m['stub'] is True and m['synthetic'] is True
++    assert m['valid_for_scientific_reporting'] is False
++    try:
++        runner.require_real_test_eval(False)
++        raise AssertionError('non-stub Stage E must raise NotImplementedError')
++    except NotImplementedError:
++        pass
++    runner.require_real_test_eval(True)  # stub path is allowed
++    print('E3. stub markers + non-stub NotImplementedError (BLOCKER 3) PASS')
++
++
+ # ----------------------------------------------------------------------------------
+ # H / I. representative selection on validation only
+ # ----------------------------------------------------------------------------------
+@@ -302,6 +447,48 @@ def test_J_aggregation_includes_near_chance():
+     print('J. mean/median/max include near-chance attacks PASS')
+ 
+ 
++def test_J2_sample_sd_uses_ddof1():
++    attempts = []
++    for i, auc in enumerate([0.50, 0.52, 0.60, 0.70]):
++        attempts.append({'attacker_seed': i, 'state': C.VALID, 'near_chance': False,
++                         'test_metrics': {'auc': auc}, 'is_representative': False})
++    s = summ.summarize_arm(attempts)
++    arr = np.asarray([0.50, 0.52, 0.60, 0.70])
++    assert abs(s['std_test_auc'] - arr.std(ddof=1)) < 1e-12
++    assert abs(s['std_test_auc'] - arr.std(ddof=0)) > 1e-12
++    # n == 1 -> sample SD undefined (None), never NaN emitted as a finished number
++    s1 = summ.summarize_arm([{'attacker_seed': 0, 'state': C.VALID, 'near_chance': False,
++                              'test_metrics': {'auc': 0.5}, 'is_representative': True}])
++    assert s1['std_test_auc'] is None
++    print('J2. restart SD uses ddof=1 sample SD (AMENDMENT 1) PASS')
++
++
++def test_J3_summary_refuses_synthetic_metrics():
++    attempts = [
++        {'attacker_seed': 0, 'state': C.VALID, 'near_chance': False,
++         'test_metrics': {'auc': 0.90, 'stub': True, 'synthetic': True,
++                          'valid_for_scientific_reporting': False},
++         'is_representative': True},
++        {'attacker_seed': 1, 'state': C.VALID, 'near_chance': False,
++         'test_metrics': {'auc': 0.91, 'valid_for_scientific_reporting': False},
++         'is_representative': False},
++    ]
++    s = summ.summarize_arm(attempts)
++    assert s['contains_stub_or_synthetic_metrics'] is True
++    assert s['n_stub_or_synthetic_test_metrics'] == 2
++    assert s['mean_test_auc'] is None and s['median_test_auc'] is None
++    assert s['max_test_auc'] is None and s['std_test_auc'] is None
++    assert s['test_auc_values'] == []
++    assert s['scientific_summary_available'] is False
++    # mixed: one real + one synthetic -> only the real one enters the aggregates
++    attempts[1]['test_metrics'] = {'auc': 0.60}
++    s2 = summ.summarize_arm(attempts)
++    assert s2['mean_test_auc'] == 0.60
++    assert s2['max_test_auc'] == 0.60
++    assert s2['n_stub_or_synthetic_test_metrics'] == 1
++    print('J3. summary refuses synthetic/stub metrics (BLOCKER 3 / R-11) PASS')
++
++
+ # ----------------------------------------------------------------------------------
+ # K. provenance fields
+ # ----------------------------------------------------------------------------------
+@@ -323,14 +510,36 @@ def test_K_provenance_required_fields():
+                 'pair_validation_path', 'pair_test_path', 'pair_train_hash',
+                 'pair_validation_hash', 'pair_test_hash', 'representative_attacker_seed',
+                 'representative_selection_criterion', 'run_states', 'near_chance_flags',
+-                'run_start_timestamp', 'run_end_timestamp', 'schedule_name']
++                'run_start_timestamp', 'run_end_timestamp', 'schedule_name',
++                'protocol_documents', 'frozen_artifacts']
+     for field in required:
+         assert field in p, field
+     # legacy vs corrected cannot be confused
+     assert p['transform_mode'] == 'corrected'
++    assert p['protocol_documents'] == {}
++    assert p['frozen_artifacts'] == {}
+     print('K. provenance required fields + mode granted PASS')
+ 
+ 
++def test_K2_provenance_protocol_and_frozen_hashes():
++    p = provenance.build_arm_provenance(
++        arm_id='arm_corrected_mu0.01', git_commit='abc', transform_mode='corrected',
++        generator_checkpoint_path='ck.pth', generator_checkpoint_hash='a' * 64,
++        mu=0.01, stochastic_lambda=0.0, attacker_architecture='ResNet-50 Siamese',
++        attacker_hyperparameters={'lr': 1e-4, 'batch_size': 16},
++        attacker_seeds_attempted=[0, 1, 2], pair_train_path='t',
++        pair_validation_path='v', pair_test_path='e', pair_train_hash='b',
++        pair_validation_hash='c', pair_test_hash='d',
++        representative_attacker_seed=1, representative_selection_criterion='median',
++        run_states={0: 'VALID'}, near_chance_flags={0: False},
++        run_start_timestamp='t0', run_end_timestamp='t1', schedule_name='confirmatory',
++        protocol_documents={'01.md': 'h1', '01B.md': 'h2'},
++        frozen_artifacts={'topk_frozen_list.csv': 'h3'})
++    assert p['protocol_documents'] == {'01.md': 'h1', '01B.md': 'h2'}
++    assert p['frozen_artifacts'] == {'topk_frozen_list.csv': 'h3'}
++    print('K2. provenance carries protocol + frozen artifact hashes (AMENDMENT 2 / R-12) PASS')
++
++
+ # ----------------------------------------------------------------------------------
+ # L. determinism checker
+ # ----------------------------------------------------------------------------------
+@@ -373,7 +582,7 @@ def test_M_topk_frozen_list_build(tmp_path):
+ 
+ 
+ # ----------------------------------------------------------------------------------
+-# N. patient-cluster bootstrap (R-9)
++# N. R-9 FINAL: patient-cluster bootstrap withdrawn; pair bootstrap label (amendment §6)
+ # ----------------------------------------------------------------------------------
+ def _td_path(tmp_path):
+     """Unwrap pytest tmp_path or tempfile.TemporaryDirectory into a str path."""
+@@ -382,7 +591,7 @@ def _td_path(tmp_path):
+     return str(tmp_path)
+ 
+ 
+-def test_N_R9_ambiguity_detected(tmp_path):
++def test_N_R9_final_policy(tmp_path):
+     pairs = os.path.join(_td_path(tmp_path), 'pairs.txt')
+     os.makedirs(os.path.dirname(pairs), exist_ok=True)
+     with open(pairs, 'w') as f:
+@@ -390,10 +599,17 @@ def test_N_R9_ambiguity_detected(tmp_path):
+         f.write('0001_000.png 0001_001.png 1.0\n')
+         f.write('0002_000.png 0003_000.png 0.0\n')
+     assert bootstrap.patient_cluster_bootstrap_is_ambiguous(pairs) is True
+-    rec = bootstrap.report_R9_ambiguity(pairs)
+-    assert rec['R9_status'] == 'BLOCKED_FOR_SCIENTIFIC_CLARIFICATION'
++    rec = bootstrap.report_R9_final_policy(pairs)
++    assert rec['R9_status'] == bootstrap.R9_FINAL_STATUS
++    assert 'WITHDRAWN' in rec['R9_status']
+     assert rec['pair_statistics']['negative_pairs_span_two_patients'] == 1
+-    print('N. R-9 ambiguity documented, not guessed PASS')
++    assert rec['restart_sd_ddof'] == 1
++    assert rec['pair_bootstrap_label'] == bootstrap.PAIR_BOOTSTRAP_LABEL
++    assert 'PAIR-SAMPLING DIAGNOSTIC' in bootstrap.PAIR_BOOTSTRAP_LABEL
++    assert 'NOT PATIENT-LEVEL UNCERTAINTY' in bootstrap.PAIR_BOOTSTRAP_LABEL
++    # no patient-cluster resampling implementation exists
++    assert not hasattr(bootstrap, 'PatientClusterResampler')
++    print('N. R-9 final policy: patient-cluster withdrawn, pair label fixed PASS')
+ 
+ 
+ def test_N_pair_schema_statistics(tmp_path):
+@@ -425,7 +641,10 @@ def test_O_shared_operator_still_routes_via_build_sampling_grid():
+ 
+ 
+ def test_P_gradient_accumulation_regression_imports_and_helpers():
+-    # quick smoke: recompute the accumulate vs doubled-batch identity torch-level
++    # CUDA-only regression; on a CPU-only machine it must PASS by skipping.
++    if not torch.cuda.is_available():
++        print('P. gradient-accumulation regression SKIPPED (no CUDA)')
++        return
+     from test_grad_accum import test_grad_accumulation_matches_doubled_batch as t
+     t()
+     print('P. gradient-accumulation regression PASS')
+@@ -495,6 +714,38 @@ def attempt_has_rep(attempts, seed):
+     return False
+ 
+ 
++# ----------------------------------------------------------------------------------
++# Z. Runner end-to-end (stub): staging, provenance hashes, stub-marked test metrics
++# ----------------------------------------------------------------------------------
++def test_Z_runner_stub_end_to_end(tmp_path):
++    out = os.path.join(_td_path(tmp_path), 'arm_s')
++    cmd = [sys.executable, 'run_adaptive_reid_arm.py', '--mode', 'screening',
++           '--arm_id', 'arm_stub', '--mu', '0.01', '--transform_mode', 'corrected',
++           '--out_dir', out, '--stub', '--stage', 'a_e']
++    res = subprocess.run(cmd, capture_output=True, text=True, cwd=os.getcwd())
++    assert res.returncode == 0, res.stdout + res.stderr
++    prov = diag.read_json(os.path.join(out, 'arm_provenance.json'))
++    # AMENDMENT 2: authoritative protocol docs + frozen Top-k CSV hashed into provenance
++    assert runner.PROTOCOL_01 in prov['protocol_documents']
++    assert prov['protocol_documents'][runner.PROTOCOL_01]
++    assert runner.PROTOCOL_01B in prov['protocol_documents']
++    assert prov['protocol_documents'][runner.PROTOCOL_01B]
++    assert runner.FROZEN_TOPK_CSV in prov['frozen_artifacts']
++    assert prov['frozen_artifacts'][runner.FROZEN_TOPK_CSV]
++    # BLOCKER 3: synthetic stub metrics never reach scientific summary fields
++    arm_summary = diag.read_json(os.path.join(out, 'arm_summary.json'))
++    assert arm_summary['contains_stub_or_synthetic_metrics'] is True
++    assert arm_summary['mean_test_auc'] is None
++    assert arm_summary['max_test_auc'] is None
++    assert arm_summary['scientific_summary_available'] is False
++    # every attempt carries a run signature (idempotent-reuse groundwork)
++    for seed in (0, 1, 2, 3):
++        sig_path = os.path.join(out, 'runs', 'retrain_snn_seed%d' % seed,
++                                runner.SIGNATURE_FILENAME)
++        assert os.path.exists(sig_path), sig_path
++    print('Z. runner stub end-to-end (a_e) PASS')
++
++
+ # ----------------------------------------------------------------------------------
+ if __name__ == '__main__':
+     import sys
+@@ -507,6 +758,8 @@ if __name__ == '__main__':
+     test_A_perfect_reversed_and_ties_auc()
+     test_A_accuracy_correct()
+     test_A_invalid_inputs_fail_loudly()
++    test_A2_accuracy_boundary_is_sigmoid_logit()
++    test_A2_validate_snn_routes_logits_accuracy()
+     test_B_numerically_invalid_conditions()
+     test_C_near_chance_is_valid_flag_not_exclusion()
+     test_D_unchanged_vs_step()
+@@ -514,6 +767,10 @@ if __name__ == '__main__':
+     test_F_screening_seeds_and_cap()
+     test_G_replacement_only_on_invalid_and_ascending()
+     test_G_replacement_never_for_near_chance()
++    test_D2_single_training_invocation_per_seed()
++    test_E2_confirmatory_ascending_replacement_on_invalid_only()
++    test_D3_idempotent_reuse_of_completed_run(_tf.TemporaryDirectory())
++    test_E3_stub_markers_and_nonstub_not_implemented()
+     test_H_representative_closest_to_median()
+     test_H_tie_break_smaller_seed()
+     test_H_even_count_median()
+@@ -521,15 +778,19 @@ if __name__ == '__main__':
+     test_I_health_accepts_no_test_argument()
+     test_I_diagnostics_file_has_no_test_field()
+     test_J_aggregation_includes_near_chance()
++    test_J2_sample_sd_uses_ddof1()
++    test_J3_summary_refuses_synthetic_metrics()
+     test_K_provenance_required_fields()
++    test_K2_provenance_protocol_and_frozen_hashes()
+     test_L_determinism_checker()
+     test_M_topk_frozen_list_build(_tf.TemporaryDirectory())
+-    test_N_R9_ambiguity_detected(_tf.TemporaryDirectory())
++    test_N_R9_final_policy(_tf.TemporaryDirectory())
+     test_N_pair_schema_statistics(_tf.TemporaryDirectory())
+     test_O_shared_operator_still_routes_via_build_sampling_grid()
+     test_P_gradient_accumulation_regression_imports_and_helpers()
+     test_P_diagnostics_json_hasno_test_mixin(_tf.TemporaryDirectory())
+     test_stage_order_test_never_selects(_tf.TemporaryDirectory())
++    test_Z_runner_stub_end_to_end(_tf.TemporaryDirectory())
+ 
+-    print('\nSTEP 2B PROTOCOL TEST SUITE: PASS')
++    print('\nSTEP 2B + STEP 2B.1 REMEDIATION TEST SUITE: PASS')
+     sys.exit(0)
+\ No newline at end of file
+diff --git a/test_grad_accum.py b/test_grad_accum.py
+index 486b54b..50cf2ea 100644
+--- a/test_grad_accum.py
++++ b/test_grad_accum.py
+@@ -17,6 +17,25 @@ import torch
+ 
+ import utils.utils as U
+ 
++try:
++    import pytest
++except ImportError:  # plain-script runs (no pytest installed)
++    pytest = None
++
++
++def _require_cuda(label):
++    """PASS+SKIP guard: return True on CUDA, otherwise skip the test.
++
++    Works under pytest (pytest.skip) and as a plain script (prints [SKIP] and returns).
++    """
++    if torch.cuda.is_available():
++        return True
++    msg = 'SKIP (%s): CUDA not available' % label
++    if pytest is not None:
++        pytest.skip(msg)
++    print('[%s]' % msg)
++    return False
++
+ 
+ def _mini_mlp(seed):
+     torch.manual_seed(seed)
+@@ -30,6 +49,8 @@ def _forward_and_loss(net, x, y):
+ 
+ 
+ def test_grad_accumulation_matches_doubled_batch():
++    if not _require_cuda('gradient accumulation'):
++        return
+     torch.manual_seed(0)
+ 
+     x = torch.randn(16, 8).cuda()
+@@ -61,7 +82,8 @@ def test_zero_grad_inside_loop_is_detected():
+ 
+     Show the test actually discriminates -- i.e. it fails when the bug is reintroduced.
+     """
+-
++    if not _require_cuda('zero_grad-in-loop detection'):
++        return
+     torch.manual_seed(0)
+     x = torch.randn(16, 8).cuda()
+     y = (torch.rand(16) > 0.5).float().cuda()
+@@ -86,6 +108,16 @@ def test_zero_grad_inside_loop_is_detected():
+ 
+ 
+ if __name__ == '__main__':
+-    test_grad_accumulation_matches_doubled_batch()
+-    test_zero_grad_inside_loop_is_detected()
+-    print('ALL GRADIENT-ACCUMULATION REGRESSION TESTS PASSED')
++    if torch.cuda.is_available():
++        test_grad_accumulation_matches_doubled_batch()
++        test_zero_grad_inside_loop_is_detected()
++        print('ALL GRADIENT-ACCUMULATION REGRESSION TESTS PASSED')
++    else:
++        _require_cuda('gradient-accumulation regression suite')
++        print('ALL GRADIENT-ACCUMULATION REGRESSION TESTS SKIPPED (no CUDA)')
++
++if pytest is not None:
++    for _fn in (test_grad_accumulation_matches_doubled_batch,
++                test_zero_grad_inside_loop_is_detected):
++        _fn = pytest.mark.skipif(not torch.cuda.is_available(),
++                                 reason='requires CUDA')(_fn)
+diff --git a/utils/utils.py b/utils/utils.py
+index cbd6ac6..c996ea6 100644
+--- a/utils/utils.py
++++ b/utils/utils.py
+@@ -773,7 +773,9 @@ def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_
+         If False (default, backward-compatible), returns validation_loss (float) exactly as
+         historically. If True, additionally collects y_true and continuous model scores of
+         the validation split and returns (validation_loss, {'auc': float, 'accuracy': float}).
+-        ROC-AUC is computed on continuous scores; accuracy uses the canonical 0.5 threshold.
++        Scores are the continuous logits from the Siamese pair head. ROC-AUC is computed on
++        those continuous scores; accuracy applies the canonical 0.5 PROBABILITY boundary via
++        sigmoid(logit) >= 0.5 (equivalently logit >= 0.0), never a raw-logit 0.5 threshold.
+         The validation data ordering/pair files are untouched; the test split is not touched.
+     :return: float or (float, dict)
+     """
+@@ -848,7 +850,7 @@ def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_
+ 
+     y_true = y_true.squeeze().numpy().astype(np.int64)
+     y_scores = y_scores.squeeze().numpy()
+-    met = arm_metrics.validation_metrics(y_scores, y_true)
++    met = arm_metrics.validation_metrics_from_logits(y_scores, y_true)
+     return validation_loss, met
+ 
+ 

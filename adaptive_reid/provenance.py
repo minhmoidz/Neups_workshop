@@ -36,9 +36,17 @@ def build_arm_provenance(
     run_start_timestamp: str,
     run_end_timestamp: str,
     schedule_name: str,
+    protocol_documents: Optional[Dict[str, str]] = None,
+    frozen_artifacts: Optional[Dict[str, str]] = None,
     extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Assemble the canonical per-arm provenance record."""
+    """Assemble the canonical per-arm provenance record.
+
+    :param protocol_documents: {path: sha256} of the authoritative frozen protocol
+        documents (R-12: 01_ADAPTIVE_REID_PROTOCOL.md, 01B_PROTOCOL_AMENDMENT.md).
+    :param frozen_artifacts: {path: sha256} of other frozen inputs, e.g. the Top-k
+        gallery/probe list (R-7).
+    """
     record = {
         'arm_id': arm_id,
         'git_commit': git_commit,
@@ -63,6 +71,8 @@ def build_arm_provenance(
         'run_start_timestamp': str(run_start_timestamp),
         'run_end_timestamp': str(run_end_timestamp),
         'schedule_name': str(schedule_name),
+        'protocol_documents': {str(p): str(h) for p, h in (protocol_documents or {}).items()},
+        'frozen_artifacts': {str(p): str(h) for p, h in (frozen_artifacts or {}).items()},
     }
     if extra:
         record.update(extra)

@@ -7,8 +7,9 @@ Implements the frozen 01/01B adaptive re-ID protocol:
     - weights-updated detection
     - restart driver (screening 3 / confirmatory 10)
     - staged pipeline (A-E) with no test-derived representative selection
-    - final arm summary aggregation
-    - patient-clustered bootstrap (R-9; blocked on ambiguity, never guessed)
+    - final arm summary aggregation (sample SD ddof=1; stub/synthetic metrics blocked)
+    - pair-bootstrap policy (R-9 FINAL: patient-cluster estimator withdrawn; pair-level
+      bootstrap allowed only as a PAIR-SAMPLING DIAGNOSTIC, not patient-level uncertainty)
     - Top-k frozen gallery/probe infrastructure
     - per-arm determinism check
     - provenance record

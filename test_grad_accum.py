@@ -17,6 +17,25 @@ import torch
 
 import utils.utils as U
 
+try:
+    import pytest
+except ImportError:  # plain-script runs (no pytest installed)
+    pytest = None
+
+
+def _require_cuda(label):
+    """PASS+SKIP guard: return True on CUDA, otherwise skip the test.
+
+    Works under pytest (pytest.skip) and as a plain script (prints [SKIP] and returns).
+    """
+    if torch.cuda.is_available():
+        return True
+    msg = 'SKIP (%s): CUDA not available' % label
+    if pytest is not None:
+        pytest.skip(msg)
+    print('[%s]' % msg)
+    return False
+
 
 def _mini_mlp(seed):
     torch.manual_seed(seed)
@@ -30,6 +49,8 @@ def _forward_and_loss(net, x, y):
 
 
 def test_grad_accumulation_matches_doubled_batch():
+    if not _require_cuda('gradient accumulation'):
+        return
     torch.manual_seed(0)
 
     x = torch.randn(16, 8).cuda()
@@ -61,7 +82,8 @@ def test_zero_grad_inside_loop_is_detected():
 
     Show the test actually discriminates -- i.e. it fails when the bug is reintroduced.
     """
-
+    if not _require_cuda('zero_grad-in-loop detection'):
+        return
     torch.manual_seed(0)
     x = torch.randn(16, 8).cuda()
     y = (torch.rand(16) > 0.5).float().cuda()
@@ -86,6 +108,16 @@ def test_zero_grad_inside_loop_is_detected():
 
 
 if __name__ == '__main__':
-    test_grad_accumulation_matches_doubled_batch()
-    test_zero_grad_inside_loop_is_detected()
-    print('ALL GRADIENT-ACCUMULATION REGRESSION TESTS PASSED')
+    if torch.cuda.is_available():
+        test_grad_accumulation_matches_doubled_batch()
+        test_zero_grad_inside_loop_is_detected()
+        print('ALL GRADIENT-ACCUMULATION REGRESSION TESTS PASSED')
+    else:
+        _require_cuda('gradient-accumulation regression suite')
+        print('ALL GRADIENT-ACCUMULATION REGRESSION TESTS SKIPPED (no CUDA)')
+
+if pytest is not None:
+    for _fn in (test_grad_accumulation_matches_doubled_batch,
+                test_zero_grad_inside_loop_is_detected):
+        _fn = pytest.mark.skipif(not torch.cuda.is_available(),
+                                 reason='requires CUDA')(_fn)

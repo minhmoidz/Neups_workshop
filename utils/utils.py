@@ -773,7 +773,9 @@ def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_
         If False (default, backward-compatible), returns validation_loss (float) exactly as
         historically. If True, additionally collects y_true and continuous model scores of
         the validation split and returns (validation_loss, {'auc': float, 'accuracy': float}).
-        ROC-AUC is computed on continuous scores; accuracy uses the canonical 0.5 threshold.
+        Scores are the continuous logits from the Siamese pair head. ROC-AUC is computed on
+        those continuous scores; accuracy applies the canonical 0.5 PROBABILITY boundary via
+        sigmoid(logit) >= 0.5 (equivalently logit >= 0.0), never a raw-logit 0.5 threshold.
         The validation data ordering/pair files are untouched; the test split is not touched.
     :return: float or (float, dict)
     """
@@ -848,7 +850,7 @@ def validate_snn(perturbation_type, net, perturbation_net, grid_identity, gauss_
 
     y_true = y_true.squeeze().numpy().astype(np.int64)
     y_scores = y_scores.squeeze().numpy()
-    met = arm_metrics.validation_metrics(y_scores, y_true)
+    met = arm_metrics.validation_metrics_from_logits(y_scores, y_true)
     return validation_loss, met
 
 

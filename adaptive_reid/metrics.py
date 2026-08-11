@@ -63,15 +63,55 @@ def compute_auc(scores, labels):
 
 
 def compute_accuracy(scores, labels, threshold=0.5):
-    """Binary accuracy at the canonical 0.5 threshold on probability-scale scores."""
+    """Binary accuracy at the canonical 0.5 threshold on probability-scale scores.
+
+    ``scores`` are expected on the PROBABILITY scale (0..1). For logits use
+    :func:`compute_accuracy_from_logits`.
+    """
     scores, labels = check_aligned(scores, labels)
     preds = (scores > threshold).astype(np.int64)
     return float(np.mean(preds == labels))
 
 
+def logistic_sigmoid(logits):
+    """Numerically-stable sigmoid (logit -> probability) as float64 ndarray."""
+    arr = np.asarray(logits, dtype=np.float64)
+    clipped = np.clip(arr, -60.0, 60.0)
+    return 1.0 / (1.0 + np.exp(-clipped))
+
+
+def compute_accuracy_from_logits(logits, labels, threshold=0.5):
+    """Accuracy with the correct 0.5 PROBABILITY boundary applied to logits.
+
+    The canonical binary decision is ``p = sigmoid(logit) >= threshold``, which at the
+    canonical threshold 0.5 is exactly ``logit >= 0.0``. Thresholding the raw logits at
+    0.5 instead is a protocol violation (R-1): it silently moves the operating point.
+    """
+    probs = logistic_sigmoid(continuous_scores(logits))
+    labels = binary_truth(labels)
+    if probs.shape[0] != labels.shape[0]:
+        raise ValueError("logits and labels length mismatch: %d vs %d" %
+                         (probs.shape[0], labels.shape[0]))
+    preds = (probs >= threshold).astype(np.int64)
+    return float(np.mean(preds == labels))
+
+
 def validation_metrics(scores, labels, threshold=0.5):
-    """Return {'auc': float, 'accuracy': float} for a validation partition."""
+    """Return {'auc': float, 'accuracy': float} for scores on the PROBABILITY scale."""
     return {
         'auc': compute_auc(scores, labels),
         'accuracy': compute_accuracy(scores, labels, threshold=threshold),
+    }
+
+
+def validation_metrics_from_logits(logits, labels, threshold=0.5):
+    """Validation metrics for raw pair-head LOGITS (the Siamese output scale).
+
+    ROC-AUC is invariant to any monotone transform, so it is computed directly on the
+    logits (continuous scores). Accuracy applies the correct sigmoid-probability
+    boundary via :func:`compute_accuracy_from_logits`.
+    """
+    return {
+        'auc': compute_auc(logits, labels),
+        'accuracy': compute_accuracy_from_logits(logits, labels, threshold=threshold),
     }
