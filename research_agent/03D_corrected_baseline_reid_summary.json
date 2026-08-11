@@ -1,0 +1,69 @@
+{
+  "arm_id": "baseline_corrected_confirmatory",
+  "attempted_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "contains_stub_or_synthetic_metrics": false,
+  "escalation_triggered": false,
+  "generator_path": "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+  "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+  "git_commit": "1c54435846af6f0ca30ef668464032e727b5aed6",
+  "invalid_seeds": [],
+  "max_test_auc": 0.8036620800000001,
+  "mean_test_auc": 0.7391939919999999,
+  "median_test_auc": 0.7221833599999999,
+  "mu": 0.01,
+  "n_attempted": 10,
+  "n_near_chance": 0,
+  "n_numerically_invalid": 0,
+  "n_valid": 10,
+  "near_chance_seeds": [],
+  "pair_hashes": {
+    "test": "87e528308507ada349d478d0c16e85f858dba8fb613abbca4857ffc437490fe2",
+    "train": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
+    "validation": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7"
+  },
+  "protocol_hashes": {
+    "01B_PROTOCOL_AMENDMENT.md": "05fcc9fd4cb4181acd9f40603707cd259987a0d1d3750d0f3463fc1fe78b0865",
+    "01_ADAPTIVE_REID_PROTOCOL.md": "c3aa381ea2136d89d03f6a409a36edd2e1cb5d8f4986b3ae3846028f61cd6741"
+  },
+  "representative_attacker_seed": 4,
+  "representative_selection_criterion": "best-validation-AUC closest to median, tie=lower seed (validation only)",
+  "sample_std_test_auc": 0.04984744373953724,
+  "stochastic_lambda": 0.0,
+  "test_auc_by_seed": {
+    "0": 0.7846912,
+    "1": 0.77798128,
+    "2": 0.72106304,
+    "3": 0.66013752,
+    "4": 0.72330368,
+    "5": 0.80366208,
+    "6": 0.71028,
+    "7": 0.71749968,
+    "8": 0.80315408,
+    "9": 0.69016736
+  },
+  "transform_mode": "corrected",
+  "valid_for_scientific_reporting": true,
+  "valid_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ]
+}
