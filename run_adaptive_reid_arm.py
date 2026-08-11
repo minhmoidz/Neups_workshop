@@ -99,11 +99,23 @@ def hashes_for(paths):
 def protocol_and_frozen_hashes():
     protocol_documents = hashes_for([PROTOCOL_01, PROTOCOL_01B])
     frozen_artifacts = hashes_for([FROZEN_TOPK_CSV])
+    # A-1: provenance must never record a non-frozen Top-k digest. Fail loudly if the
+    # canonical artifact is missing or differs from the hard-pinned digest.
+    if frozen_artifacts.get(FROZEN_TOPK_CSV) != topk.FROZEN_TOPK_SHA256:
+        raise RuntimeError(
+            'frozen Top-k digest mismatch: provenance would record %r, expected %r'
+            % (frozen_artifacts.get(FROZEN_TOPK_CSV), topk.FROZEN_TOPK_SHA256))
     return protocol_documents, frozen_artifacts
 
 
 def run_signature(seed, args, cfg, pair_hashes, protocol_documents, frozen_artifacts):
-    """Deterministic identity of one restart attempt (used for idempotent reuse)."""
+    """Deterministic identity of one restart attempt (used for idempotent reuse).
+
+    D-1 (content pinning): the signature depends on BOTH the generator checkpoint
+    path AND its SHA-256 computed from the actual checkpoint bytes. Two checkpoints
+    with the same path but different bytes therefore produce DIFFERENT signatures,
+    so a run trained against G_old is never reused once the path holds G_new.
+    """
     return {
         'arm_id': args.arm_id,
         'attacker_seed': int(seed),
@@ -111,6 +123,7 @@ def run_signature(seed, args, cfg, pair_hashes, protocol_documents, frozen_artif
         'mu': float(args.mu),
         'stochastic_lambda': float(getattr(args, 'stochastic_lambda', 0.0)),
         'generator_checkpoint_path': args.checkpoint,
+        'generator_checkpoint_hash': _generator_hash(args),
         'pair_train_hash': pair_hashes.get(PAIR_TRAIN, ''),
         'pair_validation_hash': pair_hashes.get(PAIR_VAL, ''),
         'config': {
@@ -133,6 +146,10 @@ def reuse_completed_run(run_dir, signature, seed, args):
     protocol, artifacts) is reused instead of being re-trained. For real runs the
     checkpoint must also exist AND be loadable. Returns None when the run must be
     (re)trained.
+
+    D-1 (content pinning): the recorded ``generator_checkpoint_hash`` in the stored
+    training diagnostics must equal the current arm's generator digest. A stale
+    digest (same path, different bytes) forces retraining - never silent reuse.
     """
     diag_path = os.path.join(run_dir, diag.VALIDITY_FILENAME)
     runstate_path = os.path.join(run_dir, diag.RUNSTATE_FILENAME)
@@ -152,7 +169,11 @@ def reuse_completed_run(run_dir, signature, seed, args):
         # directory (STEP 2B.2: reuse must verify the persisted artifact set is real).
         if not ar_weights.checkpoint_loadable(ck):
             return None
-    return diag.read_json(diag_path)
+    stored_diag = diag.read_json(diag_path)
+    # D-1: reject stale generator content even if the signature were forged.
+    if stored_diag.get('generator_checkpoint_hash', '') != signature.get('generator_checkpoint_hash', ''):
+        return None
+    return stored_diag
 
 
 def stub_test_metrics(seed):
@@ -206,6 +227,22 @@ def write_arm_provenance(arm_id, out_dir, summary, attempts, args, cfg, pair_has
         protocol_documents=protocol_documents, frozen_artifacts=frozen_artifacts)
     diag.write_json(os.path.join(out_dir, 'arm_provenance.json'), record)
     return record
+
+
+def verify_stage_e_generator_hash(run_dir, seed, current_hash):
+    """D-1: refuse Stage E evaluation when the recorded generator digest is stale.
+
+    :raises RuntimeError: missing diagnostics or recorded digest != current arm digest.
+    """
+    diag_path = os.path.join(run_dir, diag.VALIDITY_FILENAME)
+    if not os.path.exists(diag_path):
+        raise RuntimeError('Stage E refused: missing training_diagnostics for seed %d' % seed)
+    recorded = diag.read_json(diag_path).get('generator_checkpoint_hash', '')
+    if recorded != current_hash:
+        raise RuntimeError(
+            'Stage E refused: recorded generator_checkpoint_hash %r does not match '
+            'current arm generator_checkpoint_hash %r for seed %d'
+            % (recorded, current_hash, seed))
 
 
 def main():
@@ -280,6 +317,9 @@ def main():
         # Stage E: evaluate the frozen TEST pairs exactly once for this completed attacker.
         require_real_test_eval(args.stub)
         run_dir = os.path.join(args.out_dir, 'runs', 'retrain_snn_seed{}'.format(seed))
+        # D-1: never evaluate a run whose recorded generator digest is stale relative to
+        # the current arm. Refuse loudly rather than silently repairing provenance.
+        verify_stage_e_generator_hash(run_dir, seed, _generator_hash(args))
         metrics = stub_test_metrics(seed)
         diag_path = os.path.join(run_dir, diag.TESTMETRICS_FILENAME)
         diag.write_json(diag_path, {**metrics, 'evaluation_timestamp': now_iso()})
@@ -311,18 +351,11 @@ def main():
                                 pair_hashes, t0, t1, commit)
     diag.write_json(os.path.join(args.out_dir, 'arm_summary.json'), summary)
 
-    # Frozen Top-k metadata is reused from the authoritative tracked file, never
-    # regenerated. Fall back to deterministic construction only if it is absent.
-    try:
-        frozen_path = FROZEN_TOPK_CSV
-        if os.path.exists(frozen_path):
-            frozen = topk.load_frozen_topk_list(frozen_path)
-        else:
-            frozen = topk.build_frozen_topk_list(n_patients=C.TOPK_N_PATIENTS,
-                                                 seed=C.TOPK_SELECTION_SEED)
-        topk.save_frozen_topk_list(os.path.join(args.out_dir, topk.FROZEN_LIST_FILENAME), frozen)
-    except Exception as e:  # metadata missing -> report, do not guess
-        print('Top-k list build skipped:', e)
+    # A-1: frozen Top-k is hard-pinned. Canonical loading requires the exact tracked
+    # path, fails loudly if missing or digest-mismatched, and NEVER regenerates.
+    frozen = topk.load_frozen_topk_list_canonical(FROZEN_TOPK_CSV,
+                                                  expected_sha256=topk.FROZEN_TOPK_SHA256)
+    topk.save_frozen_topk_list(os.path.join(args.out_dir, topk.FROZEN_LIST_FILENAME), frozen)
 
     print('ARM COMPLETE: %s' % args.arm_id)
     print('representative_attacker_seed:', rep_seed)

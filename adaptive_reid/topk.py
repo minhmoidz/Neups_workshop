@@ -12,6 +12,7 @@ Metadata source: chexnet/nih_labels.csv -- columns 'Image Index', 'Follow-up #',
 The SAME frozen list file must be reused by every arm.
 """
 
+import hashlib
 import os
 
 import numpy as np
@@ -20,6 +21,42 @@ import pandas as pd
 from . import constants as C
 
 FROZEN_LIST_FILENAME = 'topk_frozen_list.csv'
+
+# A-1: hard-pinned canonical digest of research_agent/topk_frozen_list.csv (frozen
+# artifact, independently verified by the Scientist in the FINAL STEP 2 review).
+FROZEN_TOPK_SHA256 = '4ebb6e15786b7c25eb4220521e5d70cf03ceb8f7ca480581dd89ef3945b24d44'
+
+
+def load_frozen_topk_list_canonical(path=FROZEN_LIST_FILENAME,
+                                    expected_sha256=FROZEN_TOPK_SHA256):
+    """Load the frozen Top-k list in CANONICAL mode (A-1).
+
+    Frozen artifacts are SOURCE OF TRUTH:
+        missing artifact = hard ERROR
+        changed artifact = hard ERROR
+    NEVER regenerated and never silently replaced in canonical mode.
+
+    :param path: exact tracked path of the frozen list.
+    :param expected_sha256: pinned digest the file must match.
+    :return: pandas.DataFrame
+    :raises FileNotFoundError: canonical file is missing.
+    :raises ValueError: file bytes do not match the pinned digest.
+    """
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            'frozen Top-k list %r is missing - canonical mode requires the exact '
+            'tracked artifact (no regeneration).' % path)
+    actual = sha256_file(path)
+    if actual != expected_sha256:
+        raise ValueError(
+            'frozen Top-k list %r digest mismatch: expected %s, got %s - the artifact '
+            'is no longer the frozen one (no silent repair).' % (path, expected_sha256, actual))
+    return pd.read_csv(path)
+
+
+def sha256_file(path):
+    with open(path, 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
 
 def load_test_metadata(metadata_path='chexnet/nih_labels.csv'):

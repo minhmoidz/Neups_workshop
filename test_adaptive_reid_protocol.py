@@ -588,10 +588,17 @@ def test_M_topk_frozen_list_build(tmp_path):
 # N. R-9 FINAL: patient-cluster bootstrap withdrawn; pair bootstrap label (amendment §6)
 # ----------------------------------------------------------------------------------
 def _td_path(tmp_path):
-    """Unwrap pytest tmp_path or tempfile.TemporaryDirectory into a str path."""
-    if hasattr(tmp_path, 'name'):
-        return str(tmp_path.name)
-    return str(tmp_path)
+    """Unwrap a pytest tmp_path / tempfile.TemporaryDirectory into an absolute str.
+
+    D-2: explicit type handling ONLY. We must NOT use ``hasattr(x, 'name')``: a
+    ``pathlib.Path`` always has ``.name`` (the final component), which would turn
+    ``/tmp/.../test_case`` into ``test_case`` and create relative dirs inside the repo.
+    """
+    if isinstance(tmp_path, (str, os.PathLike)):
+        return str(tmp_path)
+    if isinstance(tmp_path, tempfile.TemporaryDirectory):
+        return tmp_path.name
+    raise TypeError('unsupported tmp_path type: %s' % type(tmp_path).__name__)
 
 
 def test_N_R9_final_policy(tmp_path):
@@ -753,11 +760,16 @@ def test_Z_runner_stub_end_to_end(tmp_path):
 # Z2. STEP 2B.2: real-run training-diagnostics wiring
 # ----------------------------------------------------------------------------------
 def _real_record(tmp_path, **overrides):
-    """Build + persist a REAL-style completed training record (schema-valid)."""
+    """Build + persist a REAL-style completed training record (schema-valid).
+
+    ``generator_checkpoint_hash`` defaults to '' to stay consistent with signatures
+    built from ``args.checkpoint=None`` (the D-1 reuse cross-check requires the
+    recorded digest to equal the current arm's digest).
+    """
     td = _td_path(tmp_path)
     rec = diag.build_training_diagnostics(
         attacker_seed=7, transform_mode='corrected', mu=0.01, stochastic_lambda=0.0,
-        generator_checkpoint_path='gen.pth', generator_checkpoint_hash='ghash',
+        generator_checkpoint_path='gen.pth', generator_checkpoint_hash='',
         pair_train_path=runner.PAIR_TRAIN, pair_validation_path=runner.PAIR_VAL,
         pair_train_hash='thash', pair_validation_hash='vhash',
         epochs_completed=6, termination_reason=C.TERMINATION_EARLY_STOPPING,
@@ -957,6 +969,233 @@ def test_Z2_partial_artifact_set_not_reused(tmp_path):
 
 
 # ----------------------------------------------------------------------------------
+# D-1. generator pinned by CONTENT, not path
+# ----------------------------------------------------------------------------------
+def _gen_checkpoint(tmp_path, content):
+    """Create a generator checkpoint file with exact bytes; return (path, sha256)."""
+    p = os.path.join(_td_path(tmp_path), 'generator.pth')
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, 'wb') as f:
+        f.write(content)
+    return p, diag.sha256_file(p)
+
+
+def _args_with_checkpoint(checkpoint, stub=False):
+    import argparse
+    return argparse.Namespace(arm_id='arm_x', transform_mode='corrected', mu=0.01,
+                              stochastic_lambda=0.0, checkpoint=checkpoint, stub=stub,
+                              force=False)
+
+
+def test_D1_signature_binds_generator_content(tmp_path):
+    cfg = {'learning_rate': 1e-4, 'batch_size': 16, 'max_epochs': 100,
+           'early_stopping': {'patience': 5}}
+    pair_hashes = {runner.PAIR_TRAIN: 'a', runner.PAIR_VAL: 'b'}
+    protocol_documents = {runner.PROTOCOL_01: 'c', runner.PROTOCOL_01B: 'd'}
+    frozen_artifacts = {runner.FROZEN_TOPK_CSV: 'e'}
+
+    # Test 1: same path + same bytes -> identical signature (reuse compatible)
+    ck, h1 = _gen_checkpoint(tmp_path, b'G_old bytes')
+    args1 = _args_with_checkpoint(ck)
+    s1a = runner.run_signature(3, args1, cfg, pair_hashes, protocol_documents, frozen_artifacts)
+    s1b = runner.run_signature(3, args1, cfg, pair_hashes, protocol_documents, frozen_artifacts)
+    assert s1a == s1b
+    assert s1a['generator_checkpoint_path'] == ck
+    assert s1a['generator_checkpoint_hash'] == h1
+
+    # Test 2 (critical mutation): same path, overwrite bytes -> hash+signature change
+    with open(ck, 'wb') as f:
+        f.write(b'G_new bytes')
+    h2 = diag.sha256_file(ck)
+    assert h1 != h2, 'mutation must change the digest'
+    s2 = runner.run_signature(3, args1, cfg, pair_hashes, protocol_documents, frozen_artifacts)
+    assert s2['generator_checkpoint_hash'] == h2
+    assert s2 != s1a, 'overwriting checkpoint bytes must change the run signature'
+    print('D1. signature binds generator CONTENT (path+bytes), not path alone PASS')
+
+
+def test_D1_stale_generator_prevents_reuse(tmp_path):
+    cfg = {'learning_rate': 1e-4, 'batch_size': 16, 'max_epochs': 100,
+           'early_stopping': {'patience': 5}}
+    pair_hashes = {runner.PAIR_TRAIN: 'a', runner.PAIR_VAL: 'b'}
+    protocol_documents = {runner.PROTOCOL_01: 'c', runner.PROTOCOL_01B: 'd'}
+    frozen_artifacts = {runner.FROZEN_TOPK_CSV: 'e'}
+    td = _td_path(tmp_path)
+
+    # build a completed run under G_old (recorded digest H_old)
+    ck_old, h_old = _gen_checkpoint(tmp_path, b'G_old bytes')
+    args_old = _args_with_checkpoint(ck_old, stub=True)
+    sig_old = runner.run_signature(3, args_old, cfg, pair_hashes, protocol_documents, frozen_artifacts)
+    run_dir = os.path.join(td, 'runs', 'retrain_snn_seed3')
+    os.makedirs(run_dir, exist_ok=True)
+    rec = diag.build_training_diagnostics(
+        attacker_seed=3, transform_mode='corrected', mu=0.01, stochastic_lambda=0.0,
+        generator_checkpoint_path=ck_old, generator_checkpoint_hash=h_old,
+        pair_train_path=runner.PAIR_TRAIN, pair_validation_path=runner.PAIR_VAL,
+        pair_train_hash='a', pair_validation_hash='b',
+        epochs_completed=8, termination_reason=C.TERMINATION_EARLY_STOPPING,
+        training_loss_per_epoch=[0.6] * 8, validation_loss_per_epoch=[0.62] * 8,
+        validation_auc_per_epoch=[0.55] * 8, validation_accuracy_per_epoch=[0.55] * 8,
+        best_validation_loss=0.62, best_validation_loss_epoch=0,
+        best_validation_auc=0.55, best_validation_auc_epoch=0,
+        any_nan_inf=False, checkpoint_exists=True, checkpoint_loadable=True,
+        weights_changed_from_initialization=True,
+        run_start_timestamp='t0', run_end_timestamp='t1')
+    diag.write_json(os.path.join(run_dir, diag.VALIDITY_FILENAME), rec)
+    diag.write_json(os.path.join(run_dir, diag.RUNSTATE_FILENAME),
+                    {'state': C.VALID, 'near_chance': False})
+    diag.write_json(os.path.join(run_dir, runner.SIGNATURE_FILENAME), sig_old)
+
+    # compatible case: current arm still on G_old -> reuse OK
+    assert runner.reuse_completed_run(run_dir, sig_old, 3, args_old) is not None
+
+    # Test 3: current arm now on G_new (same path, new bytes) -> run_state/diagnostics
+    # claim H_old, current arm has H_new -> reuse REJECTED
+    with open(ck_old, 'wb') as f:
+        f.write(b'G_new bytes')
+    args_new = _args_with_checkpoint(ck_old, stub=True)
+    sig_new = runner.run_signature(3, args_new, cfg, pair_hashes, protocol_documents, frozen_artifacts)
+    assert sig_new['generator_checkpoint_hash'] != h_old
+    assert runner.reuse_completed_run(run_dir, sig_new, 3, args_new) is None, \
+        'stale generator digest must force retraining, not silent reuse'
+    print('D1. stale generator digest blocks reuse (cross-check + signature) PASS')
+
+
+def test_D1_stage_e_refuses_stale_generator(tmp_path):
+    td = _td_path(tmp_path)
+    run_dir = os.path.join(td, 'runs', 'retrain_snn_seed4')
+    os.makedirs(run_dir, exist_ok=True)
+    rec = diag.build_training_diagnostics(
+        attacker_seed=4, transform_mode='corrected', mu=0.01, stochastic_lambda=0.0,
+        generator_checkpoint_path='old.pth', generator_checkpoint_hash='H_old',
+        pair_train_path=runner.PAIR_TRAIN, pair_validation_path=runner.PAIR_VAL,
+        pair_train_hash='a', pair_validation_hash='b',
+        epochs_completed=8, termination_reason=C.TERMINATION_EARLY_STOPPING,
+        training_loss_per_epoch=[0.6] * 8, validation_loss_per_epoch=[0.62] * 8,
+        validation_auc_per_epoch=[0.55] * 8, validation_accuracy_per_epoch=[0.55] * 8,
+        best_validation_loss=0.62, best_validation_loss_epoch=0,
+        best_validation_auc=0.55, best_validation_auc_epoch=0,
+        any_nan_inf=False, checkpoint_exists=True, checkpoint_loadable=True,
+        weights_changed_from_initialization=True,
+        run_start_timestamp='t0', run_end_timestamp='t1')
+    diag.write_json(os.path.join(run_dir, diag.VALIDITY_FILENAME), rec)
+
+    # Test 4: current arm on H_new, recorded digest is H_old -> refuse Stage E
+    try:
+        runner.verify_stage_e_generator_hash(run_dir, 4, 'H_new')
+        raise AssertionError('Stage E must refuse a stale recorded generator digest')
+    except RuntimeError as e:
+        assert 'H_old' in str(e) and 'H_new' in str(e)
+    # matching digest -> allowed
+    runner.verify_stage_e_generator_hash(run_dir, 4, 'H_old')
+    print('D1. Stage E refuses evaluation on stale recorded generator digest PASS')
+
+
+# ----------------------------------------------------------------------------------
+# D-2. explicit tmp_path type handling (no hasattr(x, 'name') for paths)
+# ----------------------------------------------------------------------------------
+def test_D2_td_path_absolute_for_pathlib(tmp_path):
+    import pathlib
+    p = pathlib.Path('/tmp/example/test_case')
+    assert _td_path(p) == '/tmp/example/test_case', _td_path(p)
+    assert not os.path.isabs('test_case') or _td_path(p) != 'test_case'
+    print('D2. _td_path returns ABSOLUTE path for pathlib.Path PASS')
+
+
+def test_D2_td_path_absolute_for_tempdir(tmp_path):
+    td = tempfile.TemporaryDirectory(dir=_td_path(tmp_path))
+    try:
+        assert os.path.isabs(_td_path(td))
+        assert _td_path(td) == td.name
+        assert os.path.isdir(_td_path(td))
+    finally:
+        td.cleanup()
+    print('D2. _td_path returns absolute path for TemporaryDirectory PASS')
+
+
+def test_D2_z2_tests_isolated(tmp_path):
+    # Re-run the two Z2 tests flagged by the Scientist, each in a fresh tmp dir,
+    # proving they pass regardless of execution order / leftovers.
+    test_Z2_checkpoint_loadability_reflects_reality(tmp_path)
+    test_Z2_partial_artifact_set_not_reused(tmp_path)
+    test_Z2_checkpoint_loadability_reflects_reality(tmp_path)
+    print('D2. flagged Z2 tests pass isolated and repeatable PASS')
+
+
+# ----------------------------------------------------------------------------------
+# A-1. hard-pinned frozen Top-k artifact
+# ----------------------------------------------------------------------------------
+def test_A1_canonical_load_accepts_correct_digest():
+    df = topk.load_frozen_topk_list_canonical(runner.FROZEN_TOPK_CSV,
+                                              expected_sha256=topk.FROZEN_TOPK_SHA256)
+    assert topk.sha256_file(runner.FROZEN_TOPK_CSV) == topk.FROZEN_TOPK_SHA256
+    assert {'patient_id', 'gallery_image', 'gallery_followup',
+            'probe_image', 'probe_followup'}.issubset(set(df.columns))
+    print('A1. canonical Top-k accepted (file present + correct digest) PASS')
+
+
+def test_A1_missing_canonical_fails_hard(tmp_path):
+    missing = os.path.join(_td_path(tmp_path), 'topk_missing.csv')
+    try:
+        topk.load_frozen_topk_list_canonical(missing, expected_sha256=topk.FROZEN_TOPK_SHA256)
+        raise AssertionError('missing frozen artifact must fail loudly')
+    except FileNotFoundError:
+        pass
+    print('A1. missing canonical Top-k -> hard failure (no regenerate) PASS')
+
+
+def test_A1_modified_byte_fails_hard(tmp_path):
+    copy = os.path.join(_td_path(tmp_path), 'topk_tampered.csv')
+    shutil.copyfile(runner.FROZEN_TOPK_CSV, copy)
+    with open(copy, 'rb+') as f:
+        f.seek(0)
+        b = f.read(1)
+        f.seek(0)
+        f.write(bytes([b[0] ^ 0xFF]))
+    assert topk.sha256_file(copy) != topk.FROZEN_TOPK_SHA256
+    try:
+        topk.load_frozen_topk_list_canonical(copy, expected_sha256=topk.FROZEN_TOPK_SHA256)
+        raise AssertionError('tampered frozen artifact must fail loudly')
+    except ValueError:
+        pass
+    print('A1. single-byte tamper -> digest mismatch -> hard failure PASS')
+
+
+def test_A1_canonical_mode_never_regenerates(tmp_path):
+    # production/canonical path must NEVER invoke the dev-only builder fallback
+    missing = os.path.join(_td_path(tmp_path), 'topk_absent.csv')
+    import adaptive_reid.topk as topk_mod
+    def _boom(*a, **k):
+        raise AssertionError('build_frozen_topk_list must NEVER be called in canonical mode')
+    orig_build = topk_mod.build_frozen_topk_list
+    topk_mod.build_frozen_topk_list = _boom
+    try:
+        try:
+            topk.load_frozen_topk_list_canonical(missing, expected_sha256=topk.FROZEN_TOPK_SHA256)
+            raise AssertionError('expected hard failure')
+        except FileNotFoundError:
+            pass
+    finally:
+        topk_mod.build_frozen_topk_list = orig_build
+    # the runner's production path calls only the canonical loader, never build
+    assert runner.FROZEN_TOPK_CSV == 'research_agent/topk_frozen_list.csv'
+    print('A1. canonical mode never invokes regeneration fallback PASS')
+
+
+def test_A1_provenance_digest_equals_pinned(tmp_path):
+    import argparse
+    args = argparse.Namespace(arm_id='arm_x', transform_mode='corrected', mu=0.01,
+                              stochastic_lambda=0.0, checkpoint=None, stub=True,
+                              force=False)
+    cfg = {'learning_rate': 1e-4, 'batch_size': 16, 'max_epochs': 100,
+           'early_stopping': {'patience': 5}}
+    pair_hashes = {runner.PAIR_TRAIN: 'a', runner.PAIR_VAL: 'b'}
+    protocol_documents, frozen_artifacts = runner.protocol_and_frozen_hashes()
+    assert frozen_artifacts[runner.FROZEN_TOPK_CSV] == topk.FROZEN_TOPK_SHA256
+    print('A1. provenance frozen Top-k digest equals the pinned digest PASS')
+
+
+# ----------------------------------------------------------------------------------
 if __name__ == '__main__':
     import sys
     import tempfile as _tf
@@ -1012,6 +1251,17 @@ if __name__ == '__main__':
     test_Z2_runner_no_fabrication_and_infra_not_reused(_tf.TemporaryDirectory())
     test_Z2_real_reuse_requires_loadable_checkpoint(_tf.TemporaryDirectory())
     test_Z2_partial_artifact_set_not_reused(_tf.TemporaryDirectory())
+    test_D1_signature_binds_generator_content(_tf.TemporaryDirectory())
+    test_D1_stale_generator_prevents_reuse(_tf.TemporaryDirectory())
+    test_D1_stage_e_refuses_stale_generator(_tf.TemporaryDirectory())
+    test_D2_td_path_absolute_for_pathlib(_tf.TemporaryDirectory())
+    test_D2_td_path_absolute_for_tempdir(_tf.TemporaryDirectory())
+    test_D2_z2_tests_isolated(_tf.TemporaryDirectory())
+    test_A1_canonical_load_accepts_correct_digest()
+    test_A1_missing_canonical_fails_hard(_tf.TemporaryDirectory())
+    test_A1_modified_byte_fails_hard(_tf.TemporaryDirectory())
+    test_A1_canonical_mode_never_regenerates(_tf.TemporaryDirectory())
+    test_A1_provenance_digest_equals_pinned(_tf.TemporaryDirectory())
 
     print('\nSTEP 2B + STEP 2B.1 REMEDIATION TEST SUITE: PASS')
     sys.exit(0)
