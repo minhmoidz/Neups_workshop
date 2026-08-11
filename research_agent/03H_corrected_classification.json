@@ -1,0 +1,100 @@
+{
+  "auc_by_label": {
+    "Atelectasis": 0.7456923137534945,
+    "Cardiomegaly": 0.8565280722695802,
+    "Consolidation": 0.7308985817902408,
+    "Edema": 0.8215561108512347,
+    "Effusion": 0.8130615135601738,
+    "Emphysema": 0.8556418526192752,
+    "Fibrosis": 0.7881688820547398,
+    "Hernia": 0.8924986097563199,
+    "Infiltration": 0.6854104439985806,
+    "Mass": 0.7843719087348978,
+    "Nodule": 0.717973826802772,
+    "Pleural_Thickening": 0.75036138926179,
+    "Pneumonia": 0.682890531218152,
+    "Pneumothorax": 0.8121189509394842
+  },
+  "bootstrap_95ci_mean_auc_14": [
+    0.7765141456381988,
+    0.7854249655549826
+  ],
+  "classifier_architecture": "DenseNet-121 (torchvision), 14-output sigmoid head, frozen at eval",
+  "classifier_checkpoint": "./networks/pretrained_classifier.pth",
+  "classifier_sha256": "8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663",
+  "classifier_trained_on": "raw (unperturbed) NIH ChestX-ray14 images (fold=train)",
+  "dataset_split": "chexnet/nih_labels.csv fold==test",
+  "dataset_split_sha256": "80324996867e73546bd7a09025df4a4cc3243fc00663b753023ccd90a9b5f8b9",
+  "eval_config_path": "config_files/config_eval_classifier_corrected_baseline.json",
+  "eval_config_sha256": "dfd68d3bd12f51b58fbc648b16150b694e86aba6dd73370fa040660576cffe76",
+  "eval_model_sha256": "2a50a1373cfbb488b67ac8a363cd790139d5a872cc558c06d8335a7e43510e2b",
+  "eval_script_sha256": "248366c4dc7433559f7d71a5734fcfefccadee9db61ee2e85cf70b27ecce9f3f",
+  "evaluation_timestamp": "2026-08-11T18:03:15.741978+00:00",
+  "generator_path": "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+  "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+  "git_commit": "1d22be4a2760120e2d2a316e32429a27394ecbfa",
+  "mean_auc_14": 0.7812266419721955,
+  "mu": 0.01,
+  "n_cases": 25596,
+  "n_positive_negative": {
+    "Atelectasis": {
+      "n_negative": 22341,
+      "n_positive": 3255
+    },
+    "Cardiomegaly": {
+      "n_negative": 24531,
+      "n_positive": 1065
+    },
+    "Consolidation": {
+      "n_negative": 23781,
+      "n_positive": 1815
+    },
+    "Edema": {
+      "n_negative": 24671,
+      "n_positive": 925
+    },
+    "Effusion": {
+      "n_negative": 20948,
+      "n_positive": 4648
+    },
+    "Emphysema": {
+      "n_negative": 24503,
+      "n_positive": 1093
+    },
+    "Fibrosis": {
+      "n_negative": 25161,
+      "n_positive": 435
+    },
+    "Hernia": {
+      "n_negative": 25510,
+      "n_positive": 86
+    },
+    "Infiltration": {
+      "n_negative": 19508,
+      "n_positive": 6088
+    },
+    "Mass": {
+      "n_negative": 23884,
+      "n_positive": 1712
+    },
+    "Nodule": {
+      "n_negative": 23981,
+      "n_positive": 1615
+    },
+    "Pleural_Thickening": {
+      "n_negative": 24453,
+      "n_positive": 1143
+    },
+    "Pneumonia": {
+      "n_negative": 25119,
+      "n_positive": 477
+    },
+    "Pneumothorax": {
+      "n_negative": 22935,
+      "n_positive": 2661
+    }
+  },
+  "pred_label_arrays_preserved": "research_agent/03H_artifacts/classification/preds.csv (+ labels joined from nih_labels.csv)",
+  "stochastic_lambda": 0.0,
+  "transform_mode": "corrected"
+}

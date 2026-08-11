@@ -1,0 +1,137 @@
+{
+  "aggregates": {
+    "dice": 0.9427171795861439,
+    "hd95": 2.006120219607757,
+    "iou": 0.8954544277274117
+  },
+  "anatomical_targets": [
+    "Left Lung",
+    "Right Lung",
+    "Heart"
+  ],
+  "bootstrap_95ci": {
+    "dice": [
+      0.9423809799709698,
+      0.9430708434292415
+    ],
+    "hd95": [
+      1.9778191030413041,
+      2.033733567894315
+    ],
+    "iou": [
+      0.8949147276740899,
+      0.8960232967573883
+    ]
+  },
+  "canonical_eval_seg_sha256": "ccd1ce97d21eca04aaaf87c90606cdf6a1780349cbeb900a400a7910be82d3d0",
+  "dataset_split": "chexnet/nih_labels.csv fold==test (restricted to rows with masks)",
+  "dataset_split_sha256": "80324996867e73546bd7a09025df4a4cc3243fc00663b753023ccd90a9b5f8b9",
+  "empty_mask_cases": 0,
+  "empty_pred_cases": 0,
+  "eval_script": "research_agent/eval_seg_percase.py",
+  "eval_script_sha256": "f8bb9358e81dfbc7aa32baa627db4aa11c41fe3d892a4895338eeb30b1cb477c",
+  "evaluation_timestamp": "2026-08-11T18:03:44.528038+00:00",
+  "generator_path": "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+  "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+  "git_commit": "1d22be4a2760120e2d2a316e32429a27394ecbfa",
+  "hd95_units": "pixels at 256x256 image resolution (resized-image pixels); no empty masks in this run",
+  "mask_metadata": "data/chexmask/ChestX-Ray8.csv",
+  "mask_metadata_sha256": "48766ab0268235d63666bb2bacbd9f642b33fce7c1be40b9e1ecb381605545fa",
+  "mu": 0.01,
+  "n_cases": 25596,
+  "per_structure_mean": {
+    "Heart": {
+      "dice": 0.9320600644841415,
+      "hd95": 2.7863564147815816,
+      "iou": 0.8766851777506863
+    },
+    "Left Lung": {
+      "dice": 0.9434043505711185,
+      "hd95": 1.7821723267622829,
+      "iou": 0.8970609507605463
+    },
+    "Right Lung": {
+      "dice": 0.9526871237031719,
+      "hd95": 1.4498319172794065,
+      "iou": 0.9126171546710026
+    }
+  },
+  "per_structure_stats": {
+    "dice": {
+      "Heart": {
+        "max": 0.991379310336765,
+        "mean": 0.9320600644841416,
+        "median": 0.9451475480073074,
+        "min": 1.86741365390742e-11,
+        "std": 0.053795713795741856
+      },
+      "Left Lung": {
+        "max": 0.9905204630344064,
+        "mean": 0.9434043505711185,
+        "median": 0.9601527012652228,
+        "min": 0.0494140006319476,
+        "std": 0.05444690021785134
+      },
+      "Right Lung": {
+        "max": 0.9923164484870408,
+        "mean": 0.9526871237031719,
+        "median": 0.9666711914868282,
+        "min": 0.0990919857856476,
+        "std": 0.04468551901053523
+      }
+    },
+    "hd95": {
+      "Heart": {
+        "max": 91.92388155425118,
+        "mean": 2.7863564147815816,
+        "median": 1.4142135623730951,
+        "min": 0.0,
+        "std": 4.311705308302918
+      },
+      "Left Lung": {
+        "max": 79.12016177940993,
+        "mean": 1.7821723267622829,
+        "median": 1.0,
+        "min": 0.0,
+        "std": 3.657365262802009
+      },
+      "Right Lung": {
+        "max": 78.31730154603726,
+        "mean": 1.4498319172794067,
+        "median": 0.0,
+        "min": 0.0,
+        "std": 3.4188022285351636
+      }
+    },
+    "iou": {
+      "Heart": {
+        "max": 0.9829059828901322,
+        "mean": 0.8766851777506863,
+        "median": 0.8959997639698967,
+        "min": 1.86741365390742e-11,
+        "std": 0.07903599331098525
+      },
+      "Left Lung": {
+        "max": 0.9812189616164224,
+        "mean": 0.897060950760546,
+        "median": 0.9233593263879849,
+        "min": 0.0253329002914799,
+        "std": 0.08237232119102414
+      },
+      "Right Lung": {
+        "max": 0.984750070592255,
+        "mean": 0.9126171546710026,
+        "median": 0.9354923462144604,
+        "min": 0.0521287642772143,
+        "std": 0.0703044375962587
+      }
+    }
+  },
+  "segmentation_architecture": "UNetSeg(in_channels=1, out_channels=3, init_features=16), sigmoid head",
+  "segmentation_checkpoint": "./archive/train_seg_unet/best.pth",
+  "segmentation_sha256": "2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0",
+  "segmenter_trained_on": "raw (unperturbed) NIH ChestX-ray14 images (fold=train)",
+  "stochastic_lambda": 0.0,
+  "threshold": 0.5,
+  "transform_mode": "corrected"
+}

@@ -1,0 +1,87 @@
+{
+  "classification": {
+    "auc_by_label": {
+      "Atelectasis": 0.7456923137534945,
+      "Cardiomegaly": 0.8565280722695802,
+      "Consolidation": 0.7308985817902408,
+      "Edema": 0.8215561108512347,
+      "Effusion": 0.8130615135601738,
+      "Emphysema": 0.8556418526192752,
+      "Fibrosis": 0.7881688820547398,
+      "Hernia": 0.8924986097563199,
+      "Infiltration": 0.6854104439985806,
+      "Mass": 0.7843719087348978,
+      "Nodule": 0.717973826802772,
+      "Pleural_Thickening": 0.75036138926179,
+      "Pneumonia": 0.682890531218152,
+      "Pneumothorax": 0.8121189509394842
+    },
+    "bootstrap_95ci_mean_auc_14": [
+      0.7765141456381988,
+      0.7854249655549826
+    ],
+    "classifier_architecture": "DenseNet-121 (torchvision), 14-output sigmoid head, frozen at eval",
+    "classifier_checkpoint": "./networks/pretrained_classifier.pth",
+    "classifier_sha256": "8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663",
+    "dataset_split": "chexnet/nih_labels.csv fold==test",
+    "dataset_split_sha256": "80324996867e73546bd7a09025df4a4cc3243fc00663b753023ccd90a9b5f8b9",
+    "eval_config_path": "config_files/config_eval_classifier_corrected_baseline.json",
+    "eval_config_sha256": "dfd68d3bd12f51b58fbc648b16150b694e86aba6dd73370fa040660576cffe76",
+    "mean_auc_14": 0.7812266419721955
+  },
+  "created": "2026-08-11T18:03:44.567794+00:00",
+  "evaluation_config_hashes": {
+    "chexnet/eval_model.py": "2a50a1373cfbb488b67ac8a363cd790139d5a872cc558c06d8335a7e43510e2b",
+    "config_anonymization_baseline_corrected.json": "f5b83f4ac23326887b5c9ac85f9ce5aea35ff6f7c74e9a55b8dca778b19616da",
+    "config_eval_classifier_corrected_baseline.json": "dfd68d3bd12f51b58fbc648b16150b694e86aba6dd73370fa040660576cffe76",
+    "eval_classifier.py": "248366c4dc7433559f7d71a5734fcfefccadee9db61ee2e85cf70b27ecce9f3f",
+    "eval_seg.py": "ccd1ce97d21eca04aaaf87c90606cdf6a1780349cbeb900a400a7910be82d3d0",
+    "networks/UNetSeg.py": "85acda89b639913e0c61311f5cb7ba8a0d2b3079a4b05812b47d72c3244c8fdb",
+    "networks/UNet_PriCheXyNet.py": "e01590d240c2e436ba546a6f48839dfdc6e9fe584bb9fa3bfa9a8973fcbd41c1",
+    "research_agent/eval_seg_percase.py": "f8bb9358e81dfbc7aa32baa627db4aa11c41fe3d892a4895338eeb30b1cb477c"
+  },
+  "generator_path": "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+  "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+  "git_commit": "1d22be4a2760120e2d2a316e32429a27394ecbfa",
+  "mu": 0.01,
+  "privacy": {
+    "n_valid_attackers": 10,
+    "reid_max": 0.8036620800000001,
+    "reid_mean": 0.7391939919999999,
+    "reid_median": 0.7221833599999999,
+    "reid_sample_sd": 0.04984744373953724,
+    "source": "research_agent/03D_corrected_baseline_reid_summary_auditable.json"
+  },
+  "segmentation": {
+    "anatomical_targets": [
+      "Left Lung",
+      "Right Lung",
+      "Heart"
+    ],
+    "bootstrap_95ci": {
+      "dice": [
+        0.9423809799709698,
+        0.9430708434292415
+      ],
+      "hd95": [
+        1.9778191030413041,
+        2.033733567894315
+      ],
+      "iou": [
+        0.8949147276740899,
+        0.8960232967573883
+      ]
+    },
+    "dataset_split": "chexnet/nih_labels.csv fold==test (restricted to rows with masks)",
+    "dataset_split_sha256": "80324996867e73546bd7a09025df4a4cc3243fc00663b753023ccd90a9b5f8b9",
+    "dice": 0.9427171795861439,
+    "hd95": 2.006120219607757,
+    "iou": 0.8954544277274117,
+    "mask_metadata_sha256": "48766ab0268235d63666bb2bacbd9f642b33fce7c1be40b9e1ecb381605545fa",
+    "segmentation_architecture": "UNetSeg(in_channels=1, out_channels=3, init_features=16), sigmoid head",
+    "segmentation_checkpoint": "./archive/train_seg_unet/best.pth",
+    "segmentation_sha256": "2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0"
+  },
+  "stochastic_lambda": 0.0,
+  "transform_mode": "corrected"
+}
