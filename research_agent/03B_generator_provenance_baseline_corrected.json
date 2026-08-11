@@ -1,0 +1,48 @@
+{
+  "batch_size": 16,
+  "best_epoch": 24,
+  "best_val_total_loss": 0.2444954023150304,
+  "checkpoint_selection_criterion": {
+    "direction": "min",
+    "monitored_quantity": "validation total loss"
+  },
+  "config_path": "config_files/config_anonymization_baseline_corrected.json",
+  "config_sha256": "f5b83f4ac23326887b5c9ac85f9ce5aea35ff6f7c74e9a55b8dca778b19616da",
+  "epochs": 60,
+  "experiment_id": "train_prichexy_net_baseline_corrected",
+  "generator_architecture": "UNet(1, 2, 32) \u2014 flow_field (PriCheXy-Net UNet, init_features=32)",
+  "generator_checkpoint_path": "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+  "generator_checkpoint_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+  "git_commit": "7d01e46334d456264e85f35f6c6b45f82d4e7195",
+  "gradient_accumulation_settings": {
+    "accumulation_steps": 1,
+    "h2_zero_grad_placement_fix": true
+  },
+  "initialization_description": "load ./networks/pretrained_generator_prichexy_net.pth (canonical baseline_fixed init)",
+  "learning_rate": 0.0001,
+  "mu": 0.01,
+  "optimizer": "Adam (generator); Adam (verification models); SGD(momentum=0.9, wd=1e-4) (AC classifier)",
+  "protocol_documents": {
+    "01B_PROTOCOL_AMENDMENT.md": "05fcc9fd4cb4181acd9f40603707cd259987a0d1d3750d0f3463fc1fe78b0865",
+    "01_ADAPTIVE_REID_PROTOCOL.md": "c3aa381ea2136d89d03f6a409a36edd2e1cb5d8f4986b3ae3846028f61cd6741",
+    "03A_REAL_CORRECTED_SMOKE.md": "182e0ede9156ac4698ba6d7b47b7e5d3e3f6a42cd1292540b700071d00a9f999"
+  },
+  "run_end_timestamp": "2026-08-11T14:53:00+07:00",
+  "run_start_timestamp": "2026-08-11T11:53:15+07:00",
+  "scheduler": "none",
+  "seed_information": {
+    "rng_pinning": "seed_all(): python.random, numpy, torch CPU, torch CUDA, cudnn.benchmark=False",
+    "seed": 42
+  },
+  "stochastic_lambda": 0.0,
+  "test_firewall": "no test split constructed, no test pair file opened, no test metric computed",
+  "train_split": {
+    "path": "image_pairs/image_pairs_training_10000.txt",
+    "sha256": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268"
+  },
+  "transform_mode": "corrected",
+  "validation_split": {
+    "path": "image_pairs/image_pairs_validation_2000.txt",
+    "sha256": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7"
+  }
+}
