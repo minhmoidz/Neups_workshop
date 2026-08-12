@@ -1,0 +1,144 @@
+{
+  "_label": "UTILITY-BY-BAND on VALIDATION (frozen classifier + frozen segmenter; no privacy number)",
+  "band_lowpass_sigma": 8.0,
+  "bands": {
+    "high_pass": {
+      "classification": {
+        "auc_by_label": {
+          "Atelectasis": 0.6789690956497367,
+          "Cardiomegaly": 0.6975450613553164,
+          "Consolidation": 0.7254322426860048,
+          "Edema": 0.7672322619978514,
+          "Effusion": 0.7833870869631105,
+          "Emphysema": 0.6841945684749243,
+          "Fibrosis": 0.6701809516808781,
+          "Hernia": 0.6691830307521305,
+          "Infiltration": 0.5590528097953145,
+          "Mass": 0.6758831448025173,
+          "Nodule": 0.6356304683781576,
+          "Pleural_Thickening": 0.6692164185810774,
+          "Pneumonia": 0.6211314998910508,
+          "Pneumothorax": 0.6217987841416418
+        },
+        "mean_auc_14": 0.675631244653551,
+        "n_cases": 10816
+      },
+      "segmentation": {
+        "mean_dice": 0.9110508329008555,
+        "mean_hd95": 5.022960845099152,
+        "mean_iou": 0.8428391762659603,
+        "n_cases": 10816,
+        "per_structure": {
+          "Heart": {
+            "dice": 0.8921097991311367,
+            "hd95": 6.6216340513016165,
+            "iou": 0.8097781081749031
+          },
+          "Left Lung": {
+            "dice": 0.9244238096832001,
+            "hd95": 3.5692010931490534,
+            "iou": 0.8659532966206762
+          },
+          "Right Lung": {
+            "dice": 0.9166188898882293,
+            "hd95": 4.878047390846784,
+            "iou": 0.8527861240023019
+          }
+        }
+      }
+    },
+    "low_pass": {
+      "classification": {
+        "auc_by_label": {
+          "Atelectasis": 0.694807508249283,
+          "Cardiomegaly": 0.6694161761689816,
+          "Consolidation": 0.716523437417405,
+          "Edema": 0.7207439048586067,
+          "Effusion": 0.7405513203597268,
+          "Emphysema": 0.5269345003644447,
+          "Fibrosis": 0.5071106537292953,
+          "Hernia": 0.5878218784735088,
+          "Infiltration": 0.5566247371830615,
+          "Mass": 0.6755741543240018,
+          "Nodule": 0.5004227873495719,
+          "Pleural_Thickening": 0.610377867722034,
+          "Pneumonia": 0.5836344022261356,
+          "Pneumothorax": 0.6032111364316297
+        },
+        "mean_auc_14": 0.620982461775549,
+        "n_cases": 10816
+      },
+      "segmentation": {
+        "mean_dice": 0.863962789724002,
+        "mean_hd95": 9.529704187679766,
+        "mean_iou": 0.7679850817350049,
+        "n_cases": 10816,
+        "per_structure": {
+          "Heart": {
+            "dice": 0.8589352382541577,
+            "hd95": 9.053508066616462,
+            "iou": 0.7597218690021823
+          },
+          "Left Lung": {
+            "dice": 0.8605423675755175,
+            "hd95": 11.897618261027159,
+            "iou": 0.7624569362869424
+          },
+          "Right Lung": {
+            "dice": 0.8724107633423307,
+            "hd95": 7.6379862353956725,
+            "iou": 0.7817764399158894
+          }
+        }
+      }
+    },
+    "original": {
+      "classification": {
+        "auc_by_label": {
+          "Atelectasis": 0.7898078412655705,
+          "Cardiomegaly": 0.8453827878418283,
+          "Consolidation": 0.7964756183714036,
+          "Edema": 0.8718193251647963,
+          "Effusion": 0.8787235819316201,
+          "Emphysema": 0.8744470568274091,
+          "Fibrosis": 0.7166305253356855,
+          "Hernia": 0.8920201926639496,
+          "Infiltration": 0.5904358895868385,
+          "Mass": 0.8150697496202256,
+          "Nodule": 0.7101082579255071,
+          "Pleural_Thickening": 0.7916834413503142,
+          "Pneumonia": 0.719524409977603,
+          "Pneumothorax": 0.8214549819032765
+        },
+        "mean_auc_14": 0.7938274042690019,
+        "n_cases": 10816
+      },
+      "segmentation": {
+        "mean_dice": 0.9550191102241289,
+        "mean_hd95": 1.3071548908160855,
+        "mean_iou": 0.9171547761046615,
+        "n_cases": 10816,
+        "per_structure": {
+          "Heart": {
+            "dice": 0.943852072667369,
+            "hd95": 1.926695454657623,
+            "iou": 0.8969386804985948
+          },
+          "Left Lung": {
+            "dice": 0.9569922053055984,
+            "hd95": 1.1158072338119658,
+            "iou": 0.9209600722734327
+          },
+          "Right Lung": {
+            "dice": 0.9642130526994191,
+            "hd95": 0.8789619839786676,
+            "iou": 0.9335655755419567
+          }
+        }
+      }
+    }
+  },
+  "mu": 0.01,
+  "stochastic_lambda": 0.0,
+  "transform_mode": "corrected"
+}

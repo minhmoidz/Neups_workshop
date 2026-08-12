@@ -1,0 +1,75 @@
+{
+  "_label": "STEP 4A H1 BAND DIAGNOSTIC \u2014 machine summary (diagnostic only; TRAIN/VALIDATION; no privacy number)",
+  "adaptive_bands": {
+    "HP_best_validation_auc": 0.865919,
+    "LP_best_validation_auc": 0.870531,
+    "endpoint_lowest_validation_loss": true,
+    "reference_seeds": 10,
+    "reference_unfiltered_mean_auc": 0.8382,
+    "reference_unfiltered_sd": 0.0344,
+    "restarts_per_band": 1,
+    "seed": 42,
+    "test_touched": false
+  },
+  "decision": {
+    "AUC_highpass": 0.865919,
+    "AUC_lowpass": 0.870531,
+    "auc_lowpass_above_chance": true,
+    "delta": 0.004612,
+    "falsified_threshold": 0.05,
+    "rule": "adaptive AUC_lowpass - AUC_highpass; >=0.10 SUPPORTED, 0.05-0.10 AMBIGUOUS, <0.05 FALSIFIED; AUC_lowpass above chance"
+  },
+  "evaluation_timestamp": "2026-08-12T09:41:26.683888+00:00",
+  "flow_spectrum": {
+    "cutoff_cycles_per_px": 0.01656,
+    "energy_above_cutoff": 0.892,
+    "energy_below_cutoff": 0.108,
+    "max_abs_displacement_px": 1.8,
+    "mean_abs_displacement_px": 1.049
+  },
+  "frozen_triage": {
+    "_label": "FROZEN-ATTACKER DISTRIBUTION-SHIFT DIAGNOSTIC (not adaptive; not used in rule)",
+    "high_pass_auc": 0.63589,
+    "low_pass_auc": 0.70982,
+    "original_auc": 0.81692
+  },
+  "hashes": {
+    "adaptive_band_results.json": "4c6c87713a61f49ee66470c2377656842285b3ccbb76493352a25cc1f1712830",
+    "band.py": "fcba3510bf02c7d3773cf84dd2655b5554d37db8ca68b3e66d40584c47dd5623",
+    "corrected_generator.pth": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+    "diag_4a_adaptive_bands.py": "8b00f19bc12a0551e5ffb18cc031304621d1f40ad174e57683ce28478fe2d438",
+    "diag_4a_flow_spectrum.py": "90b0860cb1e7a93d605bbb0d10b0b4ef99a043fc3b997dcf043eb6628cf1c24b",
+    "diag_4a_frozen_triage.py": "077d2dcf51be95c42bbfbac680831613fb50ad4dc0ca391102040a7d2bf895ba",
+    "diag_4a_utility_by_band.py": "4b4d7570b9d7d20632a73baaf563d8736684be67e08a100f5e1e9f15fc377dcf",
+    "flow_spectrum.json": "026abc79bb094bf5cfd9ac38fbb4d9b0d1a5dee7bc55b0a18d9e3c312f281ff3",
+    "frozen_attacker_triage.json": "fa18c2425712636dd72586a4e2445d3b232a01768d08ba64006153f2c3f29a6a",
+    "utility_by_band.json": "8cf42376e9c8c3d2c4292c0d7ab058a60e537c447f07b593f68b1c08b44f1c10"
+  },
+  "utility_by_band": {
+    "_label": "VALIDATION-only frozen-model landscape (not part of H1 rule)",
+    "classification_mean_auc14": {
+      "high_pass": 0.6756,
+      "low_pass": 0.621,
+      "original": 0.7938
+    },
+    "segmentation": {
+      "high_pass": {
+        "dice": 0.9111,
+        "hd95_px": 5.023,
+        "iou": 0.8428
+      },
+      "low_pass": {
+        "dice": 0.864,
+        "hd95_px": 9.53,
+        "iou": 0.768
+      },
+      "original": {
+        "dice": 0.955,
+        "hd95_px": 1.307,
+        "iou": 0.9172
+      }
+    }
+  },
+  "verdict": "FALSIFIED",
+  "verdict_exact_line": "STEP 4A H1 DIAGNOSTIC: FALSIFIED"
+}

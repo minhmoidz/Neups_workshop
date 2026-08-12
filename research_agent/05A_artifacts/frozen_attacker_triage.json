@@ -1,0 +1,22 @@
+{
+  "_label": "FROZEN-ATTACKER DISTRIBUTION-SHIFT DIAGNOSTIC (not an adaptive privacy estimate)",
+  "attacker_checkpoint": "archive/retrain_snn_seed4/retrain_snn_seed4_best_network.pth",
+  "band_lowpass_sigma": 8.0,
+  "generator": "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+  "high_pass": {
+    "n_pairs": 2000,
+    "validation_auc": 0.635892
+  },
+  "low_pass": {
+    "n_pairs": 2000,
+    "validation_auc": 0.709816
+  },
+  "mu": 0.01,
+  "original": {
+    "n_pairs": 2000,
+    "validation_auc": 0.816924
+  },
+  "stochastic_lambda": 0.0,
+  "transform_mode": "corrected",
+  "validation_pairs": "image_pairs/image_pairs_validation_2000.txt"
+}
