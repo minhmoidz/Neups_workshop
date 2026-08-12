@@ -1,0 +1,70 @@
+{
+  "H2_intensity": {
+    "adaptive_best_validation_auc": 0.8075,
+    "adaptive_reduction": 0.0307,
+    "adaptive_seed": 42,
+    "adaptive_verdict": "NOT SUPPORTED",
+    "frozen_triage_AUC_mechanism": 0.81699,
+    "frozen_triage_AUC_reference": 0.81729,
+    "frozen_triage_delta": -0.0003,
+    "mechanism": "intensity_normalize(p1/p99 affine, eps=1e-6)",
+    "test_touched": false,
+    "utility_classification_mean_auc14": 0.7947,
+    "utility_gross_collapse": false,
+    "utility_segmentation_mean_dice": 0.9542
+  },
+  "H3_border": {
+    "adaptive_best_validation_auc": 0.7938,
+    "adaptive_reduction": 0.0444,
+    "adaptive_seed": 42,
+    "adaptive_verdict": "NOT SUPPORTED",
+    "frozen_triage_AUC_mechanism": 0.81072,
+    "frozen_triage_AUC_reference": 0.81729,
+    "frozen_triage_delta": -0.00657,
+    "mechanism": "border_normalize(BW=4, per-image median fill)",
+    "test_touched": false,
+    "utility_classification_mean_auc14": 0.7928,
+    "utility_gross_collapse": false,
+    "utility_segmentation_mean_dice": 0.9528
+  },
+  "_label": "STEP 4B CAA MECHANISM DIAGNOSTIC \u2014 machine summary (DEVELOPMENT / MECHANISM DIAGNOSTIC; TRAIN/VALIDATION; NOT A PAPER PRIVACY ESTIMATE)",
+  "case": "CASE D",
+  "decision": {
+    "H2_reduction": 0.0307,
+    "H3_reduction": 0.0444,
+    "both_below_005": true,
+    "rule": "adaptive reduction vs reference; >=0.10 SUPPORTED, 0.05-0.10 AMBIGUOUS, <0.05 NOT SUPPORTED; CAA requires at least one >=0.10 with class>=0.765 and dice>=0.930"
+  },
+  "evaluation_timestamp": "2026-08-12T17:13:15.928622+00:00",
+  "hashes": {
+    "caa_transforms.py": "8c56b8c284ea4abe9b446764a39f71fd56cfbd9db5143d7d15b8da2b9080711b",
+    "diag_4b_adaptive.py": "0f863edf38a8ba695446bd33b4c705b71d4c830dfc1ebf248f943edab9021452",
+    "diag_4b_frozen_triage.py": "e64f9a2e386b67e669cea7dedee3389f3fe83a398d6c9b448c84c8998d899782",
+    "diag_4b_utility_sanity.py": "a1c9559672775a7388cea6a0dd3eb5d9ecb192676161c9037f91d6ec367abe6b",
+    "frozen_triage_border.json": "aee9d797ad369859c867182f1f4db0464f57d704f034b3c07145fe3e004331b8",
+    "frozen_triage_intensity.json": "ced34b0f29cc35a5d0a3bfc56689ac527cef532d2112eec6f5e5a7b263193480",
+    "mechanism_diagnostics_border.json": "9af654213ce1efe7ec61471af34539a4dccc41affb813e4d95e5d086584dc9b9",
+    "mechanism_diagnostics_intensity.json": "274957621e4a950efad7d62c143818da88761d54a6734b96c51cb030db3feb3e",
+    "utility_sanity.json": "45bc10a92f08c2171451c1b4788ce0fc4121d8bdd624aac3e2745f4fddf45696"
+  },
+  "interpretation": "Neither border/FOV nor intensity channel dominates residual identity; with STEP 4A (LP~HP) this supports distributed/redundant identity (H4). CAA not implemented.",
+  "reference": {
+    "adaptive_reference_mean_auc": 0.8382,
+    "adaptive_reference_n_seeds": 10,
+    "adaptive_reference_sd": 0.0344,
+    "adaptive_reference_source": "reused 03D/04A compatible VALIDATION per-seed records (no retrain)",
+    "generator": "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+    "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+    "mu": 0.01,
+    "pair_train": "image_pairs/image_pairs_training_10000.txt",
+    "pair_validation": "image_pairs/image_pairs_validation_2000.txt",
+    "stochastic_lambda": 0.0,
+    "transform_mode": "corrected"
+  },
+  "utility_reference": {
+    "classification_mean_auc14": 0.7938,
+    "segmentation_mean_dice": 0.955
+  },
+  "verdict": "FALSIFIED",
+  "verdict_exact_line": "STEP 4B CAA DIAGNOSTIC: FALSIFIED"
+}

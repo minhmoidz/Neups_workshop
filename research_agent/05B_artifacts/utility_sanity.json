@@ -1,0 +1,35 @@
+{
+  "_label": "DEVELOPMENT / MECHANISM DIAGNOSTIC (NOT A PAPER PRIVACY ESTIMATE)",
+  "border": {
+    "classification_mean_auc14": 0.7927638157042914,
+    "classification_n_cases": 10816,
+    "gross_collapse": {
+      "classification_below_0765": false,
+      "dice_below_0930": false
+    },
+    "segmentation_mean_dice": 0.9527913023683758,
+    "segmentation_n_cases": 10816
+  },
+  "intensity": {
+    "classification_mean_auc14": 0.7947122930943066,
+    "classification_n_cases": 10816,
+    "gross_collapse": {
+      "classification_below_0765": false,
+      "dice_below_0930": false
+    },
+    "segmentation_mean_dice": 0.9542290314621867,
+    "segmentation_n_cases": 10816
+  },
+  "mu": 0.01,
+  "reference": {
+    "classification_mean_auc14": 0.7938274042690019,
+    "classification_n_cases": 10816,
+    "gross_collapse": {
+      "classification_below_0765": false,
+      "dice_below_0930": false
+    },
+    "segmentation_mean_dice": 0.9550191102241289,
+    "segmentation_n_cases": 10816
+  },
+  "transform_mode": "corrected"
+}

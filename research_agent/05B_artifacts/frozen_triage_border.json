@@ -1,0 +1,17 @@
+{
+  "AUC_mechanism": 0.8107179999999999,
+  "AUC_reference": 0.817295,
+  "_label": "FROZEN-ATTACKER DISTRIBUTION-SHIFT TRIAGE (not a privacy estimate)",
+  "attacker_checkpoint": "archive/retrain_snn_seed4/retrain_snn_seed4_best_network.pth",
+  "attacker_seed": 4,
+  "delta_auc": -0.006577000000000055,
+  "generator": "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+  "mechanism": "border",
+  "mechanism_label": "border_normalize(BW=4)",
+  "mu": 0.01,
+  "n_pairs": 2000,
+  "stochastic_lambda": 0.0,
+  "test_touched": false,
+  "transform_mode": "corrected",
+  "validation_pairs": "image_pairs/image_pairs_validation_2000.txt"
+}
