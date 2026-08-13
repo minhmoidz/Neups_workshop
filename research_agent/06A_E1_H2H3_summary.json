@@ -1,0 +1,91 @@
+{
+  "step": "4D",
+  "package": "E1",
+  "report": "06A_E1_H2H3_RESTART_EXTENSION",
+  "title": "E1 H2/H3 restart extension (n=3, seeds 42/43/44)",
+  "status": "VERDICT: no material >=0.10 adaptive effect on either channel; CAA unchanged NO-GO",
+  "preconditions": {
+    "branch": "main",
+    "head_before": "f050c79d94afc0760df91b447465b3f5ac1964cd",
+    "git_status_clean": true,
+    "required_commit_present": "f050c79",
+    "reference_recomputed_from_raw": true
+  },
+  "reference": {
+    "source": "research_agent/03D_artifacts/seed_{0..9}/training_diagnostics.json",
+    "metric": "best_validation_auc",
+    "n": 10,
+    "mean_auc": 0.8382,
+    "sample_sd_ddof1": 0.0363,
+    "median": 0.8454,
+    "min": 0.7927,
+    "max": 0.8776
+  },
+  "arms": {
+    "H2_intensity": {
+      "canonical_transform": "unchanged STEP 4B: per-image p1/p99 affine normalize, eps=1e-6",
+      "authorized_seeds": [42, 43, 44],
+      "per_seed": {
+        "42": {"best_validation_auc": 0.80750, "best_epoch": 7, "epochs_completed": 13, "termination": "early_stopping", "test_touched": false, "source": "05B_artifacts/adaptive/diag_4b_arm_intensity_seed42/mechanism_diagnostics.json"},
+        "43": {"best_validation_auc": 0.87659, "best_epoch": 5, "epochs_completed": 11, "termination": "early_stopping", "test_touched": false, "checkpoint_sha": "ba487905f7669e624d4f55cde2b14edecdfec4105566d96dc3901d41966b301d", "cannot_invent_seeds": true},
+        "44": {"best_validation_auc": 0.81602, "best_epoch": 9, "epochs_completed": 12, "termination": "early_stopping", "test_touched": false, "checkpoint_sha": "ba97a002ca0cca9a904d355f1ffe6236c922f985fd44dee8256860e56926c9a9", "cannot_invent_seeds": true}
+      },
+      "summary": {
+        "n": 3,
+        "mean": 0.8334,
+        "sample_sd_ddof1": 0.0377,
+        "median": 0.8160,
+        "min": 0.8075,
+        "max": 0.8766,
+        "reduction_vs_reference": 0.0048,
+        "welch_95_ci_reduction": [-0.0706, 0.0803],
+        "bootstrap_95_ci_reduction": [-0.0379, 0.0426],
+        "material_0.10_effect_supported": false,
+        "one_sided_mass_above_0.10": 0.014
+      }
+    },
+    "H3_border": {
+      "canonical_transform": "unchanged STEP 4B: per-image median border fill, BORDER_WIDTH=4",
+      "authorized_seeds": [42, 43, 44],
+      "per_seed": {
+        "42": {"best_validation_auc": 0.79380, "best_epoch": 8, "epochs_completed": 11, "termination": "early_stopping", "test_touched": false, "source": "05B_artifacts/adaptive/diag_4b_arm_border_seed42/mechanism_diagnostics.json"},
+        "43": {"best_validation_auc": 0.83919, "best_epoch": 7, "epochs_completed": 13, "termination": "early_stopping", "test_touched": false, "checkpoint_sha": "ac2e99b2a70b820187dd8258877cb524e7b332bd83d7e57bef5a76955a380673", "cannot_invent_seeds": true},
+        "44": {"best_validation_auc": 0.82036, "best_epoch": 10, "epochs_completed": 11, "termination": "early_stopping", "test_touched": false, "checkpoint_sha": "1fb3d830076b35bf51614b0ceb4f79a7c8d7d52ebb439d9a50e33306e490149d", "cannot_invent_seeds": true}
+      },
+      "summary": {
+        "n": 3,
+        "mean": 0.8178,
+        "sample_sd_ddof1": 0.0228,
+        "median": 0.8204,
+        "min": 0.7938,
+        "max": 0.8392,
+        "reduction_vs_reference": 0.0204,
+        "welch_95_ci_reduction": [-0.0233, 0.0641],
+        "bootstrap_95_ci_reduction": [-0.0081, 0.0493],
+        "material_0.10_effect_supported": false,
+        "one_sided_mass_above_0.10": 0.002
+      }
+    }
+  },
+  "statistics_method": "reduction = ref_mean - arm_mean (independent group means, no seed pairing); Welch t-interval for difference of independent means + independent-arm percentile bootstrap (10 vs 3, 5000 draws). Sample SD used ddof=1 throughout. Old 0.05 screening threshold NOT reused as mechanistic falsification threshold.",
+  "interpretation_rubric": "material >=0.10 mean AUC reduction; clearly-below with CI excluding 0.10; CI spanning 0.10 = inconclusive",
+  "interpretation": {
+    "H2_intensity": "no material >=0.10 effect (reduction +0.0048, CI [-0.071, 0.080])",
+    "H3_border": "no material >=0.10 effect (reduction +0.0204, CI [-0.023, 0.064])",
+    "caa_status": "UNCHANGED NO-GO (falsified STEP 4B, confirmed E1)"
+  },
+  "utility": "not rerun; STEP 4B values stand (H2 cls AUC 0.7947/Dice 0.9542; H3 cls AUC 0.7928/Dice 0.9528, validation diagnostics only)",
+  "no_test_touched": true,
+  "evidence_hashes": {
+    "mechanism_diagnostics_border_seed43": "5234f8f753e7a754f751bdd0be8e7d335e4e3727e10ef13615f666dfa36e3158",
+    "mechanism_diagnostics_intensity_seed43": "0399d5289aa4d71cc835b7d95964b386cb880106062a54a2ff6d0f0c8a190e41",
+    "mechanism_diagnostics_border_seed44": "0b0633e280aab9f3c687b422efc6b56d1056eb144c060531bf00e994bb990307",
+    "mechanism_diagnostics_intensity_seed44": "33b2ae8550c09266998a6d9129896813e876c4198e65861237176a035f91bdec"
+  },
+  "checkpoint_hashes_pth_not_committed": {
+    "diag_4b_arm_border_seed43_best_network.pth": "ac2e99b2a70b820187dd8258877cb524e7b332bd83d7e57bef5a76955a380673",
+    "diag_4b_arm_border_seed44_best_network.pth": "1fb3d830076b35bf51614b0ceb4f79a7c8d7d52ebb439d9a50e33306e490149d",
+    "diag_4b_arm_intensity_seed43_best_network.pth": "ba487905f7669e624d4f55cde2b14edecdfec4105566d96dc3901d41966b301d",
+    "diag_4b_arm_intensity_seed44_best_network.pth": "ba97a002ca0cca9a904d355f1ffe6236c922f985fd44dee8256860e56926c9a9"
+  }
+}
