@@ -1,0 +1,109 @@
+{
+  "step": "7B",
+  "title": "P1 Capacity-Limited Anatomy Condition Test",
+  "status": "FAIL",
+  "decision_gate": {
+    "strong_pass_requires": {"joint_mean_le": 0.55, "joint_max_le": 0.60},
+    "pass_requires": {"joint_mean_le": 0.60, "joint_max_le": 0.65},
+    "promising_requires": {"joint_mean_gt": 0.60, "joint_mean_le": 0.70},
+    "fail_if": {"joint_mean_gt": 0.70, "joint_max_gt": 0.75},
+    "joint_mean_auc": 0.71152,
+    "joint_max_auc": 0.72236,
+    "passed": false,
+    "decision": "P1 CONDITION CAPACITY: FAIL"
+  },
+  "scientific_question": "Can we remove patient-specific fine anatomical shape information while retaining a clinically useful coarse anatomy condition?",
+  "p1_transform": {
+    "input_shape": [3, 256, 256],
+    "hard_mask": "M = 1[p >= 0.5]",
+    "block_partition": "non-overlapping 4x4 blocks",
+    "block_mean": "q = mean(block)",
+    "coarse_mask": "M64 = 1[q >= 0.5]",
+    "output_shape": [3, 64, 64],
+    "dtype": "uint8",
+    "binary": true,
+    "no_interpolation_to_256": true
+  },
+  "no_sweep_declaration": {
+    "tested_resolutions": ["64x64 only"],
+    "tested_thresholds": ["0.5 only"],
+    "sweep_performed": false
+  },
+  "data": {
+    "train_pairs": "image_pairs/image_pairs_training_10000.txt",
+    "val_pairs": "image_pairs/image_pairs_validation_2000.txt",
+    "test_accessed": false
+  },
+  "condition_cache": {
+    "teacher_path": "archive/train_seg_unet/best.pth",
+    "teacher_sha256": "2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0",
+    "cache_dir": "research_agent/ibr_s1_condition_p1_cache/",
+    "train_maps": {"file": "train_p1.npy", "n": 18089, "shape": [18089, 3, 64, 64]},
+    "val_maps": {"file": "val_p1.npy", "n": 3484, "shape": [3484, 3, 64, 64]}
+  },
+  "attacker": {
+    "arm_A_anatomy_only": "ResNet-18 (3ch 64x64) -> e_map 128 -> MLP(|e1-e2|)",
+    "arm_B_pathology_only": "MLP 14->64->64->128 -> e_path -> MLP(|e1-e2|) (reused from STEP 7A)",
+    "arm_C_joint": "concat(e_map,e_path) 256 -> MLP(|e1-e2|)",
+    "order_invariant": true,
+    "objective": "BCEWithLogitsLoss",
+    "optimizer": {"name": "Adam", "lr": 1e-4},
+    "batch_size": 64,
+    "early_stopping_patience": 5,
+    "checkpoint": "minimum validation BCE",
+    "max_epochs": 60
+  },
+  "seeds": {"arms": ["A", "B", "C"], "seeds": [0, 1, 2], "all_numerically_valid": true},
+  "primary_statistic_joint": {
+    "n": 3,
+    "mean": 0.71152,
+    "sd_ddof1": 0.01094,
+    "median": 0.71174,
+    "min": 0.70048,
+    "max": 0.72236
+  },
+  "per_seed": [
+    {"arm": "A", "seed": 0, "best_val_loss": 0.58767, "best_val_auc": 0.75272, "epoch": 5, "termination": "early_stopping_patience_5"},
+    {"arm": "A", "seed": 1, "best_val_loss": 0.62050, "best_val_auc": 0.70279, "epoch": 3, "termination": "early_stopping_patience_5"},
+    {"arm": "A", "seed": 2, "best_val_loss": 0.61606, "best_val_auc": 0.70717, "epoch": 2, "termination": "early_stopping_patience_5"},
+    {"arm": "B", "seed": 0, "best_val_loss": 0.67601, "best_val_auc": 0.60359, "epoch": 16, "termination": "early_stopping_patience_5", "reused_from_7A": true},
+    {"arm": "B", "seed": 1, "best_val_loss": 0.67473, "best_val_auc": 0.60889, "epoch": 8, "termination": "early_stopping_patience_5", "reused_from_7A": true},
+    {"arm": "B", "seed": 2, "best_val_loss": 0.67286, "best_val_auc": 0.61113, "epoch": 22, "termination": "early_stopping_patience_5", "reused_from_7A": true},
+    {"arm": "C", "seed": 0, "best_val_loss": 0.63032, "best_val_auc": 0.70048, "epoch": 4, "termination": "early_stopping_patience_5"},
+    {"arm": "C", "seed": 1, "best_val_loss": 0.61988, "best_val_auc": 0.71174, "epoch": 2, "termination": "early_stopping_patience_5"},
+    {"arm": "C", "seed": 2, "best_val_loss": 0.61432, "best_val_auc": 0.72236, "epoch": 5, "termination": "early_stopping_patience_5"}
+  ],
+  "ablation": {
+    "arm_A_p1_anatomy": {"n": 3, "mean": 0.72089, "sd": 0.02766, "min": 0.70279, "max": 0.75272},
+    "arm_B_pathology": {"n": 3, "mean": 0.60787, "sd": 0.00387, "min": 0.60359, "max": 0.61113},
+    "arm_C_joint": {"n": 3, "mean": 0.71152, "sd": 0.01094, "min": 0.70048, "max": 0.72236}
+  },
+  "descriptive_comparison_vs_7A": {
+    "exact_7A": {"anatomy_auc": 0.833, "pathology_auc": 0.608, "joint_auc": 0.820},
+    "p1_7B": {"anatomy_auc": 0.721, "pathology_auc": 0.608, "joint_auc": 0.712}
+  },
+  "anatomy_retention_diagnostic": {
+    "Left Lung": {"dice": 0.9725, "iou": 0.9465, "hd95_px": 0.01},
+    "Right Lung": {"dice": 0.9757, "iou": 0.9525, "hd95_px": 0.00},
+    "Heart": {"dice": 0.9755, "iou": 0.9523, "hd95_px": 0.00},
+    "mean": {"dice": 0.9746, "iou": 0.9504, "hd95_px": 0.01}
+  },
+  "load_bearing_tests": {
+    "test1_p1_transform_frozen_spec": true,
+    "test2_no_test_access": true,
+    "test3_no_pixels_no_identifiers": true,
+    "test4_pairs_balanced": true,
+    "test5_order_invariant": true,
+    "test6_maps_match_source_ids": true,
+    "test7_teacher_sha_matches_7A": true,
+    "test8_seed_reproducible": true
+  },
+  "decision_logic_outcome": "P1 is closed. Do NOT train generator. Next possible primary variant is P2 — bounded stochastic anatomy normalization, but DO NOT implement P2 automatically.",
+  "strict_stop": "P1 CONDITION CAPACITY: FAIL",
+  "artifacts": [
+    "research_agent/13_P1_CONDITION_CAPACITY.md",
+    "research_agent/13_P1_CONDITION_CAPACITY_summary.json",
+    "research_agent/ibr_s1_condition_p1_cache/",
+    "research_agent/ibr_s1_condition_p1_capacity/"
+  ]
+}

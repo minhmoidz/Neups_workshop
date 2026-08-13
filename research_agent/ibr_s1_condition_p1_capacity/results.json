@@ -1,0 +1,86 @@
+[
+  {
+    "arm": "A",
+    "seed": 0,
+    "best_val_loss": 0.5876720079249935,
+    "best_val_auc": 0.7527200000000001,
+    "best_epoch": 5,
+    "termination": "early_stopping_patience_5",
+    "num_epochs_run": 10
+  },
+  {
+    "arm": "A",
+    "seed": 1,
+    "best_val_loss": 0.6204980348866229,
+    "best_val_auc": 0.70279,
+    "best_epoch": 3,
+    "termination": "early_stopping_patience_5",
+    "num_epochs_run": 8
+  },
+  {
+    "arm": "A",
+    "seed": 2,
+    "best_val_loss": 0.6160623042542284,
+    "best_val_auc": 0.707168,
+    "best_epoch": 2,
+    "termination": "early_stopping_patience_5",
+    "num_epochs_run": 7
+  },
+  {
+    "arm": "C",
+    "seed": 0,
+    "best_val_loss": 0.6303187640828583,
+    "best_val_auc": 0.7004750000000001,
+    "best_epoch": 4,
+    "termination": "early_stopping_patience_5",
+    "num_epochs_run": 9
+  },
+  {
+    "arm": "C",
+    "seed": 1,
+    "best_val_loss": 0.619877386524422,
+    "best_val_auc": 0.711739,
+    "best_epoch": 2,
+    "termination": "early_stopping_patience_5",
+    "num_epochs_run": 7
+  },
+  {
+    "arm": "C",
+    "seed": 2,
+    "best_val_loss": 0.6143249687611387,
+    "best_val_auc": 0.7223580000000001,
+    "best_epoch": 5,
+    "termination": "early_stopping_patience_5",
+    "num_epochs_run": 10
+  },
+  {
+    "arm": "B",
+    "seed": 0,
+    "best_val_loss": 0.6760062624598504,
+    "best_val_auc": 0.6035874999999999,
+    "best_epoch": 16,
+    "termination": "early_stopping_patience_5",
+    "num_epochs_run": 21,
+    "reused_from_7A": true
+  },
+  {
+    "arm": "B",
+    "seed": 1,
+    "best_val_loss": 0.6747272998818516,
+    "best_val_auc": 0.6088875,
+    "best_epoch": 8,
+    "termination": "early_stopping_patience_5",
+    "num_epochs_run": 13,
+    "reused_from_7A": true
+  },
+  {
+    "arm": "B",
+    "seed": 2,
+    "best_val_loss": 0.6728646330266201,
+    "best_val_auc": 0.611128,
+    "best_epoch": 22,
+    "termination": "early_stopping_patience_5",
+    "num_epochs_run": 27,
+    "reused_from_7A": true
+  }
+]

@@ -1,0 +1,192 @@
+{
+  "step": "7C",
+  "p2_transform": {
+    "description": "D_lambda = (1 - lambda) * D_src + lambda * D_atlas; M_lambda = 1[D_lambda >= 0]",
+    "signed_distance_convention": "positive inside, negative outside",
+    "train_atlas_file": "train_atlas.npy",
+    "train_atlas_sha256": "0808b402414a365044d46a7c200a5b189754914b82a13a5d76fbc3e202fd0e67",
+    "frozen_lambda": 0.34,
+    "calibration": {
+      "train_macro_dice_target": 0.94,
+      "train_per_structure_dice_target": 0.93,
+      "train_macro_dice_achieved": 0.9400036720992625,
+      "train_per_structure_dice_achieved": [
+        0.942473232469712,
+        0.944664518389685,
+        0.9328732654383908
+      ],
+      "search_curve": [
+        {
+          "lambda": 0.0,
+          "macro_dice": 1.0,
+          "per_structure_dice": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "valid": true
+        },
+        {
+          "lambda": 0.1,
+          "macro_dice": 0.9986,
+          "per_structure_dice": [
+            0.999,
+            0.99879,
+            0.99801
+          ],
+          "valid": true
+        },
+        {
+          "lambda": 0.2,
+          "macro_dice": 0.98212,
+          "per_structure_dice": [
+            0.98426,
+            0.9833,
+            0.97879
+          ],
+          "valid": true
+        },
+        {
+          "lambda": 0.3,
+          "macro_dice": 0.95252,
+          "per_structure_dice": [
+            0.95527,
+            0.95595,
+            0.94634
+          ],
+          "valid": true
+        },
+        {
+          "lambda": 0.4,
+          "macro_dice": 0.92085,
+          "per_structure_dice": [
+            0.92293,
+            0.92786,
+            0.91176
+          ],
+          "valid": false
+        },
+        {
+          "lambda": 0.5,
+          "macro_dice": 0.88871,
+          "per_structure_dice": [
+            0.89115,
+            0.89866,
+            0.87631
+          ],
+          "valid": false
+        },
+        {
+          "lambda": 0.6,
+          "macro_dice": 0.85772,
+          "per_structure_dice": [
+            0.86001,
+            0.87165,
+            0.84152
+          ],
+          "valid": false
+        },
+        {
+          "lambda": 0.7,
+          "macro_dice": 0.82668,
+          "per_structure_dice": [
+            0.83018,
+            0.84328,
+            0.80659
+          ],
+          "valid": false
+        },
+        {
+          "lambda": 0.8,
+          "macro_dice": 0.79722,
+          "per_structure_dice": [
+            0.80154,
+            0.81647,
+            0.77364
+          ],
+          "valid": false
+        },
+        {
+          "lambda": 0.9,
+          "macro_dice": 0.76831,
+          "per_structure_dice": [
+            0.77386,
+            0.79013,
+            0.74095
+          ],
+          "valid": false
+        },
+        {
+          "lambda": 1.0,
+          "macro_dice": 0.74109,
+          "per_structure_dice": [
+            0.74549,
+            0.7668,
+            0.71098
+          ],
+          "valid": false
+        }
+      ]
+    }
+  },
+  "source_teacher": {
+    "path": "archive/train_seg_unet/best.pth",
+    "sha256_full": "2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0"
+  },
+  "train_p2": {
+    "file": "train_p2.npy",
+    "shape": [
+      18089,
+      3,
+      64,
+      64
+    ],
+    "dtype": "uint8"
+  },
+  "val_p2": {
+    "file": "val_p2.npy",
+    "shape": [
+      3484,
+      3,
+      64,
+      64
+    ],
+    "dtype": "uint8"
+  },
+  "validation_retention": {
+    "val_n": 3484,
+    "per_structure": {
+      "Left Lung": {
+        "dice_mean": 0.9266083364972872,
+        "dice_sd": 0.040921391684526166,
+        "iou_mean": 0.8658121468548812,
+        "iou_sd": 0.06727941273779882,
+        "hd95_mean_px": 2.5404619462065416,
+        "hd95_sd_px": 2.691138213946601
+      },
+      "Right Lung": {
+        "dice_mean": 0.9317993421526177,
+        "dice_sd": 0.03489947506936502,
+        "iou_mean": 0.8742169270233779,
+        "iou_sd": 0.05854990957291575,
+        "hd95_mean_px": 2.618433056044323,
+        "hd95_sd_px": 2.8315542913231533
+      },
+      "Heart": {
+        "dice_mean": 0.9226803508342752,
+        "dice_sd": 0.046805490833749276,
+        "iou_mean": 0.8597800918841735,
+        "iou_sd": 0.07661511943440924,
+        "hd95_mean_px": 2.781503587036191,
+        "hd95_sd_px": 3.1573758218123094
+      }
+    },
+    "mean_dice": 0.9270293431613933,
+    "mean_iou": 0.8666030552541443,
+    "mean_hd95_px": 2.646799529762352,
+    "passed_retention_target": false,
+    "method": "val_p2 upsampled 64->256 via nearest-neighbor vs original teacher hard masks"
+  },
+  "built_at": "2026-08-13T17:10:03.238676+00:00",
+  "commit": "9bd9104c8dac7afa86944592b55ad8f1c45c5e8b"
+}

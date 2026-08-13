@@ -30,5 +30,8 @@ stage3_status.txt
 
 # Experiment-local generated configs
 config_files/retrain_snn_seed*.json
-# STEP 7A condition cache (large binary maps, regenerable)
+# STEP 7A/7B/7C condition cache (large binary maps, regenerable)
 research_agent/ibr_s1_condition_cache/*.npy
+research_agent/ibr_s1_condition_p1_cache/*.npy
+research_agent/ibr_s1_condition_p2_cache/*.npy
+

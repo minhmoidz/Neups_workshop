@@ -1,0 +1,40 @@
+{
+  "step": "7B",
+  "parent_cache": "research_agent/ibr_s1_condition_cache/",
+  "source_teacher": {
+    "path": "archive/train_seg_unet/best.pth",
+    "sha256_full": "2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0"
+  },
+  "p1_transform": {
+    "steps": [
+      "M = 1[p>=0.5]",
+      "non-overlapping 4x4 blocks",
+      "q = mean(block)",
+      "M64 = 1[q>=0.5]"
+    ],
+    "input_shape": [
+      3,
+      256,
+      256
+    ],
+    "output_shape": [
+      3,
+      64,
+      64
+    ],
+    "dtype": "uint8",
+    "binary": true
+  },
+  "no_sweep": true,
+  "no_test": true,
+  "built_at": "2026-08-13T16:53:49.870530+00:00",
+  "commit": "9bd9104c8dac7afa86944592b55ad8f1c45c5e8b",
+  "train": {
+    "n_images": 18089,
+    "file": "train_p1.npy"
+  },
+  "val": {
+    "n_images": 3484,
+    "file": "val_p1.npy"
+  }
+}

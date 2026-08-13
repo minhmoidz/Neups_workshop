@@ -1,0 +1,113 @@
+{
+  "step": "7C",
+  "title": "P2 Utility-Constrained Atlas Normalization Test",
+  "status": "FAIL",
+  "decision_gate": {
+    "strong_pass_requires": {"val_macro_dice_ge": 0.930, "joint_mean_le": 0.630, "joint_max_le": 0.660, "delta_anatomy_le": 0.020},
+    "pass_requires": {"val_macro_dice_ge": 0.930, "joint_mean_le": 0.650, "joint_max_le": 0.680, "delta_anatomy_le": 0.030},
+    "promising_requires": {"val_macro_dice_ge": 0.930, "joint_mean_le": 0.690, "delta_anatomy_le": 0.060},
+    "fail_if_any": ["val_macro_dice_lt_0.930", "joint_mean_gt_0.690", "delta_anatomy_gt_0.060"],
+    "observed": {
+      "val_macro_dice": 0.9270,
+      "joint_mean_auc": 0.69800,
+      "joint_max_auc": 0.70284,
+      "pathology_mean_auc": 0.60787,
+      "delta_anatomy": 0.09013
+    },
+    "passed": false,
+    "decision": "P2 CONDITION CAPACITY: FAIL"
+  },
+  "scientific_question": "Can we explicitly remove patient-specific anatomical shape residuals while retaining enough anatomy for segmentation?",
+  "design_principle": "Deterministic shrinkage toward a TRAIN-only signed distance atlas under a fixed anatomy-fidelity budget.",
+  "p2_transform": {
+    "input_shape": [3, 64, 64],
+    "formula": "D_lambda = (1 - lambda) * D_src + lambda * D_atlas; M_lambda = 1[D_lambda >= 0]",
+    "train_atlas_file": "train_atlas.npy",
+    "train_atlas_sha256": "91ed4eefec257c793ff646ec1f7e347ce6c0feaa3ae22ed8c5825cf8c39e0eb9",
+    "frozen_lambda": 0.3400,
+    "train_retention_achieved": {
+      "macro_dice": 0.94000,
+      "per_structure_dice": [0.94247, 0.94466, 0.93287]
+    }
+  },
+  "data": {
+    "train_pairs": "image_pairs/image_pairs_training_10000.txt",
+    "val_pairs": "image_pairs/image_pairs_validation_2000.txt",
+    "test_accessed": false
+  },
+  "condition_cache": {
+    "teacher_path": "archive/train_seg_unet/best.pth",
+    "teacher_sha256": "2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0",
+    "cache_dir": "research_agent/ibr_s1_condition_p2_cache/",
+    "train_maps": {"file": "train_p2.npy", "n": 18089, "shape": [18089, 3, 64, 64]},
+    "val_maps": {"file": "val_p2.npy", "n": 3484, "shape": [3484, 3, 64, 64]}
+  },
+  "attacker": {
+    "arm_A_anatomy_only": "ResNet-18 (3ch 64x64) -> e_map 128 -> MLP(|e1-e2|)",
+    "arm_B_pathology_only": "MLP 14->64->64->128 -> e_path -> MLP(|e1-e2|) (reused from STEP 7A)",
+    "arm_C_joint": "concat(e_map,e_path) 256 -> MLP(|e1-e2|)",
+    "order_invariant": true,
+    "objective": "BCEWithLogitsLoss",
+    "optimizer": {"name": "Adam", "lr": 1e-4},
+    "batch_size": 64,
+    "early_stopping_patience": 5,
+    "checkpoint": "minimum validation BCE",
+    "max_epochs": 60
+  },
+  "seeds": {"arms": ["A", "B", "C"], "seeds": [0, 1, 2], "all_numerically_valid": true},
+  "primary_statistic_joint": {
+    "n": 3,
+    "mean": 0.69800,
+    "sd_ddof1": 0.00482,
+    "median": 0.69794,
+    "min": 0.69322,
+    "max": 0.70284
+  },
+  "per_seed": [
+    {"arm": "A", "seed": 0, "best_val_loss": 0.60897, "best_val_auc": 0.72770, "epoch": 5, "termination": "early_stopping_patience_5"},
+    {"arm": "A", "seed": 1, "best_val_loss": 0.61956, "best_val_auc": 0.69973, "epoch": 2, "termination": "early_stopping_patience_5"},
+    {"arm": "A", "seed": 2, "best_val_loss": 0.62300, "best_val_auc": 0.69449, "epoch": 2, "termination": "early_stopping_patience_5"},
+    {"arm": "B", "seed": 0, "best_val_loss": 0.67601, "best_val_auc": 0.60359, "epoch": 16, "termination": "early_stopping_patience_5", "reused_from_7A": true},
+    {"arm": "B", "seed": 1, "best_val_loss": 0.67473, "best_val_auc": 0.60889, "epoch": 8, "termination": "early_stopping_patience_5", "reused_from_7A": true},
+    {"arm": "B", "seed": 2, "best_val_loss": 0.67286, "best_val_auc": 0.61113, "epoch": 22, "termination": "early_stopping_patience_5", "reused_from_7A": true},
+    {"arm": "C", "seed": 0, "best_val_loss": 0.62707, "best_val_auc": 0.69794, "epoch": 4, "termination": "early_stopping_patience_5"},
+    {"arm": "C", "seed": 1, "best_val_loss": 0.61913, "best_val_auc": 0.69322, "epoch": 3, "termination": "early_stopping_patience_5"},
+    {"arm": "C", "seed": 2, "best_val_loss": 0.62394, "best_val_auc": 0.70284, "epoch": 4, "termination": "early_stopping_patience_5"}
+  ],
+  "ablation": {
+    "arm_A_p2_anatomy": {"n": 3, "mean": 0.70731, "sd": 0.01783, "min": 0.69449, "max": 0.72770},
+    "arm_B_pathology": {"n": 3, "mean": 0.60787, "sd": 0.00387, "min": 0.60359, "max": 0.61113},
+    "arm_C_joint": {"n": 3, "mean": 0.69800, "sd": 0.00482, "min": 0.69322, "max": 0.70284}
+  },
+  "descriptive_comparison_across_family": {
+    "exact_7A": {"macro_dice": 1.0000, "anatomy_auc": 0.833, "pathology_auc": 0.608, "joint_auc": 0.820, "delta_anatomy": 0.212},
+    "p1_7B": {"macro_dice": 0.9746, "anatomy_auc": 0.721, "pathology_auc": 0.608, "joint_auc": 0.712, "delta_anatomy": 0.104},
+    "p2_7C": {"macro_dice": 0.9270, "anatomy_auc": 0.707, "pathology_auc": 0.608, "joint_auc": 0.698, "delta_anatomy": 0.090}
+  },
+  "validation_anatomy_retention": {
+    "Left Lung": {"dice": 0.9266, "iou": 0.8658, "hd95_px": 2.54},
+    "Right Lung": {"dice": 0.9318, "iou": 0.8742, "hd95_px": 2.62},
+    "Heart": {"dice": 0.9227, "iou": 0.8598, "hd95_px": 2.78},
+    "macro_mean": {"dice": 0.9270, "iou": 0.8666, "hd95_px": 2.65}
+  },
+  "load_bearing_tests": {
+    "test1_atlas_train_only": true,
+    "test2_val_never_affects_lambda": true,
+    "test3_test_inaccessible": true,
+    "test4_signed_distance_deterministic": true,
+    "test5_lambda_reproducible": true,
+    "test6_output_mask_binary_64x64": true,
+    "test7_no_pixels_no_identifiers": true,
+    "test8_pairs_balanced": true,
+    "test9_order_invariant": true,
+    "test10_pathology_identical_to_7A": true
+  },
+  "decision_logic_outcome": "Primary condition family is CLOSED. Do NOT train generator. Do NOT invent P3. Next research route: BACKUP — multi-attacker constrained latent-manifold anonymization.",
+  "strict_stop": "P2 CONDITION CAPACITY: FAIL",
+  "artifacts": [
+    "research_agent/14_P2_ATLAS_NORMALIZATION.md",
+    "research_agent/14_P2_ATLAS_NORMALIZATION_summary.json",
+    "research_agent/ibr_s1_condition_p2_cache/",
+    "research_agent/ibr_s1_condition_p2_capacity/"
+  ]
+}

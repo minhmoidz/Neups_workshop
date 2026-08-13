@@ -1,0 +1,79 @@
+{
+  "step": "7D",
+  "title": "Backup Latent-Manifold Feasibility Audit",
+  "status": "AUDIT_ONLY_NO_TRAINING",
+  "decision": "LATENT BACKUP: REQUIRES GENERATOR PRETRAINING",
+  "primary_reference": {
+    "title": "Generative Medical Image Anonymization Based on Latent Code Projection and Optimization",
+    "authors": ["Huiyu Li", "Nicholas Ayache", "Hervé Delingette"],
+    "venue": "ISBI 2025",
+    "arxiv_id": "2501.09114",
+    "github_repo": "https://github.com/Huiyu-Li/GMIA",
+    "license": "Open Academic",
+    "generator_arch": "StyleGAN-style / Latent Projection",
+    "latent_space": "W+",
+    "expected_resolution": [256, 256],
+    "dataset": "MIMIC-CXR"
+  },
+  "critical_question_1_checkpoints": {
+    "generator_checkpoint": "MUST BE TRAINED (Not hosted upstream)",
+    "encoder_checkpoint": "MUST BE TRAINED",
+    "identity_encoder_checkpoint": "PUBLICLY AVAILABLE (standard backbones)",
+    "utility_encoder_checkpoint": "PUBLICLY AVAILABLE (CheXNet / torchvision)"
+  },
+  "critical_question_2_nih_compatibility": {
+    "nih_resolution": [256, 256],
+    "domain_shift": "Significant domain difference between MIMIC DICOMs and NIH PNGs",
+    "classification": "REQUIRES GENERATOR RETRAINING"
+  },
+  "critical_question_3_project_assets": {
+    "workspace_checkpoints_scanned": [
+      "networks/pretrained_generator_prichexy_net.pth",
+      "networks/corrected_baseline/generator_lowest_total_loss_corrected.pth",
+      "archive/train_seg_unet/best.pth",
+      "networks/pretrained_classifier.pth",
+      "networks/pretrained_verification_model.pth"
+    ],
+    "valid_generative_manifolds_found": 0,
+    "note": "Workspace contains UNet autoencoders (PriCheXy-Net) and UNet segmentation models, but zero pretrained StyleGAN / Diffusion generative manifolds."
+  },
+  "critical_question_4_minimal_formulation": {
+    "latent_optimization": "x -> w0 = E(x), x' = G(w), optimize w in W+",
+    "privacy_objective": "L_priv = max(s_ResNet18(x', x), s_DenseNet121(x', x))",
+    "utility_losses": ["L_path (classifier)", "L_mask (UNet seg)", "L_boundary (signed distance)"],
+    "manifold_regularization": "L_reg = ||w - w0||^2 + lambda * ||w - w_bar||^2"
+  },
+  "novelty_audit": {
+    "generic": "Standard latent projection + single identity/utility loss",
+    "proposed_differentiators": [
+      "Multi-attacker worst-case max(s_A, s_B) privacy formulation",
+      "UNet mask + signed-distance boundary anatomical preservation",
+      "Adaptive retrained verifier evaluation under strict protocol"
+    ],
+    "assessment": "Strong novelty if multi-attacker max-min optimization and boundary-preserving constraints are implemented."
+  },
+  "compute_feasibility": {
+    "hardware": "NVIDIA RTX 5070 Ti 16 GB",
+    "scenario_A_pretrained_manifold": {
+      "vram": "8-12 GB",
+      "per_image_opt_time": "15-30s",
+      "val_dataset_time": "8-16 GPU-hours"
+    },
+    "scenario_B_generator_training_required": {
+      "dataset": "NIH ChestX-ray14 (112,120 images)",
+      "vram": "12-16 GB",
+      "estimated_training_time": "3-7 GPU-days",
+      "flag": "Generator retraining from scratch requires multiple GPU-days."
+    }
+  },
+  "load_bearing_discipline": {
+    "test_accessed": false,
+    "models_trained": false,
+    "latent_optimization_run": false,
+    "p3_created": false
+  },
+  "artifacts": [
+    "research_agent/15_LATENT_BACKUP_FEASIBILITY.md",
+    "research_agent/15_LATENT_BACKUP_FEASIBILITY_summary.json"
+  ]
+}
