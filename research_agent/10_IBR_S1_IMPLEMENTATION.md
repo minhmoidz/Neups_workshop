@@ -45,6 +45,8 @@ Tensor shapes (B=2 smoke): `z_id (2,128)`, `z_med (2,512,16,16)`, `x_self (2,1,2
 | Pathology classifier | `networks/pretrained_classifier.pth` | `8ad15b38…5e663` | DenseNet-121 14-label sigmoid | 6,968,206 | TEST 7 + loader assert |
 | Segmentation teacher | `archive/train_seg_unet/best.pth` | `2dfdcf9b…73e0` | `UNetSeg(1,3,16)` (checkpoint `init_features=16`) | 1,942,323 | TEST 7 + prefix assert |
 
+> **Param-count reconciliation with the STEP 6A lock:** the lock (§1) reports 1,945,285 for the teacher. That number is the full `state_dict` total including the 2,962 `num_batches_tracked` buffer elements (18 BatchNorm layers, one scalar each). `module.parameters()` yields 1,942,323; 1,945,285 − 1,942,323 = 2,962. Same checkpoint, different counting convention (buffers vs parameters).
+
 Both loaded with `eval()`, `requires_grad_(False)`. Gradients propagate THROUGH their forwards to `x_anon` (no `torch.no_grad` on those paths — TEST 3/8).
 
 ## 4. Loss graph (exactly the STEP 6A lock)
