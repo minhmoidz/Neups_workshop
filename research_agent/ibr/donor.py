@@ -10,6 +10,7 @@ Protocol (locked in STEP 6A):
 """
 
 import json
+import hashlib
 import os
 
 import numpy as np
@@ -76,6 +77,28 @@ class DonorSampler:
         return splits.pop()
 
     # -- deterministic donor selection --------------------------------------
+    def donor_for(self, source_image):
+        """Deterministic per-source donor (pure function of seed + image name).
+
+        Unlike __call__ (which keys on the sorted batch list), this gives an
+        identical donor for a source image regardless of how it is batched, so
+        donor loading can be parallelised inside DataLoader workers while the
+        mapping stays reproducible across processes and batchings.
+        """
+        src_pid = int(self.patient_by_image[source_image])
+        split = self._split_for(source_image)
+        pool = self._pool[split]
+        candidates = []
+        for pid in pool['patients']:
+            if pid != src_pid:
+                candidates.extend(pool['images_by_patient'][pid])
+        assert len(candidates) > 0, "No donor candidate for %s in %s" % (source_image, split)
+        key = hashlib.sha256(repr(source_image).encode()).hexdigest()
+        rng = np.random.default_rng(self.seed + int(key[:16], 16) % (2**32))
+        donor = candidates[int(rng.integers(0, len(candidates)))]
+        assert self.patient_by_image[donor] != src_pid, "Donor must differ from source patient"
+        return donor
+
     def __call__(self, source_images, rng=None):
         """Return donor image index (str) for each source image index.
 
@@ -84,7 +107,12 @@ class DonorSampler:
         """
         source_images = list(source_images)
         if rng is None:
-            rng = np.random.default_rng(self.seed + hash(tuple(sorted(source_images))) % (2**32))
+            # Content-addressed key: built-in hash() is salted per-process, which would
+            # break cross-process reproducibility. Use a stable digest of the sorted
+            # source list (STEP 6A lock #5: deterministic donor mapping given a seed,
+            # reproducible across runs).
+            key = hashlib.sha256(repr(sorted(source_images)).encode()).hexdigest()
+            rng = np.random.default_rng(self.seed + int(key[:16], 16) % (2**32))
         split = self.allowed_donor_pool(source_images)
         pool = self._pool[split]
         donor_images = []
