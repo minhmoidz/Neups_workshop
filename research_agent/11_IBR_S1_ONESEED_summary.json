@@ -1,0 +1,51 @@
+{
+  "step": "6C",
+  "status": "STOPPED_BEFORE_TRAINING",
+  "stop_reason": "CHECKPOINT SELECTION UNSPECIFIED",
+  "commit": "8f085d6",
+  "branch": "main",
+  "clean_tree": true,
+  "source_of_truth": [
+    "research_agent/09_IBR_PREIMPLEMENTATION_LOCK.md",
+    "research_agent/10_IBR_S1_IMPLEMENTATION.md",
+    "research_agent/10_IBR_S1_summary.json"
+  ],
+  "gate_text": "If 09_IBR_PREIMPLEMENTATION_LOCK.md does NOT explicitly define a checkpoint-selection rule, then STOP BEFORE TRAINING and report CHECKPOINT SELECTION UNSPECIFIED. Do NOT invent a checkpoint-selection rule.",
+  "specified_by_lock": {
+    "graph": "x_self=G(z_id,z_med); x_anon=G(z_id_donor,z_med); L_rec ONLY on x_self",
+    "z_id_dim": 128,
+    "z_med": "spatial bottleneck map",
+    "s1_objective": "L_rec + L_path + L_anat + L_zid_pair + L_zmed_adv",
+    "lambda": "all 1.0, GRL lambda 1.0",
+    "optimizers": "Adam lr=1e-4 E/G/V; Adam lr=1e-4 H_med",
+    "batch_size": 16,
+    "frozen_classifier_sha": "8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663",
+    "frozen_seg_teacher_sha": "2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0",
+    "validation_references": {
+      "adaptive_reid_val": 0.8382,
+      "classification_auc14_val": 0.793827,
+      "dice_val": 0.955019
+    },
+    "gates": {
+      "privacy": "adaptive val Re-ID <= 0.750",
+      "class_drop": "<= 0.030 (>= 0.7638)",
+      "dice_drop": "<= 0.025 (>= 0.9300)"
+    }
+  },
+  "not_specified_by_lock": {
+    "s1_epoch_count": false,
+    "s1_schedule_or_pretraining_phase": false,
+    "s1_checkpoint_selection_rule": false,
+    "s1_checkpoint_selection_metric": false
+  },
+  "training_started": false,
+  "attacker_trained": false,
+  "test_touched": false,
+  "seed_42_run": false,
+  "required_to_unblock": [
+    "explicit S1 training schedule (epoch count, optional pretraining phase)",
+    "explicit S1 checkpoint-selection rule with tie-breaking",
+    "re-issue of the same ONE S1 (seed 42) + ONE attacker (seed 42) budget"
+  ],
+  "classification": "CHECKPOINT SELECTION UNSPECIFIED"
+}
