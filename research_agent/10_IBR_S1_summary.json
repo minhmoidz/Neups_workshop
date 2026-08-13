@@ -1,0 +1,94 @@
+{
+  "step": "6B",
+  "package": "IBR S1 implementation + load-bearing tests",
+  "source_of_truth": "research_agent/09_IBR_PREIMPLEMENTATION_LOCK.md",
+  "status": "IBR S1 CODE READY FOR 1-SEED SANITY",
+  "training_run_started": false,
+  "test_split_accessed": false,
+  "attacker_trained": false,
+  "architecture": {
+    "encoder": "IBREncoder U-Net init_features=32, 256x256x1 -> bottleneck 16x16x512",
+    "z_id_dim": 128,
+    "z_med": "spatial (B,512,16,16)",
+    "decoder": "IBRDecoder U-Net skip connections, z_id injected at bottleneck, tanh output",
+    "z_id_verifier": "ZIdVerifier MLP(256->128->1) BCE",
+    "z_med_adversary": "ZMedAdversary 1x1 conv -> GAP -> Linear, GRL on encoder path",
+    "grl_lambda": 1.0,
+    "trainable_params": 8089524
+  },
+  "losses": {
+    "L_rec": "L1(x_self, x) ONLY x_self",
+    "L_path": "BCE(classifier(x_anon), y_path_source)",
+    "L_anat": "MSE(seg(x_anon), seg(x_source))",
+    "L_zid_pair": "BCE(V(z_id, z_id_donor), y_pair)",
+    "L_zmed_adv": "BCE(H_med(GRL(z_med), GRL(z_med_donor)), y_pair)",
+    "lambda_rec": 1.0,
+    "lambda_path": 1.0,
+    "lambda_anat": 1.0,
+    "lambda_zid": 1.0,
+    "lambda_adv": 1.0,
+    "mutual_information_claim": false
+  },
+  "frozen_checkpoints": {
+    "classifier": {
+      "path": "networks/pretrained_classifier.pth",
+      "sha256": "8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663",
+      "architecture": "DenseNet-121 14-label",
+      "params": 6968206
+    },
+    "segmentation_teacher": {
+      "path": "archive/train_seg_unet/best.pth",
+      "sha256": "2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0",
+      "architecture": "UNetSeg(in=1,out=3,init_features=16)",
+      "params": 1942323
+    }
+  },
+  "donor_protocol": {
+    "donor_not_equal_source": true,
+    "train_donor_pool_only": true,
+    "validation_donor_pool_patient_disjoint": true,
+    "test_donor_pool": "none (TEST source rejected)",
+    "deterministic_for_seed": true,
+    "seed_changes_mapping": true
+  },
+  "tests": {
+    "1_shapes": "PASS",
+    "2_reconstruction_isolation": "PASS",
+    "3_frozen_utility_grads": "PASS",
+    "4_grl_sign": "PASS",
+    "5_zid_verification_sensitivity": "PASS",
+    "6_donor_safety": "PASS",
+    "7_checkpoint_provenance": "PASS",
+    "8_gradient_ownership": "PASS",
+    "all_pass": true
+  },
+  "dry_run": {
+    "batch_size": 16,
+    "device": "RTX 5070 Ti 16GB",
+    "peak_vram_gb": 9.68,
+    "free_gb": 5.58,
+    "bs16_feasible": true,
+    "gradient_accumulation_introduced": false,
+    "vs_6a_estimate_gb": 6.78,
+    "note": "dry-run higher than 6A probe because frozen-model activations are retained in-graph for gradient flow to x_anon"
+  },
+  "training_entry_point": {
+    "path": "research_agent/ibr/train_s1.py",
+    "test_split_rejected": true,
+    "explicit_split_required": true
+  },
+  "files_added": [
+    "research_agent/ibr/grl.py",
+    "research_agent/ibr/models.py",
+    "research_agent/ibr/frozen_models.py",
+    "research_agent/ibr/losses.py",
+    "research_agent/ibr/s1_loss.py",
+    "research_agent/ibr/ibr_model.py",
+    "research_agent/ibr/donor.py",
+    "research_agent/ibr/train_s1.py",
+    "research_agent/ibr/dry_run_s1.py",
+    "research_agent/ibr/__init__.py",
+    "research_agent/test_ibr_s1.py",
+    "research_agent/10_IBR_S1_IMPLEMENTATION.md"
+  ]
+}
