@@ -35,3 +35,10 @@ research_agent/ibr_s1_condition_cache/*.npy
 research_agent/ibr_s1_condition_p1_cache/*.npy
 research_agent/ibr_s1_condition_p2_cache/*.npy
 
+# CompDiff model weights & artifacts
+*.safetensors
+research_agent/compdiff_model/
+research_agent/compdiff_artifacts/*.png
+research_agent/compdiff_artifacts/test_m*.json
+
+

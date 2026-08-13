@@ -1,0 +1,2379 @@
+{
+  "seed": 42,
+  "train_count": 48,
+  "val_count": 48,
+  "nih_labels": [
+    "Atelectasis",
+    "Cardiomegaly",
+    "Effusion",
+    "Infiltration",
+    "Mass",
+    "Nodule",
+    "Pneumonia",
+    "Pneumothorax",
+    "Consolidation",
+    "Edema",
+    "Emphysema",
+    "Fibrosis",
+    "Pleural_Thickening",
+    "Hernia"
+  ],
+  "train_label_distribution": {
+    "Atelectasis": 5,
+    "Cardiomegaly": 3,
+    "Effusion": 7,
+    "Infiltration": 9,
+    "Mass": 4,
+    "Nodule": 3,
+    "Pneumonia": 4,
+    "Pneumothorax": 4,
+    "Consolidation": 3,
+    "Edema": 3,
+    "Emphysema": 3,
+    "Fibrosis": 3,
+    "Pleural_Thickening": 3,
+    "Hernia": 3
+  },
+  "val_label_distribution": {
+    "Atelectasis": 7,
+    "Cardiomegaly": 4,
+    "Effusion": 11,
+    "Infiltration": 10,
+    "Mass": 5,
+    "Nodule": 3,
+    "Pneumonia": 3,
+    "Pneumothorax": 3,
+    "Consolidation": 3,
+    "Edema": 3,
+    "Emphysema": 3,
+    "Fibrosis": 3,
+    "Pleural_Thickening": 3,
+    "Hernia": 3
+  },
+  "train_evaluable_labels": [
+    "Atelectasis",
+    "Cardiomegaly",
+    "Effusion",
+    "Infiltration",
+    "Mass",
+    "Nodule",
+    "Pneumonia",
+    "Pneumothorax",
+    "Consolidation",
+    "Edema",
+    "Emphysema",
+    "Fibrosis",
+    "Pleural_Thickening",
+    "Hernia"
+  ],
+  "val_evaluable_labels": [
+    "Atelectasis",
+    "Cardiomegaly",
+    "Effusion",
+    "Infiltration",
+    "Mass",
+    "Nodule",
+    "Pneumonia",
+    "Pneumothorax",
+    "Consolidation",
+    "Edema",
+    "Emphysema",
+    "Fibrosis",
+    "Pleural_Thickening",
+    "Hernia"
+  ],
+  "train_subset": [
+    {
+      "index": 0,
+      "image_id": "00009386_003.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00009386_003.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 1,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 1,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Effusion",
+        "Infiltration",
+        "Pneumonia",
+        "Edema"
+      ]
+    },
+    {
+      "index": 1,
+      "image_id": "00016805_004.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00016805_004.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 1,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 1,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 1,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis",
+        "Mass",
+        "Pneumothorax",
+        "Pleural_Thickening"
+      ]
+    },
+    {
+      "index": 2,
+      "image_id": "00004747_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00004747_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 1,
+        "Fibrosis": 1,
+        "Pleural_Thickening": 1,
+        "Hernia": 1
+      },
+      "positive_labels": [
+        "Infiltration",
+        "Emphysema",
+        "Fibrosis",
+        "Pleural_Thickening",
+        "Hernia"
+      ]
+    },
+    {
+      "index": 3,
+      "image_id": "00020363_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00020363_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 1,
+        "Effusion": 1,
+        "Infiltration": 1,
+        "Mass": 1,
+        "Nodule": 1,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 1,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Cardiomegaly",
+        "Effusion",
+        "Infiltration",
+        "Mass",
+        "Nodule",
+        "Consolidation"
+      ]
+    },
+    {
+      "index": 4,
+      "image_id": "00014436_008.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00014436_008.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 1,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Pneumonia"
+      ]
+    },
+    {
+      "index": 5,
+      "image_id": "00001912_006.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00001912_006.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 1,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Pneumothorax"
+      ]
+    },
+    {
+      "index": 6,
+      "image_id": "00022672_002.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00022672_002.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 1,
+        "Effusion": 1,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 1,
+        "Edema": 1,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 1,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Cardiomegaly",
+        "Effusion",
+        "Consolidation",
+        "Edema",
+        "Pleural_Thickening"
+      ]
+    },
+    {
+      "index": 7,
+      "image_id": "00019784_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00019784_001.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis"
+      ]
+    },
+    {
+      "index": 8,
+      "image_id": "00009903_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00009903_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 1,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Fibrosis"
+      ]
+    },
+    {
+      "index": 9,
+      "image_id": "00007352_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00007352_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 1
+      },
+      "positive_labels": [
+        "Hernia"
+      ]
+    },
+    {
+      "index": 10,
+      "image_id": "00007713_003.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00007713_003.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 1,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Infiltration",
+        "Emphysema"
+      ]
+    },
+    {
+      "index": 11,
+      "image_id": "00015562_002.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00015562_002.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 1,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Infiltration",
+        "Nodule"
+      ]
+    },
+    {
+      "index": 12,
+      "image_id": "00013376_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00013376_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 1,
+        "Pneumonia": 1,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Nodule",
+        "Pneumonia"
+      ]
+    },
+    {
+      "index": 13,
+      "image_id": "00003207_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00003207_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 1,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Pneumothorax"
+      ]
+    },
+    {
+      "index": 14,
+      "image_id": "00007442_010.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00007442_010.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 1,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 1,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Infiltration",
+        "Pneumonia",
+        "Edema"
+      ]
+    },
+    {
+      "index": 15,
+      "image_id": "00014884_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00014884_001.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis"
+      ]
+    },
+    {
+      "index": 16,
+      "image_id": "00010409_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00010409_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 1,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Fibrosis"
+      ]
+    },
+    {
+      "index": 17,
+      "image_id": "00008447_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00008447_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 1
+      },
+      "positive_labels": [
+        "Hernia"
+      ]
+    },
+    {
+      "index": 18,
+      "image_id": "00022545_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00022545_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 1,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Emphysema"
+      ]
+    },
+    {
+      "index": 19,
+      "image_id": "00015654_006.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00015654_006.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 0,
+        "Mass": 1,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Effusion",
+        "Mass"
+      ]
+    },
+    {
+      "index": 20,
+      "image_id": "00006875_014.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00006875_014.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 1,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 1,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Cardiomegaly",
+        "Pneumothorax"
+      ]
+    },
+    {
+      "index": 21,
+      "image_id": "00001637_005.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00001637_005.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 1,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Infiltration",
+        "Consolidation"
+      ]
+    },
+    {
+      "index": 22,
+      "image_id": "00005372_015.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00005372_015.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 23,
+      "image_id": "00018266_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00018266_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 24,
+      "image_id": "00002846_014.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00002846_014.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 25,
+      "image_id": "00019084_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00019084_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 26,
+      "image_id": "00015548_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00015548_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 27,
+      "image_id": "00014596_008.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00014596_008.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 28,
+      "image_id": "00019996_002.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00019996_002.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 29,
+      "image_id": "00021120_003.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00021120_003.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 30,
+      "image_id": "00012815_003.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00012815_003.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 31,
+      "image_id": "00021479_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00021479_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 32,
+      "image_id": "00004174_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00004174_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 33,
+      "image_id": "00005669_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00005669_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 34,
+      "image_id": "00002955_004.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00002955_004.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis"
+      ]
+    },
+    {
+      "index": 35,
+      "image_id": "00020216_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00020216_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 36,
+      "image_id": "00000731_007.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00000731_007.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 37,
+      "image_id": "00014010_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00014010_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 1,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Mass"
+      ]
+    },
+    {
+      "index": 38,
+      "image_id": "00010792_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00010792_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Effusion",
+        "Infiltration"
+      ]
+    },
+    {
+      "index": 39,
+      "image_id": "00005386_003.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00005386_003.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 40,
+      "image_id": "00018076_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00018076_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 41,
+      "image_id": "00010145_005.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00010145_005.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Effusion"
+      ]
+    },
+    {
+      "index": 42,
+      "image_id": "00012794_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00012794_000.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis",
+        "Effusion",
+        "Infiltration"
+      ]
+    },
+    {
+      "index": 43,
+      "image_id": "00010561_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00010561_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 44,
+      "image_id": "00014848_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00014848_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 45,
+      "image_id": "00020066_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00020066_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 46,
+      "image_id": "00014571_010.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00014571_010.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 47,
+      "image_id": "00002415_002.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00002415_002.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    }
+  ],
+  "val_subset": [
+    {
+      "index": 0,
+      "image_id": "00029500_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00029500_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 1,
+        "Mass": 1,
+        "Nodule": 0,
+        "Pneumonia": 1,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 1,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Effusion",
+        "Infiltration",
+        "Mass",
+        "Pneumonia",
+        "Pleural_Thickening"
+      ]
+    },
+    {
+      "index": 1,
+      "image_id": "00030561_006.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00030561_006.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 1,
+        "Nodule": 1,
+        "Pneumonia": 0,
+        "Pneumothorax": 1,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 1
+      },
+      "positive_labels": [
+        "Atelectasis",
+        "Infiltration",
+        "Mass",
+        "Nodule",
+        "Pneumothorax",
+        "Hernia"
+      ]
+    },
+    {
+      "index": 2,
+      "image_id": "00030059_008.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00030059_008.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 1,
+        "Edema": 1,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis",
+        "Effusion",
+        "Consolidation",
+        "Edema"
+      ]
+    },
+    {
+      "index": 3,
+      "image_id": "00028871_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00028871_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 1,
+        "Effusion": 1,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 1,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Cardiomegaly",
+        "Effusion",
+        "Fibrosis"
+      ]
+    },
+    {
+      "index": 4,
+      "image_id": "00026997_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026997_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 1,
+        "Edema": 0,
+        "Emphysema": 1,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Consolidation",
+        "Emphysema"
+      ]
+    },
+    {
+      "index": 5,
+      "image_id": "00025290_003.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00025290_003.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 1,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 1,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Infiltration",
+        "Pneumonia",
+        "Edema"
+      ]
+    },
+    {
+      "index": 6,
+      "image_id": "00029822_008.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00029822_008.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 1,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis",
+        "Effusion",
+        "Pneumothorax"
+      ]
+    },
+    {
+      "index": 7,
+      "image_id": "00029309_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00029309_000.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 1,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis",
+        "Fibrosis"
+      ]
+    },
+    {
+      "index": 8,
+      "image_id": "00030235_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00030235_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 1,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 1
+      },
+      "positive_labels": [
+        "Consolidation",
+        "Hernia"
+      ]
+    },
+    {
+      "index": 9,
+      "image_id": "00030615_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00030615_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 1,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Emphysema"
+      ]
+    },
+    {
+      "index": 10,
+      "image_id": "00026738_003.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026738_003.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 1,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis",
+        "Infiltration",
+        "Nodule"
+      ]
+    },
+    {
+      "index": 11,
+      "image_id": "00026041_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026041_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 1,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Infiltration",
+        "Pleural_Thickening"
+      ]
+    },
+    {
+      "index": 12,
+      "image_id": "00030374_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00030374_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 1,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Cardiomegaly"
+      ]
+    },
+    {
+      "index": 13,
+      "image_id": "00030129_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00030129_001.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 1,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis",
+        "Effusion",
+        "Infiltration",
+        "Pneumonia"
+      ]
+    },
+    {
+      "index": 14,
+      "image_id": "00026281_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026281_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 1,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Pneumothorax"
+      ]
+    },
+    {
+      "index": 15,
+      "image_id": "00027813_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00027813_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 1,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Infiltration",
+        "Edema"
+      ]
+    },
+    {
+      "index": 16,
+      "image_id": "00026704_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026704_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 1,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Fibrosis"
+      ]
+    },
+    {
+      "index": 17,
+      "image_id": "00028307_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00028307_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 1
+      },
+      "positive_labels": [
+        "Hernia"
+      ]
+    },
+    {
+      "index": 18,
+      "image_id": "00026489_003.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026489_003.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 1,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Emphysema"
+      ]
+    },
+    {
+      "index": 19,
+      "image_id": "00030271_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00030271_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 1,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Nodule"
+      ]
+    },
+    {
+      "index": 20,
+      "image_id": "00026202_008.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026202_008.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 1,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Mass"
+      ]
+    },
+    {
+      "index": 21,
+      "image_id": "00027485_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00027485_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 0,
+        "Mass": 1,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 1,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Effusion",
+        "Mass",
+        "Pleural_Thickening"
+      ]
+    },
+    {
+      "index": 22,
+      "image_id": "00028020_002.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00028020_002.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 1,
+        "Effusion": 1,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Cardiomegaly",
+        "Effusion"
+      ]
+    },
+    {
+      "index": 23,
+      "image_id": "00026813_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026813_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 24,
+      "image_id": "00025534_002.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00025534_002.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 25,
+      "image_id": "00029035_006.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00029035_006.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 26,
+      "image_id": "00027642_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00027642_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 27,
+      "image_id": "00027201_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00027201_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 28,
+      "image_id": "00025638_004.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00025638_004.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 29,
+      "image_id": "00027874_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00027874_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 30,
+      "image_id": "00030381_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00030381_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 31,
+      "image_id": "00028105_003.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00028105_003.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 32,
+      "image_id": "00025817_002.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00025817_002.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 33,
+      "image_id": "00026692_003.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026692_003.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 34,
+      "image_id": "00027506_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00027506_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 35,
+      "image_id": "00026501_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026501_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 36,
+      "image_id": "00028819_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00028819_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 1,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 1,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Cardiomegaly",
+        "Mass"
+      ]
+    },
+    {
+      "index": 37,
+      "image_id": "00028890_006.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00028890_006.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Effusion"
+      ]
+    },
+    {
+      "index": 38,
+      "image_id": "00026435_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026435_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 39,
+      "image_id": "00025988_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00025988_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 40,
+      "image_id": "00027603_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00027603_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Effusion",
+        "Infiltration"
+      ]
+    },
+    {
+      "index": 41,
+      "image_id": "00029802_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00029802_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 42,
+      "image_id": "00027534_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00027534_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 43,
+      "image_id": "00026005_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00026005_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    },
+    {
+      "index": 44,
+      "image_id": "00025793_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00025793_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Effusion",
+        "Infiltration"
+      ]
+    },
+    {
+      "index": 45,
+      "image_id": "00027307_000.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00027307_000.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 1,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Infiltration"
+      ]
+    },
+    {
+      "index": 46,
+      "image_id": "00028655_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00028655_001.png",
+      "labels": {
+        "Atelectasis": 1,
+        "Cardiomegaly": 0,
+        "Effusion": 1,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": [
+        "Atelectasis",
+        "Effusion"
+      ]
+    },
+    {
+      "index": 47,
+      "image_id": "00025279_001.png",
+      "image_path": "/home/minhtt/datasets/nih/images/00025279_001.png",
+      "labels": {
+        "Atelectasis": 0,
+        "Cardiomegaly": 0,
+        "Effusion": 0,
+        "Infiltration": 0,
+        "Mass": 0,
+        "Nodule": 0,
+        "Pneumonia": 0,
+        "Pneumothorax": 0,
+        "Consolidation": 0,
+        "Edema": 0,
+        "Emphysema": 0,
+        "Fibrosis": 0,
+        "Pleural_Thickening": 0,
+        "Hernia": 0
+      },
+      "positive_labels": []
+    }
+  ],
+  "manifest_sha256": "824a6e58cdc12fec81034a8b5ae88d0ef38106020799b1c6fb4cbd3b42c8aea3"
+}

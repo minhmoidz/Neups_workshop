@@ -1,0 +1,581 @@
+{
+  "step": "7F",
+  "title": "COMPDiff Pretrained CXR Manifold Inversion / Reconstruction Smoke",
+  "decision": "COMPDiff MANIFOLD SMOKE: FAIL",
+  "all_gates_passed": false,
+  "gates": {
+    "delta_class": {
+      "observed": -0.0445226024042783,
+      "threshold": -0.02,
+      "passed": false
+    },
+    "macro_dice": {
+      "observed": 0.9999999999999236,
+      "threshold": 0.93,
+      "passed": true
+    },
+    "macro_iou": {
+      "observed": 0.9999999999998473,
+      "threshold": 0.87,
+      "passed": true
+    },
+    "macro_hd95": {
+      "observed": 0.0,
+      "threshold": 3.0,
+      "passed": true
+    },
+    "numerical_finite": true
+  },
+  "environment": {
+    "pytorch_version": "2.7.0+cu128",
+    "cuda_version": "12.8",
+    "gpu_name": "NVIDIA GeForce RTX 5070 Ti",
+    "idle_vram_mb": 0.0,
+    "loaded_model_vram_mb": 2478.177734375,
+    "peak_vram_mb": 3134.625
+  },
+  "model_provenance": {
+    "repo_id": "mahmoudibra98/compdiff-chest-xray",
+    "revision": "ff145044ca3f525dce25c2fcbe6a3c252ff1d2d1",
+    "local_path": "/home/minhtt/Neups_workshop/research_agent/compdiff_model",
+    "total_downloaded_bytes": 5161556379,
+    "configs": {
+      "model_index.json": {
+        "sha256": "e33e1aaa62071cb689965c3d085d6a3940a0320a1cb713457da03d9a192a03e5",
+        "size_bytes": 643,
+        "config": {
+          "_class_name": "StableDiffusionPipeline",
+          "_diffusers_version": "0.35.1",
+          "_name_or_path": "stabilityai/stable-diffusion-2-1-base",
+          "feature_extractor": [
+            "transformers",
+            "CLIPImageProcessor"
+          ],
+          "image_encoder": [
+            null,
+            null
+          ],
+          "requires_safety_checker": false,
+          "safety_checker": [
+            null,
+            null
+          ],
+          "scheduler": [
+            "diffusers",
+            "PNDMScheduler"
+          ],
+          "text_encoder": [
+            "transformers",
+            "CLIPTextModel"
+          ],
+          "tokenizer": [
+            "transformers",
+            "CLIPTokenizer"
+          ],
+          "unet": [
+            "diffusers",
+            "UNet2DConditionModel"
+          ],
+          "vae": [
+            "diffusers",
+            "AutoencoderKL"
+          ]
+        }
+      },
+      "unet/config.json": {
+        "sha256": "50003c6527cb7b41356fa3fdf438b27865735f64a59ccbbf568e24fc6356eea0",
+        "size_bytes": 1873,
+        "config": {
+          "_class_name": "UNet2DConditionModel",
+          "_diffusers_version": "0.35.1",
+          "_name_or_path": "stabilityai/stable-diffusion-2-1-base",
+          "act_fn": "silu",
+          "addition_embed_type": null,
+          "addition_embed_type_num_heads": 64,
+          "addition_time_embed_dim": null,
+          "attention_head_dim": [
+            5,
+            10,
+            20,
+            20
+          ],
+          "attention_type": "default",
+          "block_out_channels": [
+            320,
+            640,
+            1280,
+            1280
+          ],
+          "center_input_sample": false,
+          "class_embed_type": null,
+          "class_embeddings_concat": false,
+          "conv_in_kernel": 3,
+          "conv_out_kernel": 3,
+          "cross_attention_dim": 1024,
+          "cross_attention_norm": null,
+          "down_block_types": [
+            "CrossAttnDownBlock2D",
+            "CrossAttnDownBlock2D",
+            "CrossAttnDownBlock2D",
+            "DownBlock2D"
+          ],
+          "downsample_padding": 1,
+          "dropout": 0.0,
+          "dual_cross_attention": false,
+          "encoder_hid_dim": null,
+          "encoder_hid_dim_type": null,
+          "flip_sin_to_cos": true,
+          "freq_shift": 0,
+          "in_channels": 4,
+          "layers_per_block": 2,
+          "mid_block_only_cross_attention": null,
+          "mid_block_scale_factor": 1,
+          "mid_block_type": "UNetMidBlock2DCrossAttn",
+          "norm_eps": 1e-05,
+          "norm_num_groups": 32,
+          "num_attention_heads": null,
+          "num_class_embeds": null,
+          "only_cross_attention": false,
+          "out_channels": 4,
+          "projection_class_embeddings_input_dim": null,
+          "resnet_out_scale_factor": 1.0,
+          "resnet_skip_time_act": false,
+          "resnet_time_scale_shift": "default",
+          "reverse_transformer_layers_per_block": null,
+          "sample_size": 64,
+          "time_cond_proj_dim": null,
+          "time_embedding_act_fn": null,
+          "time_embedding_dim": null,
+          "time_embedding_type": "positional",
+          "timestep_post_act": null,
+          "transformer_layers_per_block": 1,
+          "up_block_types": [
+            "UpBlock2D",
+            "CrossAttnUpBlock2D",
+            "CrossAttnUpBlock2D",
+            "CrossAttnUpBlock2D"
+          ],
+          "upcast_attention": false,
+          "use_linear_projection": true
+        }
+      },
+      "vae/config.json": {
+        "sha256": "44fe237ddc6be0538c05553382f55011172d7ca8e48c8c4baa72d0119972cdfe",
+        "size_bytes": 931,
+        "config": {
+          "_class_name": "AutoencoderKL",
+          "_diffusers_version": "0.35.1",
+          "_name_or_path": "/home/vito/ibrahimm/.cache/huggingface/hub/models--stabilityai--stable-diffusion-2-1-base/snapshots/5ede9e4bf3e3fd1cb0ef2f7a3fff13ee514fdf06/vae",
+          "act_fn": "silu",
+          "block_out_channels": [
+            128,
+            256,
+            512,
+            512
+          ],
+          "down_block_types": [
+            "DownEncoderBlock2D",
+            "DownEncoderBlock2D",
+            "DownEncoderBlock2D",
+            "DownEncoderBlock2D"
+          ],
+          "force_upcast": true,
+          "in_channels": 3,
+          "latent_channels": 4,
+          "latents_mean": null,
+          "latents_std": null,
+          "layers_per_block": 2,
+          "mid_block_add_attention": true,
+          "norm_num_groups": 32,
+          "out_channels": 3,
+          "sample_size": 768,
+          "scaling_factor": 0.18215,
+          "shift_factor": null,
+          "up_block_types": [
+            "UpDecoderBlock2D",
+            "UpDecoderBlock2D",
+            "UpDecoderBlock2D",
+            "UpDecoderBlock2D"
+          ],
+          "use_post_quant_conv": true,
+          "use_quant_conv": true
+        }
+      },
+      "scheduler/scheduler_config.json": {
+        "sha256": "ea4ea6286bee529f97e209a689ec7ea08b1203973988f81c19237d03b8bb5a02",
+        "size_bytes": 374,
+        "config": {
+          "_class_name": "PNDMScheduler",
+          "_diffusers_version": "0.35.1",
+          "beta_end": 0.012,
+          "beta_schedule": "scaled_linear",
+          "beta_start": 0.00085,
+          "clip_sample": false,
+          "num_train_timesteps": 1000,
+          "prediction_type": "epsilon",
+          "set_alpha_to_one": false,
+          "skip_prk_steps": true,
+          "steps_offset": 1,
+          "timestep_spacing": "leading",
+          "trained_betas": null
+        }
+      },
+      "text_encoder/config.json": {
+        "sha256": "acdc906ef44a4191d0fbb74dc18071f2126c610385efecb085baacf49c69ec56",
+        "size_bytes": 555,
+        "config": {
+          "architectures": [
+            "CLIPTextModel"
+          ],
+          "attention_dropout": 0.0,
+          "bos_token_id": 0,
+          "dropout": 0.0,
+          "eos_token_id": 2,
+          "hidden_act": "gelu",
+          "hidden_size": 1024,
+          "initializer_factor": 1.0,
+          "initializer_range": 0.02,
+          "intermediate_size": 4096,
+          "layer_norm_eps": 1e-05,
+          "max_position_embeddings": 77,
+          "model_type": "clip_text_model",
+          "num_attention_heads": 16,
+          "num_hidden_layers": 23,
+          "pad_token_id": 1,
+          "projection_dim": 512,
+          "torch_dtype": "float32",
+          "transformers_version": "4.55.4",
+          "vocab_size": 49408
+        }
+      }
+    },
+    "file_hashes_sample": {
+      "model_index.json": "e33e1aaa62071cb689965c3d085d6a3940a0320a1cb713457da03d9a192a03e5",
+      "text_encoder/config.json": "acdc906ef44a4191d0fbb74dc18071f2126c610385efecb085baacf49c69ec56",
+      "unet/config.json": "50003c6527cb7b41356fa3fdf438b27865735f64a59ccbbf568e24fc6356eea0",
+      "tokenizer/special_tokens_map.json": "f118ab3a983206e4f32583448de6bd6aae4ee21869135cef1f5848a753cdaab6",
+      "tokenizer/merges.txt": "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a",
+      "tokenizer/tokenizer_config.json": "cb591546bf1d3135b59adc6da78326e03a3d6b067c26cb81960fef8ef491708f",
+      "tokenizer/vocab.json": "e089ad92ba36837a0d31433e555c8f45fe601ab5c221d4f607ded32d9f7a4349",
+      "vae/config.json": "44fe237ddc6be0538c05553382f55011172d7ca8e48c8c4baa72d0119972cdfe",
+      "scheduler/scheduler_config.json": "ea4ea6286bee529f97e209a689ec7ea08b1203973988f81c19237d03b8bb5a02"
+    }
+  },
+  "subset_manifest_sha256": "824a6e58cdc12fec81034a8b5ae88d0ef38106020799b1c6fb4cbd3b42c8aea3",
+  "train_metrics": {
+    "classification": {
+      "evaluable_labels_count": 14,
+      "evaluable_labels": [
+        "Atelectasis",
+        "Cardiomegaly",
+        "Effusion",
+        "Infiltration",
+        "Mass",
+        "Nodule",
+        "Pneumonia",
+        "Pneumothorax",
+        "Consolidation",
+        "Edema",
+        "Emphysema",
+        "Fibrosis",
+        "Pleural_Thickening",
+        "Hernia"
+      ],
+      "auc_source": {
+        "Atelectasis": 0.8883720930232558,
+        "Cardiomegaly": 0.9185185185185185,
+        "Effusion": 0.9581881533101045,
+        "Infiltration": 0.7464387464387464,
+        "Mass": 0.9488636363636364,
+        "Nodule": 0.9407407407407408,
+        "Pneumonia": 0.6875,
+        "Pneumothorax": 0.8636363636363638,
+        "Consolidation": 0.9481481481481482,
+        "Edema": 0.9925925925925926,
+        "Emphysema": 0.9703703703703703,
+        "Fibrosis": 0.8296296296296296,
+        "Pleural_Thickening": 0.8666666666666667,
+        "Hernia": 0.6370370370370371
+      },
+      "auc_resize_control": {
+        "Atelectasis": 0.8883720930232558,
+        "Cardiomegaly": 0.8962962962962963,
+        "Effusion": 0.9581881533101045,
+        "Infiltration": 0.7321937321937322,
+        "Mass": 0.9602272727272727,
+        "Nodule": 0.9481481481481482,
+        "Pneumonia": 0.6818181818181818,
+        "Pneumothorax": 0.8863636363636364,
+        "Consolidation": 0.9407407407407408,
+        "Edema": 0.9925925925925926,
+        "Emphysema": 0.9703703703703704,
+        "Fibrosis": 0.8444444444444443,
+        "Pleural_Thickening": 0.874074074074074,
+        "Hernia": 0.6296296296296295
+      },
+      "auc_compdiff": {
+        "Atelectasis": 0.8186046511627907,
+        "Cardiomegaly": 0.9703703703703703,
+        "Effusion": 0.9477351916376308,
+        "Infiltration": 0.6182336182336182,
+        "Mass": 0.9715909090909092,
+        "Nodule": 0.762962962962963,
+        "Pneumonia": 0.7272727272727273,
+        "Pneumothorax": 0.8863636363636365,
+        "Consolidation": 0.9851851851851853,
+        "Edema": 0.9777777777777777,
+        "Emphysema": 0.9925925925925926,
+        "Fibrosis": 0.7407407407407407,
+        "Pleural_Thickening": 0.9037037037037037,
+        "Hernia": 0.6666666666666666
+      },
+      "delta_class_compdiff": {
+        "Atelectasis": -0.06976744186046513,
+        "Cardiomegaly": 0.051851851851851816,
+        "Effusion": -0.010452961672473782,
+        "Infiltration": -0.1282051282051282,
+        "Mass": 0.022727272727272818,
+        "Nodule": -0.1777777777777778,
+        "Pneumonia": 0.03977272727272729,
+        "Pneumothorax": 0.022727272727272707,
+        "Consolidation": 0.03703703703703709,
+        "Edema": -0.014814814814814836,
+        "Emphysema": 0.022222222222222254,
+        "Fibrosis": -0.0888888888888889,
+        "Pleural_Thickening": 0.03703703703703698,
+        "Hernia": 0.02962962962962956
+      },
+      "delta_class_resize": {
+        "Atelectasis": 0.0,
+        "Cardiomegaly": -0.022222222222222254,
+        "Effusion": 0.0,
+        "Infiltration": -0.014245014245014231,
+        "Mass": 0.011363636363636354,
+        "Nodule": 0.007407407407407418,
+        "Pneumonia": -0.005681818181818232,
+        "Pneumothorax": 0.022727272727272596,
+        "Consolidation": -0.007407407407407418,
+        "Edema": 0.0,
+        "Emphysema": 1.1102230246251565e-16,
+        "Fibrosis": 0.014814814814814725,
+        "Pleural_Thickening": 0.007407407407407307,
+        "Hernia": -0.007407407407407529
+      },
+      "macro_auc_source": 0.8711930497482722,
+      "macro_auc_resize_control": 0.8716756689808914,
+      "macro_auc_compdiff": 0.8549857666972365,
+      "macro_delta_class_compdiff": -0.016207283051035692,
+      "macro_delta_class_resize": 0.00048261923261927464
+    },
+    "segmentation_compdiff_vs_source": {
+      "Left Lung": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "Right Lung": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "Heart": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "macro": {
+        "dice": 0.9999999999999236,
+        "iou": 0.9999999999998473,
+        "hd95": 0.0
+      }
+    },
+    "segmentation_resize_vs_source": {
+      "Left Lung": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "Right Lung": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "Heart": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "macro": {
+        "dice": 0.9999999999999236,
+        "iou": 0.9999999999998473,
+        "hd95": 0.0
+      }
+    },
+    "timing": {
+      "mean_inversion_sec": 0.7204666237036387,
+      "mean_recon_sec": 0.7211802303791046,
+      "mean_total_sec_per_img": 1.4416468540827432,
+      "total_subset_sec": 69.19904899597168,
+      "wall_clock_total_sec": 76.98789858818054
+    }
+  },
+  "val_metrics": {
+    "classification": {
+      "evaluable_labels_count": 14,
+      "evaluable_labels": [
+        "Atelectasis",
+        "Cardiomegaly",
+        "Effusion",
+        "Infiltration",
+        "Mass",
+        "Nodule",
+        "Pneumonia",
+        "Pneumothorax",
+        "Consolidation",
+        "Edema",
+        "Emphysema",
+        "Fibrosis",
+        "Pleural_Thickening",
+        "Hernia"
+      ],
+      "auc_source": {
+        "Atelectasis": 0.8188153310104529,
+        "Cardiomegaly": 0.8409090909090908,
+        "Effusion": 0.8378378378378378,
+        "Infiltration": 0.7736842105263159,
+        "Mass": 0.9069767441860466,
+        "Nodule": 0.4592592592592592,
+        "Pneumonia": 0.8444444444444444,
+        "Pneumothorax": 0.7555555555555555,
+        "Consolidation": 0.5925925925925926,
+        "Edema": 0.9407407407407408,
+        "Emphysema": 0.9333333333333333,
+        "Fibrosis": 0.26666666666666666,
+        "Pleural_Thickening": 0.9185185185185185,
+        "Hernia": 0.8296296296296297
+      },
+      "auc_resize_control": {
+        "Atelectasis": 0.8083623693379791,
+        "Cardiomegaly": 0.8125,
+        "Effusion": 0.8329238329238329,
+        "Infiltration": 0.7684210526315789,
+        "Mass": 0.9116279069767442,
+        "Nodule": 0.4444444444444445,
+        "Pneumonia": 0.8148148148148149,
+        "Pneumothorax": 0.7333333333333333,
+        "Consolidation": 0.5925925925925927,
+        "Edema": 0.9407407407407408,
+        "Emphysema": 0.9259259259259259,
+        "Fibrosis": 0.25925925925925924,
+        "Pleural_Thickening": 0.8740740740740741,
+        "Hernia": 0.8148148148148148
+      },
+      "auc_compdiff": {
+        "Atelectasis": 0.89198606271777,
+        "Cardiomegaly": 0.6477272727272727,
+        "Effusion": 0.7444717444717445,
+        "Infiltration": 0.7289473684210527,
+        "Mass": 0.8232558139534885,
+        "Nodule": 0.5555555555555555,
+        "Pneumonia": 0.7481481481481481,
+        "Pneumothorax": 0.7555555555555555,
+        "Consolidation": 0.5333333333333333,
+        "Edema": 0.9111111111111111,
+        "Emphysema": 0.7259259259259259,
+        "Fibrosis": 0.37037037037037035,
+        "Pleural_Thickening": 0.8518518518518519,
+        "Hernia": 0.8074074074074074
+      },
+      "delta_class_compdiff": {
+        "Atelectasis": 0.07317073170731714,
+        "Cardiomegaly": -0.19318181818181812,
+        "Effusion": -0.09336609336609336,
+        "Infiltration": -0.044736842105263186,
+        "Mass": -0.08372093023255811,
+        "Nodule": 0.09629629629629627,
+        "Pneumonia": -0.09629629629629632,
+        "Pneumothorax": 0.0,
+        "Consolidation": -0.059259259259259234,
+        "Edema": -0.029629629629629672,
+        "Emphysema": -0.20740740740740748,
+        "Fibrosis": 0.10370370370370369,
+        "Pleural_Thickening": -0.06666666666666665,
+        "Hernia": -0.022222222222222365
+      },
+      "delta_class_resize": {
+        "Atelectasis": -0.010452961672473782,
+        "Cardiomegaly": -0.02840909090909083,
+        "Effusion": -0.004914004914004955,
+        "Infiltration": -0.0052631578947369695,
+        "Mass": 0.0046511627906976605,
+        "Nodule": -0.014814814814814725,
+        "Pneumonia": -0.02962962962962956,
+        "Pneumothorax": -0.022222222222222254,
+        "Consolidation": 1.1102230246251565e-16,
+        "Edema": 0.0,
+        "Emphysema": -0.007407407407407418,
+        "Fibrosis": -0.007407407407407418,
+        "Pleural_Thickening": -0.0444444444444444,
+        "Hernia": -0.014814814814814947
+      },
+      "macro_auc_source": 0.7656402825150346,
+      "macro_auc_resize_control": 0.7524167972764382,
+      "macro_auc_compdiff": 0.7211176801107563,
+      "macro_delta_class_compdiff": -0.0445226024042783,
+      "macro_delta_class_resize": -0.0132234852385964
+    },
+    "segmentation_compdiff_vs_source": {
+      "Left Lung": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "Right Lung": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "Heart": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "macro": {
+        "dice": 0.9999999999999236,
+        "iou": 0.9999999999998473,
+        "hd95": 0.0
+      }
+    },
+    "segmentation_resize_vs_source": {
+      "Left Lung": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "Right Lung": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "Heart": {
+        "dice_mean": 0.9999999999999236,
+        "iou_mean": 0.9999999999998473,
+        "hd95_mean": 0.0
+      },
+      "macro": {
+        "dice": 0.9999999999999236,
+        "iou": 0.9999999999998473,
+        "hd95": 0.0
+      }
+    },
+    "timing": {
+      "mean_inversion_sec": 0.7205901841322581,
+      "mean_recon_sec": 0.7213549762964249,
+      "mean_total_sec_per_img": 1.4419451604286828,
+      "total_subset_sec": 69.21336770057678,
+      "wall_clock_total_sec": 77.93699765205383
+    }
+  },
+  "contact_sheets_count": 48,
+  "commit": "df26420318b59964f2a55f0455fb69d4f938eb25"
+}
