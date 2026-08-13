@@ -1,0 +1,35 @@
+{
+  "step": "7A",
+  "teacher": {
+    "path": "archive/train_seg_unet/best.pth",
+    "sha256_full": "2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0",
+    "prefix_assert": "2dfdcf9b"
+  },
+  "image_base_path": "/home/minhtt/datasets/nih/images/",
+  "pair_files": {
+    "train": "image_pairs/image_pairs_training_10000.txt",
+    "val": "image_pairs/image_pairs_validation_2000.txt"
+  },
+  "map_shape": [
+    3,
+    256,
+    256
+  ],
+  "dtype": "float16",
+  "channel_order": [
+    "Left Lung",
+    "Right Lung",
+    "Heart"
+  ],
+  "built_at": "2026-08-13T15:50:00.823758+00:00",
+  "commit": "448ccb53bdb146ddf82b388500e96aadd6263c9f",
+  "test_accessed": false,
+  "train": {
+    "n_images": 18089,
+    "files": "train_maps.npy / train_images.json"
+  },
+  "val": {
+    "n_images": 3484,
+    "files": "val_maps.npy / val_images.json"
+  }
+}

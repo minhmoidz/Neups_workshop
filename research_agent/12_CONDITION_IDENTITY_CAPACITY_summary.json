@@ -1,0 +1,98 @@
+{
+  "step": "7A",
+  "title": "Source-condition identity-capacity test",
+  "status": "FAIL",
+  "decision_gate": {
+    "pass_requires": {"joint_mean_le": 0.60, "joint_max_le": 0.65, "all_valid": true},
+    "joint_mean_auc": 0.82042,
+    "joint_max_auc": 0.8353,
+    "passed": false,
+    "decision": "CONDITION CAPACITY: FAIL"
+  },
+  "scientific_question": "Can a freshly trained patient verifier recover identity using ONLY anatomy maps + pathology labels (no pixels/features/latent)?",
+  "condition": {
+    "anatomy": ["Left Lung", "Right Lung", "Heart"],
+    "anatomy_shape": [3, 256, 256],
+    "pathology": "14 NIH labels",
+    "no_pixels": true,
+    "no_image_features": true,
+    "no_source_appearance_latent": true
+  },
+  "data": {
+    "train_pairs": "image_pairs/image_pairs_training_10000.txt",
+    "train_pairs_sha256": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
+    "train_pairs_counts": {"rows": 10000, "pos": 5000, "neg": 5000, "unique_images": 18089},
+    "val_pairs": "image_pairs/image_pairs_validation_2000.txt",
+    "val_pairs_sha256": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7",
+    "val_pairs_counts": {"rows": 2000, "pos": 1000, "neg": 1000, "unique_images": 3484},
+    "test_accessed": false
+  },
+  "condition_cache": {
+    "teacher_path": "archive/train_seg_unet/best.pth",
+    "teacher_sha256": "2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0",
+    "teacher_arch": "UNetSeg(in=1, out=3, init_features=16)",
+    "teacher_params": 1942323,
+    "map_shape": [3, 256, 256],
+    "dtype": "float16",
+    "cache_dir": "research_agent/ibr_s1_condition_cache/",
+    "train_maps": {"file": "train_maps.npy", "n": 18089},
+    "val_maps": {"file": "val_maps.npy", "n": 3484},
+    "build_commit": "448ccb53bdb146ddf82b388500e96aadd6263c9f"
+  },
+  "attacker": {
+    "arm_A_anatomy_only": "ResNet-18 (3ch maps) -> e_map 128 -> MLP(|e1-e2|)",
+    "arm_B_pathology_only": "MLP 14->64->64->128 -> e_path -> MLP(|e1-e2|)",
+    "arm_C_joint": "concat(e_map,e_path) 256 -> MLP(|e1-e2|)",
+    "order_invariant": true,
+    "objective": "BCEWithLogitsLoss",
+    "optimizer": {"name": "Adam", "lr": 1e-4},
+    "batch_size": 64,
+    "early_stopping_patience": 5,
+    "checkpoint": "minimum validation BCE",
+    "max_epochs": 60
+  },
+  "seeds": {"arms": ["A", "B", "C"], "seeds": [0, 1, 2], "all_numerically_valid": true},
+  "primary_statistic_joint": {
+    "n": 3,
+    "mean": 0.82042,
+    "sd_ddof1": 0.01346,
+    "median": 0.81689,
+    "min": 0.80909,
+    "max": 0.8353
+  },
+  "per_seed": [
+    {"arm": "A", "seed": 0, "best_val_loss": 0.49287, "best_val_auc": 0.85137, "epoch": 8, "termination": "early_stopping_patience_5"},
+    {"arm": "A", "seed": 1, "best_val_loss": 0.51148, "best_val_auc": 0.82552, "epoch": 7, "termination": "early_stopping_patience_5"},
+    {"arm": "A", "seed": 2, "best_val_loss": 0.51906, "best_val_auc": 0.82077, "epoch": 9, "termination": "early_stopping_patience_5"},
+    {"arm": "B", "seed": 0, "best_val_loss": 0.67601, "best_val_auc": 0.60359, "epoch": 16, "termination": "early_stopping_patience_5"},
+    {"arm": "B", "seed": 1, "best_val_loss": 0.67473, "best_val_auc": 0.60889, "epoch": 8, "termination": "early_stopping_patience_5"},
+    {"arm": "B", "seed": 2, "best_val_loss": 0.67286, "best_val_auc": 0.61113, "epoch": 22, "termination": "early_stopping_patience_5"},
+    {"arm": "C", "seed": 0, "best_val_loss": 0.50432, "best_val_auc": 0.8353, "epoch": 9, "termination": "early_stopping_patience_5"},
+    {"arm": "C", "seed": 1, "best_val_loss": 0.53528, "best_val_auc": 0.80909, "epoch": 8, "termination": "early_stopping_patience_5"},
+    {"arm": "C", "seed": 2, "best_val_loss": 0.52387, "best_val_auc": 0.81689, "epoch": 7, "termination": "early_stopping_patience_5"}
+  ],
+  "ablation": {
+    "arm_A_anatomy": {"n": 3, "mean": 0.83256, "sd": 0.01647, "min": 0.82077, "max": 0.85137},
+    "arm_B_pathology": {"n": 3, "mean": 0.60787, "sd": 0.00387, "min": 0.60359, "max": 0.61113},
+    "arm_C_joint": {"n": 3, "mean": 0.82042, "sd": 0.01346, "min": 0.80909, "max": 0.8353}
+  },
+  "interpretation": "Identity recoverability comes predominantly from anatomy shape (maps alone ~0.83, joint ~0.82); pathology labels contribute a small lift over chance (~0.61). Reported as observed AUCs, not as percentages of identity information.",
+  "load_bearing_tests": {
+    "test1_test_inaccessible": true,
+    "test2_no_pixels_in_attacker": true,
+    "test3_no_filename_patientid_in_features": true,
+    "test4_pairs_balanced": true,
+    "test5_order_invariant": true,
+    "test6_maps_match_source_ids": true,
+    "test7_teacher_sha": true,
+    "test8_seed_reproducible": true
+  },
+  "next_allowed_variant": "P1 — CAPACITY-LIMITED ANATOMY CONDITION (e.g. spatial downsampling/quantization of anatomy maps) — NOT implemented; return evidence for scientific review first.",
+  "forbidden": ["implement resynthesis", "train generator", "resume IBR", "access TEST", "tune threshold", "add another condition channel"],
+  "artifacts": [
+    "research_agent/12_CONDITION_IDENTITY_CAPACITY.md",
+    "research_agent/12_CONDITION_IDENTITY_CAPACITY_summary.json",
+    "research_agent/ibr_s1_condition_cache/",
+    "research_agent/ibr_s1_condition_capacity/"
+  ]
+}
