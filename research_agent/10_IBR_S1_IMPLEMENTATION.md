@@ -115,7 +115,7 @@ Vs STEP 6A estimate (6.78 GB): the dry run is higher because the real S1 graph r
 ## 10. Known limitations
 
 - `L_anat` uses MSE on the teacher's 3-structure probability maps (equivalent scale to BCE terms); STEP 6B did not run hyperparameter search — coefficients stay frozen.
-- `L_zid_pair` in S1 uses the (source, donor) pair, which in the actual protocol is always a different-patient pair (y=0); the general loss supports both labels.
+- `L_zid_pair` in S1 uses the (source, partner) pair; the partner is a same-patient image with p=0.5 (when the patient has ≥2 images in the split) else a different-patient donor (y=0), so BOTH identity classes reach V and H_med. Fix documented in `11A_IBR_S1_MECHANISM_DEBUG.md`.
 - Full S1 training, attacker training, and TEST remain strictly out of scope for this step.
 
 ## 11. Strict step boundaries respected

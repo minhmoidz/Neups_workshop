@@ -78,27 +78,63 @@ class SingleImageLabels(Dataset):
     the S1 model lives in [-1,1] (decoder tanh), so we map x <- 2*x - 1.
     The deterministic donor image (seed 42) is loaded here in the worker
     process so image + donor I/O is parallelised by the DataLoader.
+
+    Identity pair (lock §3/§4): each sample carries a deterministic partner
+    image x_partner and the same/different-patient label y_pair. With prob 0.5
+    (and when the source patient has >= 2 images in the split) the partner is a
+    SAME-patient image (y_pair=1); otherwise it is the different-patient donor
+    (y_pair=0). This guarantees BOTH classes reach the z_id verifier and the
+    z_med adversary -- fixing the Stage-B bug where y_pair was hardcoded to 0
+    (source, donor) is always a different-patient pair, so the identity heads
+    only ever saw negative pairs and collapsed to chance.
     """
 
     def __init__(self, fold, seed=42):
         self.ds = CXRDataset(path_to_images=IMAGE_PATH, fold=fold,
                              perturbation_type='flow_field')
         self.sampler = DonorSampler(seed=seed)
+        self.seed = int(seed)
         self._donor_cache = {}
 
     def __len__(self):
         return len(self.ds)
 
-    def __getitem__(self, idx):
-        img, label, name = self.ds[idx]
-        x = img * 2.0 - 1.0
-        y = torch.as_tensor(label, dtype=torch.float32)
+    def _partner_for(self, name):
+        """Deterministic identity-pair partner + label (pure function of seed+name).
+
+        Returns (partner_image, y_pair). Same-patient when the source patient has
+        >= 2 images in the split and a seeded coin lands heads; else the donor
+        (guaranteed different patient, y_pair=0).
+        """
+        src_pid = int(self.sampler.patient_by_image[name])
+        split = self.sampler._split_for(name)
+        pool_imgs = self.sampler._pool[split]['images_by_patient'].get(src_pid, [])
+        others = [im for im in pool_imgs if im != name]
+        key = hashlib.sha256(repr(('pair_partner', self.seed, name)).encode()).hexdigest()
+        rng = np.random.default_rng(self.seed + int(key[:16], 16) % (2 ** 32))
+        if others and rng.random() < 0.5:
+            partner = others[int(rng.integers(0, len(others)))]
+            assert int(self.sampler.patient_by_image[partner]) == src_pid
+            return partner, 1.0
+        donor = self._donor_for(name)
+        return donor, 0.0
+
+    def _donor_for(self, name):
         donor = self._donor_cache.get(name)
         if donor is None:
             donor = self.sampler.donor_for(name)
             self._donor_cache[name] = donor
+        return donor
+
+    def __getitem__(self, idx):
+        img, label, name = self.ds[idx]
+        x = img * 2.0 - 1.0
+        y = torch.as_tensor(label, dtype=torch.float32)
+        donor = self._donor_for(name)
         x_donor = load_x_image(os.path.join(IMAGE_PATH, donor))
-        return x, y, name, x_donor, donor
+        partner, y_pair = self._partner_for(name)
+        x_partner = load_x_image(os.path.join(IMAGE_PATH, partner))
+        return x, y, name, x_donor, donor, x_partner, torch.tensor(y_pair, dtype=torch.float32).reshape(1)
 
 
 def load_x_image(path):
@@ -142,17 +178,22 @@ class S1Trainer:
         return [ds[i] for i in idx]
 
     # ----------------------------------------------------------------- stage A
-    def stage_a(self, n_epochs=20):
+    def stage_a(self, n_epochs=20, resume_from=0):
         print('=== STAGE A: self-reconstruction pretrain (L_rec only), %d epochs ===' % n_epochs)
+        if resume_from > 0:
+            ckpt = {'path': os.path.join(self.out_dir, 's1_a_epoch%02d.pth' % resume_from)}
+            self._load_checkpoint(ckpt)
+            print('  resuming Stage A from epoch %d' % resume_from)
         loader = self._loader('train', shuffle=True)
-        logs = []
-        for ep in range(1, n_epochs + 1):
+        logs = self._load_logs('stage_a_logs.json')
+        logs = [r for r in logs if r.get('epoch', 0) <= resume_from]
+        for ep in range(resume_from + 1, n_epochs + 1):
             self.model.train()
             t0 = time.time()
             run_loss = 0.0
             n_batches = 0
             nan_inf = False
-            for x, y_path, names, _, _ in loader:
+            for x, y_path, names, _, _, _, _ in loader:
                 x = x.to(self.device)
                 self.opt_egv.zero_grad()
                 z_id, z_med, skips = self.model.encode(x)
@@ -177,34 +218,41 @@ class S1Trainer:
                                                    {k: round(v, 4) for k, v in diag.items()
                                                     if isinstance(v, float)}))
             self._save_logs('stage_a_logs.json', logs)
+            self._make_checkpoint(stage='A', epoch=ep)  # per-epoch ckpt for resume
         ckpt = self._make_checkpoint(stage='A', epoch=n_epochs)
         self._save_checkpoint('stage_a_epoch%02d.pth' % n_epochs, ckpt)
         print('  STAGE A DONE. checkpoint=%s' % ckpt['path'])
         return ckpt
 
     # ----------------------------------------------------------------- stage B
-    def stage_b(self, n_epochs=30, init_checkpoint=None):
+    def stage_b(self, n_epochs=30, init_checkpoint=None, resume_from=0):
         print('=== STAGE B: full S1 training, %d epochs ===' % n_epochs)
-        if init_checkpoint is not None:
+        if resume_from > 0:
+            ckpt = {'path': os.path.join(self.out_dir, 's1_b_epoch%02d.pth' % resume_from)}
+            self._load_checkpoint(ckpt)
+            print('  resuming Stage B from epoch %d' % resume_from)
+        elif init_checkpoint is not None:
             self._load_checkpoint(init_checkpoint)
         loader = self._loader('train', shuffle=True)
-        logs = []
-        for ep in range(1, n_epochs + 1):
+        logs = self._load_logs('stage_b_logs.json')
+        logs = [r for r in logs if r.get('epoch', 0) <= resume_from]
+        for ep in range(resume_from + 1, n_epochs + 1):
             self.model.train()
             t0 = time.time()
             acc = {'L_rec': 0.0, 'L_path': 0.0, 'L_anat': 0.0, 'L_zid': 0.0, 'L_adv': 0.0, 'total': 0.0}
             n_batches = 0
             nan_inf = False
             donor_same = 0
-            for x, y_path, names, x_donor, donor_names in loader:
+            for x, y_path, names, x_donor, donor_names, x_partner, y_pair in loader:
                 x = x.to(self.device)
                 x_donor = x_donor.to(self.device)
+                x_partner = x_partner.to(self.device)
                 y_path = y_path.to(self.device)
-                y_pair = torch.zeros(x.shape[0], 1, device=self.device)
+                y_pair = y_pair.to(self.device)
                 self.opt_egv.zero_grad()
                 self.opt_adv.zero_grad()
                 total, parts = compute_s1_loss(self.model, self.frozen, x, x_donor,
-                                               y_path, y_pair, return_parts=True)
+                                               y_path, x_partner, y_pair, return_parts=True)
                 total.backward()
                 self.opt_egv.step()
                 self.opt_adv.step()
@@ -252,19 +300,33 @@ class S1Trainer:
             xs = torch.stack([v[0] for v in val]).to(self.device)
             ys = torch.stack([v[1] for v in val]).to(self.device)
             x_donors = torch.stack([v[3] for v in val]).to(self.device)
+            x_partners = torch.stack([v[5] for v in val]).to(self.device)
+            y_pairs = torch.stack([v[6] for v in val]).to(self.device)
             with torch.no_grad():
-                z_id, z_med, skips = self.model.encode(xs)
-                x_self = self.model.decode(z_id, z_med, skips)
-                out[prefix + '_val_recon_l1'] = round(float(F.l1_loss(x_self, xs).item()), 5)
-                # full S1 loss diagnostics (preloaded deterministic donors)
-                y_pair = torch.zeros(xs.shape[0], 1, device=self.device)
-                total, parts = compute_s1_loss(self.model, self.frozen, xs, x_donors,
-                                               ys, y_pair, return_parts=True)
-                out[prefix + '_val_total'] = round(float(total.item()), 5)
+                # chunked so frozen-model memory matches the training batch (bs=16)
+                recon_acc = 0.0
+                loss_acc = {'L_rec': 0.0, 'L_path': 0.0, 'L_anat': 0.0, 'L_zid': 0.0, 'L_adv': 0.0, 'total': 0.0}
+                n_chunks = 0
+                for i in range(0, xs.shape[0], self.bs):
+                    xb = xs[i:i + self.bs]
+                    yb = ys[i:i + self.bs]
+                    xdb = x_donors[i:i + self.bs]
+                    xpb = x_partners[i:i + self.bs]
+                    ypb = y_pairs[i:i + self.bs]
+                    z_id, z_med, skips = self.model.encode(xb)
+                    x_self = self.model.decode(z_id, z_med, skips)
+                    recon_acc += float(F.l1_loss(x_self, xb).item())
+                    total, parts = compute_s1_loss(self.model, self.frozen, xb, xdb,
+                                                   yb, xpb, ypb, return_parts=True)
+                    for k in loss_acc:
+                        loss_acc[k] += parts[k]
+                    n_chunks += 1
+                out[prefix + '_val_recon_l1'] = round(recon_acc / max(n_chunks, 1), 5)
+                out[prefix + '_val_total'] = round(loss_acc['total'] / max(n_chunks, 1), 5)
                 for k in ['L_rec', 'L_path', 'L_anat', 'L_zid', 'L_adv']:
-                    out[prefix + '_val_' + k] = round(float(parts[k]), 5)
-                # frozen classification diagnostic (x_anon vs source labels)
-                out[prefix + '_val_class_auc14'] = self._class_auc14(x_self)  # recon proxy
+                    out[prefix + '_val_' + k] = round(loss_acc[k] / max(n_chunks, 1), 5)
+                # frozen classification diagnostic (x_anon vs source labels) chunked
+                out[prefix + '_val_class_auc14'] = self._class_auc14(xs, ys)
                 # z_id verifier on validation pairs
                 vz = self._pair_auc(model_side='zid')
                 out[prefix + '_zid_verifier_auc'] = round(vz, 5)
@@ -275,18 +337,20 @@ class S1Trainer:
             out[prefix + '_diagnostic_error'] = str(e)[:200]
         return out
 
-    def _class_auc14(self, x_self):
-        """Frozen classifier mean AUC-14 on x_self vs source labels (subset proxy)."""
+    def _class_auc14(self, xs, ys):
+        """Frozen classifier mean AUC-14 on the given images vs their source labels."""
         try:
+            probs_chunks = []
             with torch.no_grad():
-                probs = self.frozen.path_logits(x_self).detach().cpu().numpy()
-            val = self._val_subset('val', n=x_self.shape[0], seed=9)
-            ys = torch.stack([v[1] for v in val]).numpy()
+                for i in range(0, xs.shape[0], self.bs):
+                    probs_chunks.append(self.frozen.path_logits(xs[i:i + self.bs]).detach().cpu().numpy())
+            probs = np.concatenate(probs_chunks, axis=0)
+            ys_np = ys.detach().cpu().numpy()
             aucs = []
             for i in range(14):
-                if len(np.unique(ys[:, i])) > 1:
+                if len(np.unique(ys_np[:, i])) > 1:
                     try:
-                        aucs.append(roc_auc_score(ys[:, i], probs[:, i]))
+                        aucs.append(roc_auc_score(ys_np[:, i], probs[:, i]))
                     except ValueError:
                         pass
             return round(float(np.mean(aucs)), 5) if aucs else float('nan')
@@ -348,6 +412,13 @@ class S1Trainer:
         with open(os.path.join(self.out_dir, fname), 'w') as f:
             json.dump(logs, f, indent=2)
 
+    def _load_logs(self, fname):
+        p = os.path.join(self.out_dir, fname)
+        if os.path.exists(p):
+            with open(p) as f:
+                return json.load(f)
+        return []
+
 
 def _load_frozen(device):
     from research_agent.ibr.losses import FrozenUtility
@@ -362,6 +433,10 @@ def main():
     ap.add_argument('--out_dir', required=True)
     ap.add_argument('--epochs_a', type=int, default=20)
     ap.add_argument('--epochs_b', type=int, default=30)
+    ap.add_argument('--resume_a', type=int, default=0,
+                    help='resume Stage A after this completed epoch (loads s1_a_epochN.pth)')
+    ap.add_argument('--resume_b', type=int, default=0,
+                    help='resume Stage B after this completed epoch (loads s1_b_epochN.pth); implies skip Stage A')
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -378,8 +453,14 @@ def main():
         json.dump(meta, f, indent=2)
     print('META', json.dumps(meta))
 
-    a = trainer.stage_a(n_epochs=args.epochs_a)
-    b = trainer.stage_b(n_epochs=args.epochs_b, init_checkpoint=a)
+    a = None
+    if args.resume_b > 0:
+        a = {'path': os.path.join(args.out_dir, 's1_a_epoch%02d.pth' % args.epochs_a),
+             'stage': 'A', 'epoch': args.epochs_a}
+        b = trainer.stage_b(n_epochs=args.epochs_b, init_checkpoint=a, resume_from=args.resume_b)
+    else:
+        a = trainer.stage_a(n_epochs=args.epochs_a, resume_from=args.resume_a)
+        b = trainer.stage_b(n_epochs=args.epochs_b, init_checkpoint=a)
     summary = {'meta': meta, 'stage_a_ckpt': a, 'stage_b_frozen_ckpt': b, 'finished': utcnow()}
     with open(os.path.join(args.out_dir, 'run_summary.json'), 'w') as f:
         json.dump(summary, f, indent=2)

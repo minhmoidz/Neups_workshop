@@ -1,0 +1,67 @@
+{
+  "step": "6C-D",
+  "status": "FIXED — READY TO RESTART",
+  "date": "2026-08-13",
+  "commit_prior": "19def44bd3a5a6e190c19ccefb56ee28bd06b6c6",
+  "interrupted_run": {
+    "seed": 42,
+    "bs": 16,
+    "stage_a_epochs": 20,
+    "stage_b_epochs_reached": 5,
+    "stage_b_epochs_total": 30,
+    "stopped": "graceful pkill -TERM",
+    "logs_preserved": "/tmp/opencode/stopped_run_preserve/",
+    "checkpoints": "s1_a_epoch01-20.pth, s1_b_epoch01-05.pth (32434153 B each)"
+  },
+  "symptoms": {
+    "train_L_zid": "collapsed to 0.0 from epoch 2",
+    "train_L_adv": "collapsed to 0.0 from epoch 3",
+    "val_L_zid": 0.0,
+    "val_L_adv": 0.0,
+    "zid_verifier_auc": [0.52015, 0.43885, 0.4845, 0.4215, 0.44255],
+    "zmed_adversary_auc": [0.5315, 0.4964, 0.5111, 0.51195, 0.51945]
+  },
+  "checks": {
+    "1_lambdas": {"all_lambdas_1.0": true, "raw_L_zid_init": 0.686, "raw_L_adv_init": 0.689, "trainer_y_pair_mean": 0.0},
+    "2_pair_labels": {"train_pos": 0, "train_neg": 16, "val_pos": 0, "val_neg": 16, "positive_frac": 0.0},
+    "3_verifier_overfit": {"perfect_feats_acc": 1.0, "real_zid_acc": 0.875},
+    "4_adversary_overfit": {"perfect_feats_acc": 1.0, "real_zmed_acc": 0.875},
+    "5_grl": {"cos_normal_grl": -1.0},
+    "6_optimizer_ownership": {"encoder": 4779296, "decoder": 3114881, "verifier": 33025, "adv": 164481, "overlap": false},
+    "7_stage_b_y_pair": {"zeros": true, "optimizers_reused": true},
+    "8_full_graph": {"grad_norms": {"encoder": 6.798, "decoder": 5.496, "verifier": 0.900, "adv": 1.005}, "frozen_grads": 0}
+  },
+  "root_cause": "Stage B hardcoded y_pair=zeros; donor protocol guarantees donor patient != source patient, so the (source,donor) identity pair always had label y=0; BCE on all-negative labels collapsed to 0 and both heads stuck at chance.",
+  "fix": {
+    "loss": "compute_s1_loss now takes (x_pair, y_pair); L_zid/L_adv computed from (source,partner) pair",
+    "data": "SingleImageLabels returns 7-tuple; _partner_for() picks same-patient partner p=0.5 (if patient has >=2 imgs in split) else donor (y=0)",
+    "stage_b": "no longer builds zeros; passes real x_partner/y_pair",
+    "diagnostics": "_validation_diagnostics stacks v[5]/v[6] and passes them",
+    "legacy": "train_s1.py and dry_run_s1.py updated to new signature",
+    "not_changed": ["lambdas", "architecture", "z_id_dim", "donor_mechanism", "batch_size", "lr", "no_v2"]
+  },
+  "postfix_micro_validation": {
+    "train_batch_y_pair": {"pos": 6, "neg": 10},
+    "raw_L_zid": 0.697123289,
+    "raw_L_adv": 0.687512875,
+    "all_terms_finite": true,
+    "grad_norms": {"encoder": 6.7795, "decoder": 5.4963, "verifier": 0.2650, "adv": 0.2643},
+    "frozen_grads": 0,
+    "grl_cos": -1.0,
+    "verifier_overfit": {"loss": [0.6998, 0.0054], "acc": 1.0},
+    "adversary_overfit": {"loss": [0.6930, 0.0000], "acc": 1.0},
+    "test_touched": false
+  },
+  "restart_recommendation": {
+    "stage_a": "20 epochs (s1_a_epoch20.pth usable)",
+    "stage_b": "30 epochs",
+    "seed": 42,
+    "bs": 16,
+    "lambdas": "all 1.0, GRL_LAMBDA=1.0",
+    "z_id_dim": 128,
+    "lr": "1e-4 Adam",
+    "launch": "setsid + PYTHONPATH=.",
+    "success_criteria": "train_L_zid/train_L_adv stay >0; verifier AUC >0.5 (same-patient z_id); adversary AUC stays ~0.5 (GRL suppression)",
+    "auto_launched": false
+  }
+}

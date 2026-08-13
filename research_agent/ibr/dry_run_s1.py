@@ -36,9 +36,11 @@ def build_synthetic_batch(bs, seed=0):
     g = torch.Generator().manual_seed(seed)
     x = torch.randn(bs, 1, 256, 256, generator=g).clamp(-1, 1)
     x_donor = torch.randn(bs, 1, 256, 256, generator=g).clamp(-1, 1)
+    x_pair = torch.randn(bs, 1, 256, 256, generator=g).clamp(-1, 1)
     y_path = (torch.rand(bs, 14, generator=g) > 0.5).float()
-    y_pair = torch.zeros(bs, 1)  # different-patient pair by donor protocol
-    return x, x_donor, y_path, y_pair
+    # mixed same/different identity pairs so both classes reach V and H_med
+    y_pair = (torch.rand(bs, 1, generator=g) > 0.5).float()
+    return x, x_donor, x_pair, y_path, y_pair
 
 
 def dataset_sanity():
@@ -81,14 +83,16 @@ def main():
     dset = dataset_sanity()
     print('dataset sanity:', dset)
 
-    x, x_donor, y_path, y_pair = build_synthetic_batch(bs, seed=0)
-    x, x_donor, y_path, y_pair = (x.to(device), x_donor.to(device),
-                                  y_path.to(device), y_pair.to(device))
+    x, x_donor, x_pair, y_path, y_pair = build_synthetic_batch(bs, seed=0)
+    x, x_donor, x_pair, y_path, y_pair = (x.to(device), x_donor.to(device),
+                                          x_pair.to(device), y_path.to(device),
+                                          y_pair.to(device))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     optimizer_adv = torch.optim.Adam(model.adv.parameters(), lr=1e-4)
 
-    total, parts = compute_s1_loss(model, frozen, x, x_donor, y_path, y_pair, return_parts=True)
+    total, parts = compute_s1_loss(model, frozen, x, x_donor, y_path, x_pair, y_pair,
+                                   return_parts=True)
     total.backward()
     optimizer.step()
     optimizer_adv.step()

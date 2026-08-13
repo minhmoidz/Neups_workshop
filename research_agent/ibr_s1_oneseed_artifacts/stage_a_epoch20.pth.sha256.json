@@ -1,0 +1,7 @@
+{
+  "path": "research_agent/ibr_s1_oneseed_artifacts/s1_a_epoch20.pth",
+  "stage": "A",
+  "epoch": 20,
+  "sha256": "3c5d780e1ed41bc69f98f3060239db63aa75347a17cc5c973e8c7b55c0cb1d79",
+  "size_bytes": 32434153
+}

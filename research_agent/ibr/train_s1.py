@@ -85,7 +85,7 @@ def check_finite(tensors, prefix):
     return out
 
 
-def train_one_batch(model, frozen, optimizer, optimizer_adv, x, x_donor, y_path, y_pair):
+def train_one_batch(model, frozen, optimizer, optimizer_adv, x, x_donor, y_path, x_pair, y_pair):
     """One S1 training step.
 
     Optimizers:
@@ -96,7 +96,8 @@ def train_one_batch(model, frozen, optimizer, optimizer_adv, x, x_donor, y_path,
     optimizer.zero_grad()
     optimizer_adv.zero_grad()
 
-    total, parts = compute_s1_loss(model, frozen, x, x_donor, y_path, y_pair, return_parts=True)
+    total, parts = compute_s1_loss(model, frozen, x, x_donor, y_path, x_pair, y_pair,
+                                   return_parts=True)
     total.backward()
 
     optimizer.step()

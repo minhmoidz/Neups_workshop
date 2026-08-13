@@ -1,0 +1,12 @@
+{
+  "seed": 42,
+  "bs": 16,
+  "epochs_a": 20,
+  "epochs_b": 30,
+  "commit": "19def44bd3a5a6e190c19ccefb56ee28bd06b6c6",
+  "device": "cuda",
+  "s1_trainable_params": 8091683,
+  "classifier_sha256": "8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663",
+  "seg_prefix": "2dfdcf9b",
+  "started": "2026-08-13T10:44:35+00:00"
+}

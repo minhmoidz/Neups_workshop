@@ -26,16 +26,22 @@ from research_agent.ibr.losses import (
 )
 
 
-def compute_s1_loss(model, frozen_utility, x, x_donor, y_path, y_pair, return_parts=False):
+def compute_s1_loss(model, frozen_utility, x, x_donor, y_path, x_pair, y_pair, return_parts=False):
     """Compute the full S1 loss for a batch.
 
     Args:
         model: IBRModel
         frozen_utility: FrozenUtility (frozen classifier + segmentation teacher)
         x: source images (B,1,256,256) [-1,1]
-        x_donor: donor images (B,1,256,256) [-1,1]
+        x_donor: donor images (B,1,256,256) [-1,1]; used ONLY for the anon
+            branch (x_anon = G(z_id_donor, z_med_source)). The donor contributes
+            identity via z_id; the donor patient is always != source patient.
         y_path: (B,14) source pathology labels in {0,1}
-        y_pair: (B,1) same/different-patient labels for the (source, donor) pair
+        x_pair: (B,1,256,256) partner images forming the (source, partner)
+            identity pair. Partner may be same-patient (y_pair=1) or
+            different-patient (y_pair=0); both classes MUST be present.
+        y_pair: (B,1) same/different-patient labels for the (x, x_pair) identity
+            pairs. This is the STEP 6A lock §3/§4 pair label y_id.
         return_parts: if True, also return the dict of individual terms
 
     Returns:
@@ -54,8 +60,10 @@ def compute_s1_loss(model, frozen_utility, x, x_donor, y_path, y_pair, return_pa
     anat_source = frozen_utility.anat_maps(x)
     L_anat = anatomy_loss(anat_anon, anat_source)
 
-    L_zid = zid_pair_loss(model.verify(z_id, out['z_id_donor']), y_pair)
-    L_adv = zmed_adv_loss(model.adversary_logits(z_med, out['z_med_donor']), y_pair)
+    # identity pair (source, partner) with BOTH classes in y_pair (lock §3/§4).
+    z_id_pair, z_med_pair, _ = model.encode(x_pair)
+    L_zid = zid_pair_loss(model.verify(z_id, z_id_pair), y_pair)
+    L_adv = zmed_adv_loss(model.adversary_logits(z_med, z_med_pair), y_pair)
 
     total = (LAMBDA_REC * L_rec + LAMBDA_PATH * L_path + LAMBDA_ANAT * L_anat
              + LAMBDA_ZID * L_zid + LAMBDA_ADV * L_adv)
