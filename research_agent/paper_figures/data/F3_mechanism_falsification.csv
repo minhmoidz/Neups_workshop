@@ -1,0 +1,8 @@
+channel,stat,value,ci,threshold,split,conclusion
+H1 LP vs HP,adaptive val AUC LP,0.8705,,0.1,VALIDATION DIAGNOSTIC,not material
+H1 LP vs HP,adaptive val AUC HP,0.8659,,0.1,VALIDATION DIAGNOSTIC,not material
+H2 intensity,mean adaptive val AUC (n=3),0.8334,,0.1,VALIDATION DIAGNOSTIC,not material
+H2 intensity,reduction vs ref,0.0048,"[-0.071, +0.080]",0.1,VALIDATION DIAGNOSTIC,no material >=0.10
+H3 border/FOV,mean adaptive val AUC (n=3),0.8178,,0.1,VALIDATION DIAGNOSTIC,not material
+H3 border/FOV,reduction vs ref,0.0204,"[-0.023, +0.064]",0.1,VALIDATION DIAGNOSTIC,no material >=0.10
+REFERENCE (validation),mean adaptive val AUC,0.8382,,,VALIDATION DIAGNOSTIC,reference

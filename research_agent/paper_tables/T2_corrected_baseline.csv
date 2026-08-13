@@ -1,0 +1,11 @@
+metric,value,split,n,operator_mode,test_or_validation,source,source_artifact_sha256
+Re-ID mean AUC,0.739194,TEST,10,corrected,TEST,03D_artifacts/arm_summary_machine.json,d4c6e4e6d3ddea155cf323a31d84b87c39444df97ffa59adb310392fa63d8bea
+Re-ID SD AUC,0.049847,TEST,10,corrected,TEST,03D_artifacts/arm_summary_machine.json,d4c6e4e6d3ddea155cf323a31d84b87c39444df97ffa59adb310392fa63d8bea
+Re-ID median AUC,0.722183,TEST,10,corrected,TEST,03D_artifacts/arm_summary_machine.json,d4c6e4e6d3ddea155cf323a31d84b87c39444df97ffa59adb310392fa63d8bea
+Re-ID max AUC,0.803662,TEST,10,corrected,TEST,03D_artifacts/arm_summary_machine.json,d4c6e4e6d3ddea155cf323a31d84b87c39444df97ffa59adb310392fa63d8bea
+Classification mean AUC (14 labels),0.781227,TEST,25596,corrected,TEST,03H_corrected_classification.json,b15369f4849796a3d193a91ca13d24ddc251eca3822489a07d4ed480ae3f81d3
+Segmentation Dice,0.942717,TEST,25596,corrected,TEST,03H_corrected_segmentation.json,88d4a49508c9dab863f1602d6161e5020c720ce179d4cf798bde9b90756d2c62
+Segmentation IoU,0.895454,TEST,25596,corrected,TEST,03H_corrected_segmentation.json,88d4a49508c9dab863f1602d6161e5020c720ce179d4cf798bde9b90756d2c62
+Segmentation HD95 (px),2.00612,TEST,25596,corrected,TEST,03H_corrected_segmentation.json,88d4a49508c9dab863f1602d6161e5020c720ce179d4cf798bde9b90756d2c62
+HISTORICAL legacy baseline Re-ID (approx.),0.635,HISTORICAL / NON-COMPARABLE,10,legacy,HISTORICAL / NON-COMPARABLE,03D_CORRECTED_BASELINE_REID.md,4e61b2d45924c3d65294a2fd741d01049c03c7ee15891a3e6ebdb01365f14c07
+HISTORICAL published Re-ID figure,0.577,HISTORICAL / NON-COMPARABLE,,external,HISTORICAL / NON-COMPARABLE,01B_PROTOCOL_AMENDMENT.md,05fcc9fd4cb4181acd9f40603707cd259987a0d1d3750d0f3463fc1fe78b0865

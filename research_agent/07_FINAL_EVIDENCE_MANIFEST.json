@@ -1,0 +1,770 @@
+{
+  "_label": "STEP 5 FINAL EVIDENCE MANIFEST \u2014 machine-readable registry of every paper-facing number",
+  "phase": "evidence assembly only; no new training/privacy experiments",
+  "locked_at_commit": "b546155",
+  "manifest_created": "2026-08-13",
+  "evidence_rule": "No value recomputed differently from its locked source; source artifact SHA256 and commit recorded for each entry",
+  "entries": [
+    {
+      "metric": "Adaptive Re-ID mean test AUC",
+      "value": 0.739194,
+      "split": "TEST",
+      "n": 10,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/03D_artifacts/arm_summary_machine.json",
+      "source_artifact_sha256": "d4c6e4e6d3ddea155cf323a31d84b87c39444df97ffa59adb310392fa63d8bea",
+      "commit_provenance": "e0dec4b (STEP 3B.1 evidence remediation; arm from baseline_corrected_confirmatory)",
+      "test_or_validation": "TEST",
+      "inferential_or_diagnostic": "inferential (primary privacy estimate)"
+    },
+    {
+      "metric": "Adaptive Re-ID SD test AUC",
+      "value": 0.049847,
+      "split": "TEST",
+      "n": 10,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/03D_artifacts/arm_summary_machine.json",
+      "source_artifact_sha256": "d4c6e4e6d3ddea155cf323a31d84b87c39444df97ffa59adb310392fa63d8bea",
+      "commit_provenance": "e0dec4b (STEP 3B.1 evidence remediation)",
+      "test_or_validation": "TEST",
+      "inferential_or_diagnostic": "inferential"
+    },
+    {
+      "metric": "Adaptive Re-ID median test AUC",
+      "value": 0.722183,
+      "split": "TEST",
+      "n": 10,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/03D_artifacts/arm_summary_machine.json",
+      "source_artifact_sha256": "d4c6e4e6d3ddea155cf323a31d84b87c39444df97ffa59adb310392fa63d8bea",
+      "commit_provenance": "e0dec4b (STEP 3B.1 evidence remediation)",
+      "test_or_validation": "TEST",
+      "inferential_or_diagnostic": "inferential"
+    },
+    {
+      "metric": "Adaptive Re-ID max test AUC",
+      "value": 0.803662,
+      "split": "TEST",
+      "n": 10,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/03D_artifacts/arm_summary_machine.json",
+      "source_artifact_sha256": "d4c6e4e6d3ddea155cf323a31d84b87c39444df97ffa59adb310392fa63d8bea",
+      "commit_provenance": "e0dec4b (STEP 3B.1 evidence remediation)",
+      "test_or_validation": "TEST",
+      "inferential_or_diagnostic": "inferential"
+    },
+    {
+      "metric": "Adaptive Re-ID per-seed test AUC",
+      "value": [
+        0.784691,
+        0.777981,
+        0.721063,
+        0.660138,
+        0.723304,
+        0.803662,
+        0.71028,
+        0.7175,
+        0.803154,
+        0.690167
+      ],
+      "split": "TEST",
+      "n": 10,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/03D_artifacts/arm_summary_machine.json",
+      "source_artifact_sha256": "d4c6e4e6d3ddea155cf323a31d84b87c39444df97ffa59adb310392fa63d8bea",
+      "commit_provenance": "e0dec4b (STEP 3B.1 evidence remediation)",
+      "test_or_validation": "TEST",
+      "inferential_or_diagnostic": "inferential"
+    },
+    {
+      "metric": "Classification mean AUC (14 labels)",
+      "value": 0.781227,
+      "split": "TEST",
+      "n": 25596,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/03H_corrected_classification.json",
+      "source_artifact_sha256": "b15369f4849796a3d193a91ca13d24ddc251eca3822489a07d4ed480ae3f81d3",
+      "commit_provenance": "7e762de (STEP 3C corrected baseline utility)",
+      "test_or_validation": "TEST",
+      "inferential_or_diagnostic": "inferential (utility)"
+    },
+    {
+      "metric": "Segmentation Dice",
+      "value": 0.942717,
+      "split": "TEST",
+      "n": 25596,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/03H_corrected_segmentation.json",
+      "source_artifact_sha256": "88d4a49508c9dab863f1602d6161e5020c720ce179d4cf798bde9b90756d2c62",
+      "commit_provenance": "7e762de (STEP 3C corrected baseline utility)",
+      "test_or_validation": "TEST",
+      "inferential_or_diagnostic": "inferential (utility)"
+    },
+    {
+      "metric": "Segmentation IoU",
+      "value": 0.895454,
+      "split": "TEST",
+      "n": 25596,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/03H_corrected_segmentation.json",
+      "source_artifact_sha256": "88d4a49508c9dab863f1602d6161e5020c720ce179d4cf798bde9b90756d2c62",
+      "commit_provenance": "7e762de (STEP 3C corrected baseline utility)",
+      "test_or_validation": "TEST",
+      "inferential_or_diagnostic": "inferential (utility)"
+    },
+    {
+      "metric": "Segmentation HD95 (px)",
+      "value": 2.00612,
+      "split": "TEST",
+      "n": 25596,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/03H_corrected_segmentation.json",
+      "source_artifact_sha256": "88d4a49508c9dab863f1602d6161e5020c720ce179d4cf798bde9b90756d2c62",
+      "commit_provenance": "7e762de (STEP 3C corrected baseline utility)",
+      "test_or_validation": "TEST",
+      "inferential_or_diagnostic": "inferential (utility)"
+    },
+    {
+      "metric": "Reference adaptive validation AUC mean",
+      "value": 0.8382,
+      "split": "VALIDATION",
+      "n": 10,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/03D_artifacts/seed_{0..9}/training_diagnostics.json (best_validation_auc)",
+      "source_artifact_sha256": "per-seed files (10) recorded in 05B reference block",
+      "commit_provenance": "e0dec4b (03D per-seed training diagnostics) ; summary reuse in 896867e/05A and f050c79/05B",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic reference"
+    },
+    {
+      "metric": "Reference adaptive validation AUC sample SD (ddof=1)",
+      "value": 0.0363,
+      "split": "VALIDATION",
+      "n": 10,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "recomputed from research_agent/03D_artifacts/seed_{0..9}/training_diagnostics.json (best_validation_auc) with ddof=1",
+      "source_artifact_sha256": "per-seed files (10)",
+      "commit_provenance": "e0dec4b (raw records); recompute documented in 06A_E1 report and STEP 4D prompt (value 0.0363)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic reference"
+    },
+    {
+      "metric": "Low-pass only adaptive validation AUC",
+      "value": 0.8705,
+      "split": "VALIDATION",
+      "n": 1,
+      "seeds": [
+        42
+      ],
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_H1_diagnostic_summary.json",
+      "source_artifact_sha256": "e3e39e362fc61ca0d931c18715f5be5617b3ebd79a53f8212b8fcba9e1376695",
+      "commit_provenance": "896867e (STEP 4A H1 band diagnostic)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic"
+    },
+    {
+      "metric": "High-pass only adaptive validation AUC",
+      "value": 0.8659,
+      "split": "VALIDATION",
+      "n": 1,
+      "seeds": [
+        42
+      ],
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_H1_diagnostic_summary.json",
+      "source_artifact_sha256": "e3e39e362fc61ca0d931c18715f5be5617b3ebd79a53f8212b8fcba9e1376695",
+      "commit_provenance": "896867e (STEP 4A H1 band diagnostic)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic"
+    },
+    {
+      "metric": "Reference classification mean AUC14 (validation)",
+      "value": 0.7938,
+      "split": "VALIDATION",
+      "n": null,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_artifacts/utility_by_band.json",
+      "source_artifact_sha256": "8cf42376e9c8c3d2c4292c0d7ab058a60e537c447f07b593f68b1c08b44f1c10",
+      "commit_provenance": "896867e (STEP 4A)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic"
+    },
+    {
+      "metric": "Low-pass classification mean AUC14 (validation)",
+      "value": 0.621,
+      "split": "VALIDATION",
+      "n": null,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_artifacts/utility_by_band.json",
+      "source_artifact_sha256": "8cf42376e9c8c3d2c4292c0d7ab058a60e537c447f07b593f68b1c08b44f1c10",
+      "commit_provenance": "896867e (STEP 4A)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic"
+    },
+    {
+      "metric": "High-pass classification mean AUC14 (validation)",
+      "value": 0.6756,
+      "split": "VALIDATION",
+      "n": null,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_artifacts/utility_by_band.json",
+      "source_artifact_sha256": "8cf42376e9c8c3d2c4292c0d7ab058a60e537c447f07b593f68b1c08b44f1c10",
+      "commit_provenance": "896867e (STEP 4A)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic"
+    },
+    {
+      "metric": "Reference segmentation Dice (validation)",
+      "value": 0.955,
+      "split": "VALIDATION",
+      "n": null,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_artifacts/utility_by_band.json",
+      "source_artifact_sha256": "8cf42376e9c8c3d2c4292c0d7ab058a60e537c447f07b593f68b1c08b44f1c10",
+      "commit_provenance": "896867e (STEP 4A)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic"
+    },
+    {
+      "metric": "Low-pass segmentation Dice (validation)",
+      "value": 0.864,
+      "split": "VALIDATION",
+      "n": null,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_artifacts/utility_by_band.json",
+      "source_artifact_sha256": "8cf42376e9c8c3d2c4292c0d7ab058a60e537c447f07b593f68b1c08b44f1c10",
+      "commit_provenance": "896867e (STEP 4A)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic"
+    },
+    {
+      "metric": "High-pass segmentation Dice (validation)",
+      "value": 0.9111,
+      "split": "VALIDATION",
+      "n": null,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_artifacts/utility_by_band.json",
+      "source_artifact_sha256": "8cf42376e9c8c3d2c4292c0d7ab058a60e537c447f07b593f68b1c08b44f1c10",
+      "commit_provenance": "896867e (STEP 4A)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic"
+    },
+    {
+      "metric": "Flow spectrum: energy fraction above -3dB cutoff (high-frequency content)",
+      "value": 0.8918,
+      "split": "VALIDATION (descriptive)",
+      "n": 128,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_artifacts/flow_spectrum.json",
+      "source_artifact_sha256": "026abc79bb094bf5cfd9ac38fbb4d9b0d1a5dee7bc55b0a18d9e3c312f281ff3",
+      "commit_provenance": "896867e (STEP 4A PART F)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "descriptive diagnostic"
+    },
+    {
+      "metric": "Flow spectrum: cutoff (-3 dB) cycles per pixel",
+      "value": 0.01656,
+      "split": "VALIDATION (descriptive)",
+      "n": 128,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_artifacts/flow_spectrum.json",
+      "source_artifact_sha256": "026abc79bb094bf5cfd9ac38fbb4d9b0d1a5dee7bc55b0a18d9e3c312f281ff3",
+      "commit_provenance": "896867e (STEP 4A PART F)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "descriptive diagnostic"
+    },
+    {
+      "metric": "Flow spectrum: mean absolute displacement (px)",
+      "value": 1.049,
+      "split": "VALIDATION (descriptive)",
+      "n": 128,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_artifacts/flow_spectrum.json",
+      "source_artifact_sha256": "026abc79bb094bf5cfd9ac38fbb4d9b0d1a5dee7bc55b0a18d9e3c312f281ff3",
+      "commit_provenance": "896867e (STEP 4A PART F)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "descriptive diagnostic"
+    },
+    {
+      "metric": "Flow spectrum: max absolute displacement (px)",
+      "value": 1.803,
+      "split": "VALIDATION (descriptive)",
+      "n": 128,
+      "seeds": null,
+      "operator_mode": "corrected",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/05A_artifacts/flow_spectrum.json",
+      "source_artifact_sha256": "026abc79bb094bf5cfd9ac38fbb4d9b0d1a5dee7bc55b0a18d9e3c312f281ff3",
+      "commit_provenance": "896867e (STEP 4A PART F)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "descriptive diagnostic"
+    },
+    {
+      "metric": "H2 intensity: mean adaptive validation AUC (n=3)",
+      "value": 0.8334,
+      "split": "VALIDATION",
+      "n": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "operator_mode": "corrected + intensity_normalize(p1/p99 affine, eps=1e-6)",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/06A_E1_H2H3_summary.json (arms.H2_intensity.summary) + per-seed mechanism_diagnostics.json",
+      "source_artifact_sha256": "2f05622f5d9f68219f6fd5cc100b27ed2449a412a489dd806e5e919d5f255dc3",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic (mechanism)"
+    },
+    {
+      "metric": "H2 intensity: sample SD (ddof=1)",
+      "value": 0.0377,
+      "split": "VALIDATION",
+      "n": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "operator_mode": "corrected + intensity_normalize(p1/p99 affine, eps=1e-6)",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/06A_E1_H2H3_summary.json",
+      "source_artifact_sha256": "2f05622f5d9f68219f6fd5cc100b27ed2449a412a489dd806e5e919d5f255dc3",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic (mechanism)"
+    },
+    {
+      "metric": "H2 intensity: reduction vs reference (mean ref - mean arm)",
+      "value": 0.0048,
+      "split": "VALIDATION",
+      "n": [
+        10,
+        3
+      ],
+      "seeds": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        [
+          42,
+          43,
+          44
+        ]
+      ],
+      "operator_mode": "corrected + intensity_normalize(p1/p99 affine, eps=1e-6)",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/06A_E1_H2H3_summary.json",
+      "source_artifact_sha256": "2f05622f5d9f68219f6fd5cc100b27ed2449a412a489dd806e5e919d5f255dc3",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic (mechanism, independent-arm)"
+    },
+    {
+      "metric": "H2 intensity: 95% CI of reduction (Welch independent-arm)",
+      "value": [
+        -0.071,
+        0.08
+      ],
+      "split": "VALIDATION",
+      "n": [
+        10,
+        3
+      ],
+      "seeds": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        [
+          42,
+          43,
+          44
+        ]
+      ],
+      "operator_mode": "corrected + intensity_normalize(p1/p99 affine, eps=1e-6)",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/06A_E1_H2H3_summary.json",
+      "source_artifact_sha256": "2f05622f5d9f68219f6fd5cc100b27ed2449a412a489dd806e5e919d5f255dc3",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic (mechanism, independent-arm)"
+    },
+    {
+      "metric": "H2 intensity: 95% CI of reduction (bootstrap independent-arm)",
+      "value": [
+        -0.0379,
+        0.0426
+      ],
+      "split": "VALIDATION",
+      "n": [
+        10,
+        3
+      ],
+      "seeds": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        [
+          42,
+          43,
+          44
+        ]
+      ],
+      "operator_mode": "corrected + intensity_normalize(p1/p99 affine, eps=1e-6)",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/06A_E1_H2H3_summary.json",
+      "source_artifact_sha256": "2f05622f5d9f68219f6fd5cc100b27ed2449a412a489dd806e5e919d5f255dc3",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic (mechanism, independent-arm)"
+    },
+    {
+      "metric": "H3 border/FOV: mean adaptive validation AUC (n=3)",
+      "value": 0.8178,
+      "split": "VALIDATION",
+      "n": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "operator_mode": "corrected + border_normalize(BW=4, per-image median fill)",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/06A_E1_H2H3_summary.json (arms.H3_border.summary)",
+      "source_artifact_sha256": "2f05622f5d9f68219f6fd5cc100b27ed2449a412a489dd806e5e919d5f255dc3",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic (mechanism)"
+    },
+    {
+      "metric": "H3 border/FOV: sample SD (ddof=1)",
+      "value": 0.0228,
+      "split": "VALIDATION",
+      "n": 3,
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "operator_mode": "corrected + border_normalize(BW=4, per-image median fill)",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/06A_E1_H2H3_summary.json",
+      "source_artifact_sha256": "2f05622f5d9f68219f6fd5cc100b27ed2449a412a489dd806e5e919d5f255dc3",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic (mechanism)"
+    },
+    {
+      "metric": "H3 border/FOV: reduction vs reference (mean ref - mean arm)",
+      "value": 0.0204,
+      "split": "VALIDATION",
+      "n": [
+        10,
+        3
+      ],
+      "seeds": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        [
+          42,
+          43,
+          44
+        ]
+      ],
+      "operator_mode": "corrected + border_normalize(BW=4, per-image median fill)",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/06A_E1_H2H3_summary.json",
+      "source_artifact_sha256": "2f05622f5d9f68219f6fd5cc100b27ed2449a412a489dd806e5e919d5f255dc3",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic (mechanism, independent-arm)"
+    },
+    {
+      "metric": "H3 border/FOV: 95% CI of reduction (Welch independent-arm)",
+      "value": [
+        -0.023,
+        0.064
+      ],
+      "split": "VALIDATION",
+      "n": [
+        10,
+        3
+      ],
+      "seeds": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        [
+          42,
+          43,
+          44
+        ]
+      ],
+      "operator_mode": "corrected + border_normalize(BW=4, per-image median fill)",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/06A_E1_H2H3_summary.json",
+      "source_artifact_sha256": "2f05622f5d9f68219f6fd5cc100b27ed2449a412a489dd806e5e919d5f255dc3",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic (mechanism, independent-arm)"
+    },
+    {
+      "metric": "H3 border/FOV: 95% CI of reduction (bootstrap independent-arm)",
+      "value": [
+        -0.0081,
+        0.0493
+      ],
+      "split": "VALIDATION",
+      "n": [
+        10,
+        3
+      ],
+      "seeds": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        [
+          42,
+          43,
+          44
+        ]
+      ],
+      "operator_mode": "corrected + border_normalize(BW=4, per-image median fill)",
+      "generator_sha256": "8a489eec036679f6775a2bf0b21fb112f1f968490a513b1f9b6dc012d4e384c2",
+      "source_artifact": "research_agent/06A_E1_H2H3_summary.json",
+      "source_artifact_sha256": "2f05622f5d9f68219f6fd5cc100b27ed2449a412a489dd806e5e919d5f255dc3",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "VALIDATION",
+      "inferential_or_diagnostic": "diagnostic (mechanism, independent-arm)"
+    },
+    {
+      "metric": "Material-effect threshold (predeclared, paper-mechanism)",
+      "value": 0.1,
+      "split": "NA (analytic)",
+      "n": null,
+      "seeds": null,
+      "operator_mode": "NA",
+      "generator_sha256": null,
+      "source_artifact": "STEP 4D prompt (predeclared) + 06A_E1_H2H3_RESTART_EXTENSION.md",
+      "source_artifact_sha256": "8a00a0b678027a5d0a96ab9f6c85c6903db0f20e9fb38a45b5c600dbba207667",
+      "commit_provenance": "b546155 (STEP 4D E1)",
+      "test_or_validation": "NA",
+      "inferential_or_diagnostic": "analytic decision rule"
+    },
+    {
+      "metric": "HISTORICAL (non-comparable): legacy-operator baseline Re-ID",
+      "value": 0.635,
+      "split": "HISTORICAL / NON-COMPARABLE (legacy operator, different protocol)",
+      "n": 10,
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "operator_mode": "legacy",
+      "generator_sha256": "legacy operator generator (different artifact; not a comparator)",
+      "source_artifact": "RESEARCH_BRIEF.md / 03D_CORRECTED_BASELINE_REID.md 'Historical legacy baseline (approx.) ~0.635'",
+      "source_artifact_sha256": "markdown source (documented in 03D report)",
+      "commit_provenance": "pre-STEP-2B history; explicitly excluded from inferential comparisons",
+      "test_or_validation": "HISTORICAL / NON-COMPARABLE",
+      "inferential_or_diagnostic": "historical context only"
+    },
+    {
+      "metric": "HISTORICAL (non-comparable): original published Re-ID figure",
+      "value": 0.577,
+      "split": "HISTORICAL / NON-COMPARABLE (external paper, different operator+protocol)",
+      "n": null,
+      "seeds": null,
+      "operator_mode": "external",
+      "generator_sha256": null,
+      "source_artifact": "01B_PROTOCOL_AMENDMENT.md line 172 (external aspirational target ~0.577)",
+      "source_artifact_sha256": "05fcc9fd4cb4181acd9f40603707cd259987a0d1d3750d0f3463fc1fe78b0865",
+      "commit_provenance": "pre-STEP-2B protocol docs",
+      "test_or_validation": "HISTORICAL / NON-COMPARABLE",
+      "inferential_or_diagnostic": "external context only"
+    }
+  ]
+}

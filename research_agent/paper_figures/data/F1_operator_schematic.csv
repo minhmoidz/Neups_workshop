@@ -1,0 +1,7 @@
+item,corrected,legacy,evidence_split,source
+operator mode,corrected (I - G*u),legacy (G*(I-u)),VALIDATION SMOKE / UNIT TEST,00F2_OPERATOR_REVIEW_EVIDENCE.md
+sampling identity-grid invariant |I-grid| at mu=0,0,0.652,UNIT TEST (TEST D),00F_OPERATOR_REPAIR.md
+source pixels with zero/negligible weight at mu=0,0 (0.00%),736/4096 (17.97%),UNIT TEST (TEST 4),00F_OPERATOR_REPAIR.md
+border max grid difference at mu=0.05,~0,6.516e-01,UNIT TEST (TEST 6),00F_OPERATOR_REPAIR.md
+proxy Re-ID AUC (real validation batch),0.720785,0.699515,VALIDATION SMOKE,00F_OPERATOR_REPAIR.md / 00F2_OPERATOR_REVIEW_EVIDENCE.md
+border-mean displacement,0.0075,0.2230,VALIDATION SMOKE,00F2_OPERATOR_REVIEW_EVIDENCE.md

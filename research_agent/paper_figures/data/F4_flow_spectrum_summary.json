@@ -1,0 +1,11 @@
+{
+  "cutoff_cycles_per_px": 0.016563147719962305,
+  "cutoff_cycles_per_image_256": 4.24016581631035,
+  "energy_fraction_above_cutoff": 0.8918363398448598,
+  "energy_fraction_below_cutoff": 0.10816366015514023,
+  "mean_abs_displacement_px": 1.0489640207961202,
+  "max_abs_displacement_px": 1.80312180519104,
+  "n_images": 128,
+  "split": "VALIDATION DIAGNOSTIC (descriptive)",
+  "source": "05A_artifacts/flow_spectrum.json"
+}

@@ -1,0 +1,15 @@
+stat,value,seed,split,n,label
+mean,0.739194,,TEST,10,corrected baseline official TEST
+median,0.722183,,TEST,10,corrected baseline official TEST
+max,0.803662,,TEST,10,corrected baseline official TEST
+sd,0.049847,,TEST,10,corrected baseline official TEST
+per-seed,0.7846912,0,TEST,10,corrected baseline official TEST
+per-seed,0.7779812800000001,1,TEST,10,corrected baseline official TEST
+per-seed,0.72106304,2,TEST,10,corrected baseline official TEST
+per-seed,0.66013752,3,TEST,10,corrected baseline official TEST
+per-seed,0.7233036799999999,4,TEST,10,corrected baseline official TEST
+per-seed,0.8036620800000001,5,TEST,10,corrected baseline official TEST
+per-seed,0.71028,6,TEST,10,corrected baseline official TEST
+per-seed,0.71749968,7,TEST,10,corrected baseline official TEST
+per-seed,0.80315408,8,TEST,10,corrected baseline official TEST
+per-seed,0.69016736,9,TEST,10,corrected baseline official TEST

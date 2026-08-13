@@ -1,0 +1,9 @@
+arm,mechanism,n,seeds,mean_val_auc,sd_ddof1,median,min,max,reduction_vs_ref,welch_95ci_reduction,bootstrap_95ci_reduction,material>=0.10?,test_or_validation,source
+H1 LP (band),low-pass only (sigma_lp=8),1,[42],0.8705,,0.8705,0.8705,0.8705,,,,,VALIDATION DIAGNOSTIC,05A_H1_diagnostic_summary.json
+H1 HP (band),high-pass only,1,[42],0.8659,,0.8659,0.8659,0.8659,,,,,VALIDATION DIAGNOSTIC,05A_H1_diagnostic_summary.json
+H2 intensity,"intensity_normalize(p1/p99 affine, eps=1e-6)",3,"[42,43,44]",0.8334,0.0377,0.816,0.8075,0.8766,0.0048,"[-0.0706,0.0803]","[-0.0379,0.0426]",no,VALIDATION DIAGNOSTIC,06A_E1_H2H3_summary.json
+H3 border/FOV,"border_normalize(BW=4, per-image median fill)",3,"[42,43,44]",0.8178,0.0228,0.8204,0.7938,0.8392,0.0204,"[-0.0233,0.0641]","[-0.0081,0.0493]",no,VALIDATION DIAGNOSTIC,06A_E1_H2H3_summary.json
+REFERENCE (validation),"corrected baseline, fresh attacker",10,[0..9],0.8382,0.0363,0.8454,0.7927,0.8776,,,,,VALIDATION DIAGNOSTIC,03D per-seed training_diagnostics.json
+utility REF,classification mean AUC14 / Dice,,,0.7938,,0.955,,,,,,,VALIDATION DIAGNOSTIC,05A_artifacts/utility_by_band.json
+utility LP,classification mean AUC14 / Dice,,,0.621,,0.864,,,,,,,VALIDATION DIAGNOSTIC,05A_artifacts/utility_by_band.json
+utility HP,classification mean AUC14 / Dice,,,0.6756,,0.9111,,,,,,,VALIDATION DIAGNOSTIC,05A_artifacts/utility_by_band.json
