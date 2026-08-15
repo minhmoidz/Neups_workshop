@@ -1,11 +1,18 @@
 {
   "protocol": "M2_S1_EXECUTION_LOCK",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "branch": "research/method-restart",
-  "git_head_at_preflight": "ca7a4c883c5d7ff42dd3dc84a6a72163d22002e8",
+  "git_head_at_preflight": "851c3f1a6912255c97345a7f53ed138e7ae7981d",
+  "execution_code_commit": "851c3f1a6912255c97345a7f53ed138e7ae7981d",
   "execution_mode": "paired_control_vs_c4_s1",
   "test_firewall": "CLOSED",
   "dataset_root": "/home/minhtt/datasets/nih/images/",
+  "metadata_path": "Data_Entry_2017_v2020.csv",
+  "metadata_sha256": "dc1d2df67fdc1c5a7601d48699cda2b13dc2c4841488b4183dcf04884dbaca11",
+  "config_sha_runtime_enforced": true,
+  "manifest_epochs_completed_required": true,
+  "numerical_fail_closed": true,
+  "run_validity_strict": true,
   "scientific_choices_frozen": {
     "mu": 0.01,
     "operator": "legacy",
@@ -59,7 +66,9 @@
     "c4_config_path": "config_files/config_dev_c4.json",
     "c4_config_sha256": "7cbdfce84e41317dac73651d0d7d6080cf68871e0340a68ec0d9191383716a8a",
     "attacker_config_path": "config_files/config_dev_attacker_s1.json",
-    "attacker_config_sha256": "72923582e6595103026ac0fa3488ace4888f70ca09aa91f7cdf49d8e53eb70e1"
+    "attacker_config_sha256": "72923582e6595103026ac0fa3488ace4888f70ca09aa91f7cdf49d8e53eb70e1",
+    "metadata_csv_path": "Data_Entry_2017_v2020.csv",
+    "metadata_csv_sha256": "dc1d2df67fdc1c5a7601d48699cda2b13dc2c4841488b4183dcf04884dbaca11"
   },
   "execution_paths": {
     "b_dev_output_dir": "research_runs/M2_S1/B_dev/seed_42/",
@@ -78,18 +87,17 @@
     "c4_loss_finite": true,
     "optimization_status": "PASS"
   },
-  "m1_4a_certification": {
-    "version": "1.4.1",
-    "master_runner_e2e_smoke": "PASS",
-    "attacker_privacy_contracts": "PASS",
-    "gradient_diagnostic_noninterference": "PASS",
-    "true_gradient_parity": "PASS",
-    "scientific_cli_frozen": true,
-    "run_validity_computed": true,
-    "manifest_handoffs": true,
-    "test_firewall": "CLOSED",
-    "m0_m1_4_regression": "86/86 PASS",
-    "m1_4a_gates": "26/26 PASS"
+  "m1_4b_certification": {
+    "version": "1.4.2",
+    "execution_code_commit": "851c3f1a6912255c97345a7f53ed138e7ae7981d",
+    "m0_m1_4b_regression": "110/110 PASS (T1-T136)",
+    "m1_4b_gates": "24/24 PASS (T113-T136)",
+    "config_sha_runtime_enforced": true,
+    "manifest_epochs_completed_required": true,
+    "numerical_fail_closed": true,
+    "metadata_verified": true,
+    "run_validity_strict": true,
+    "test_firewall": "CLOSED"
   },
   "lock_status": "LOCKED"
 }
