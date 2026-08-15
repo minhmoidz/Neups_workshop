@@ -13,6 +13,7 @@ TESTS = [
     'test_t11_t12_operator.py',
     'test_t13_t14_t15_firewall_provenance.py',
     'test_m01_provenance_hashes.py',
+    'test_m1_paired_configs.py',
 ]
 ALL_OK = True
 for t in TESTS:

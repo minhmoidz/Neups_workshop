@@ -1,0 +1,122 @@
+{
+  "protocol": "M1_C4_DEVELOPMENT_PROTOCOL_LOCK",
+  "version": "1.0.0",
+  "lock_date": "2026-08-15",
+  "branch": "research/method-restart",
+  "git_head_at_lock": "9af21e0189d7b57d5575d3ffd8fc4604fea56ffd",
+  "git_commit_chain": {
+    "m0": "6d9b5ba76e1312e54ec1c10934d3a9bfd7f42f43",
+    "m0_branch_manifest": "14f6715c922e2fc27338d265fcede1f48eb58298",
+    "m0_1": "9af21e0189d7b57d5575d3ffd8fc4604fea56ffd"
+  },
+  "execution_lock": {
+    "no_training": true,
+    "no_test_access": true,
+    "no_sweeps": true,
+    "no_architecture_change": true,
+    "allowed": ["read_code_configs_reports", "run_m0_suite", "tiny_probes"]
+  },
+  "arms": {
+    "b_dev": {
+      "role": "control",
+      "config": "config_files/config_dev_restored_baseline.json",
+      "config_sha256": "1f7df9e5db0c1e1b8e79b540d227d8b143b83a0f0ca6363855120c870aee221b"
+    },
+    "c4": {
+      "role": "method",
+      "config": "config_files/config_dev_c4.json",
+      "config_sha256": "e63f0a9ee0ecba2dd949a4037e113b2b7b5ab0d3688f196f7a7a62cc8548fb40",
+      "delta": "feature_loss_weight=1.0 with L_feat = MSELoss on DenseNet-121 penultimate pooled 1024-d, detached source"
+    }
+  },
+  "frozen_hyperparameters": {
+    "mu": 0.01,
+    "image_size": 256,
+    "batch_size": 16,
+    "accumulation_steps": 1,
+    "optimizer": "Adam",
+    "learning_rate": 0.0001,
+    "max_epochs": 250,
+    "ac_loss_weight": 1.0,
+    "ver_loss_weight": 1.0,
+    "ac_pos_weight": null,
+    "feature_loss_weight_b_dev": 0.0,
+    "feature_loss_weight_c4": 1.0,
+    "feature_loss": "mse",
+    "feature_representation": "densenet121_penultimate_pooled_1024",
+    "feature_loss_detach_source": true,
+    "checkpoint_selection_rule": "lowest_validation_total_loss_method_neutral",
+    "checkpoint_selection_metric": "ac_loss_weight*ac_bce + ver_loss_weight*(-log(1-ver))",
+    "checkpoint_selection_feature_term_included": false,
+    "checkpoint_selection_tiebreak": "earliest_epoch",
+    "c2_c3_off": {
+      "ver_ensemble_size": 1,
+      "ver_restart_every": 0,
+      "ver_warmup_iters": 0,
+      "use_budget_map": false
+    },
+    "seeds": {
+      "s1": {"anonymizer": 42, "attacker": 42},
+      "s2": {"anonymizer": [42, 43, 44], "attacker": [42, 43, 44]}
+    }
+  },
+  "attacker_recipe": {
+    "architecture": "SiameseNetwork_ResNet50_fresh_ImageNet",
+    "criterion": "BCEWithLogitsLoss",
+    "optimizer": "Adam",
+    "batch_size": 32,
+    "learning_rate": 0.0001,
+    "max_epochs": 100,
+    "early_stopping": 5,
+    "image_size": 256,
+    "perturbation": "flow_field",
+    "mu": 0.01,
+    "checkpoint_rule": "lowest_validation_loss"
+  },
+  "artifacts": {
+    "released_generator": "4d82dcdd1c1b5856d6361fd08b7a6838b044ffc7db89e8bf953a6279cb3bf153",
+    "generator_train_init": "101226890c061ba5917db7a56a300d1a53988f6eda8767856f10863e2a20aacb",
+    "classifier": "8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663",
+    "verifier": "331efaed0c0433c69941ddc003a14a936c688d94fd4ecfbefd34e53bfa7c051a",
+    "pairs_training": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
+    "pairs_validation": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7"
+  },
+  "vram_probe": {
+    "batch_64": "OOM",
+    "batch_32": "OOM",
+    "batch_24": "OK_12330MiB_79pct",
+    "batch_16": "OK_8294_8722MiB_54_56pct",
+    "decision": "batch_size=16 (safe fallback per hierarchy 64->32->16)"
+  },
+  "ambiguity_resolutions": {
+    "A1_batch_size": "16 both arms, identical iter order",
+    "A2_max_epochs": "250, no early stopping",
+    "A3_checkpoint_selection": "method-neutral lowest validation total loss with feature term EXCLUDED from selection metric in both arms",
+    "A4_critic_semantics": "online SGD every iter; ACLoss deepcopy/refresh each forward (repaired m0_port ACLoss); unchanged in C4",
+    "A5_feature_term": "MSELoss 1024-d penultimate, detached source, weight 1.0",
+    "A6_verifier_input": "raw 256 -> Resize 224 -> ImageNet normalize",
+    "A7_seeds": "S1 42/42; S2 42,43,44 both",
+    "A8_c2c3": "off",
+    "A9_initial_generator": "pretrained_generator_prichexy_net.pth (upstream init) both arms",
+    "A10_attacker_init": "fresh ImageNet ResNet-50 per run",
+    "A11_segmentation": "BLOCKED"
+  },
+  "evaluators": {
+    "classification": "DenseNet-121 pretrained_classifier.pth on TRAIN/VAL anonymized images only",
+    "reid_privacy": "attacker recipe on TRAIN/VAL pairs only",
+    "segmentation": "BLOCKED — archive/train_seg_unet/best.pth sha 2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0 has no training script/config/VAL provenance in repo"
+  },
+  "false_positive_control": {
+    "required": true,
+    "checks": [
+      "config sha256 match frozen values",
+      "ACLoss repair == pristine upstream (T4e)",
+      "identical batch/seed B_dev vs C4"
+    ]
+  },
+  "gates": {
+    "s1_required": true,
+    "s2_condition": "only if S1 internally consistent (no NaN/OOM/config drift)"
+  },
+  "test_lock": "OFFICIAL_TEST_LOCK.md respected; TEST closed"
+}
