@@ -123,7 +123,8 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
 
 def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
                                 perturbation_type='flow_field', batch_size=16,
-                                generator_checkpoint=None, image_size=None):
+                                generator_checkpoint=None, image_size=None,
+                                expected_generator_sha=None):
     """VAL-only classification evaluation. fold is validated BEFORE dataset init.
 
     :param config: dev config dict (image_path, ...).
@@ -132,6 +133,7 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
     :param fold: development fold; MUST be 'val'.
     :param generator_checkpoint: explicit path to selected M2 generator checkpoint (required for flow_field).
     :param image_size: legacy flow-field grid size; defaults to config image_size or 256.
+    :param expected_generator_sha: optional expected SHA256 of the generator checkpoint.
     """
     assert_dev_fold(fold)          # reject TEST before dataset construction
     firewall_check('dev')
@@ -166,6 +168,9 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
             raise FileNotFoundError("Selected generator checkpoint not found: %s" % gen_path)
 
         selected_gen_sha = file_sha256(gen_path)
+        if expected_generator_sha is not None and selected_gen_sha != expected_generator_sha:
+            raise RuntimeError("Selected generator SHA mismatch before classification eval: %s != expected %s" % (selected_gen_sha, expected_generator_sha))
+
         generator = UNet(1, 2, 32).to(device)
         generator.load_state_dict(torch.load(gen_path, map_location=device, weights_only=False))
         if image_size is None:
@@ -176,6 +181,8 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
     if config.get('dataloader') is not None:
         dataloader = config['dataloader']
         n_images = len(dataloader.dataset)
+        if not config.get('unit_test_mode', False) and fold == 'val' and n_images != 10816:
+            raise RuntimeError("Classification scientific VAL requires exactly 10,816 images, got %d" % n_images)
     elif config.get('unit_test_mode', False):
         from m0_tests.test_m14a_execution_harness import SyntheticClassificationDataset
         if image_size is None:

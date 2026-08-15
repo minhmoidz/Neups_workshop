@@ -39,8 +39,17 @@ from m2_dev.evaluator_common import (
     FROZEN_VERIFIER_SHA,
     REPAIRED_ACLOSS_PATH,
     REPAIRED_ACLOSS_SHA,
+    FROZEN_METADATA_PATH,
+    FROZEN_METADATA_SHA,
+    FROZEN_B_DEV_CONFIG_PATH,
+    FROZEN_B_DEV_CONFIG_SHA,
+    FROZEN_C4_CONFIG_PATH,
+    FROZEN_C4_CONFIG_SHA,
+    FROZEN_ATTACKER_CONFIG_PATH,
+    FROZEN_ATTACKER_CONFIG_SHA,
     METHOD_NEUTRAL_CKPT_NAME,
     verify_repaired_acloss,
+    verify_frozen_scientific_configs,
     verify_scientific_dependencies,
 )
 from m2_dev.anonymizer_runner import M2AnonymizerRunner
@@ -70,7 +79,9 @@ def parse_args():
     args = parser.parse_args()
 
     if args.scientific_m2_s1:
-        # Strictly enforce frozen scientific hyperparameters
+        # Strictly enforce frozen scientific hyperparameters and full paired execution
+        if args.arm != 'all':
+            raise ValueError("Scientific M2-S1 mode requires --arm all, got %r" % args.arm)
         if args.max_epochs != 250:
             raise ValueError("Scientific M2-S1 mode requires max_epochs == 250, got %d" % args.max_epochs)
         if args.attacker_epochs != 100:
@@ -86,7 +97,7 @@ def parse_args():
 
 
 def assert_m2_scientific_mode_ready(image_path='/home/minhtt/datasets/nih/images/'):
-    """Fail closed unless all dependencies, checkpoints, SHAs, pair files, and images pass."""
+    """Fail closed unless all dependencies, checkpoints, SHAs, pair files, metadata, configs, and images pass."""
     firewall_check('dev')
     dep_res = verify_scientific_dependencies(image_path=image_path)
     if dep_res['status'] != 'PASS':
@@ -109,15 +120,20 @@ def verify_environment_and_hashes():
             torch.cuda.get_device_properties(0).total_memory / (1024**3)
         ))
 
-    # Comprehensive dependency preflight
+    # Comprehensive dependency preflight (checkpoints, configs, metadata, pairs, images)
     dep = assert_m2_scientific_mode_ready('/home/minhtt/datasets/nih/images/')
     print("[PASS] Initial Generator SHA: %s..." % dep['initial_generator_sha256'][:16])
     print("[PASS] Frozen Classifier SHA: %s..." % dep['classifier_sha256'][:16])
     print("[PASS] Frozen Verifier SHA:   %s..." % dep['verifier_sha256'][:16])
     print("[PASS] Repaired ACLoss SHA:   %s..." % dep['acloss_sha256'][:16])
+    print("[PASS] B_dev Config SHA:      %s..." % dep['b_dev_config_sha256'][:16])
+    print("[PASS] C4 Config SHA:         %s..." % dep['c4_config_sha256'][:16])
+    print("[PASS] Attacker Config SHA:   %s..." % dep['attacker_config_sha256'][:16])
+    print("[PASS] Metadata SHA:          %s..." % dep['metadata_sha256'][:16])
     print("[PASS] TRAIN Pairs SHA:       %s... (%d pairs verified)" % (dep['train_pairs_sha256'][:16], dep['train_pairs_count']))
     print("[PASS] VAL Pairs SHA:         %s... (%d pairs verified)" % (dep['val_pairs_sha256'][:16], dep['val_pairs_count']))
     print("[PASS] Dataset Image Availability: 100%% (0 missing)")
+    print("[PASS] Metadata Image1 Coverage: 100%% (0 missing)")
     print("=" * 70)
     return device
 
@@ -146,6 +162,7 @@ def run_anonymizer_arm(arm, config_path, max_epochs, seed, device, out_base_dir=
     runner = M2AnonymizerRunner(
         arm=arm,
         config=cfg,
+        config_path=config_path,
         output_dir=out_dir,
         device=device,
         seed=seed,
@@ -195,8 +212,22 @@ def train_s1_attacker_arm(arm, seed, attacker_seed, max_epochs, patience, device
     os.makedirs(attacker_out_dir, exist_ok=True)
 
     att_cfg_path = os.path.join(ROOT, 'config_files', 'config_dev_attacker_s1.json')
+    if not os.path.exists(att_cfg_path):
+        raise FileNotFoundError("Attacker config not found: %s" % att_cfg_path)
+    actual_att_cfg_sha = file_sha256(att_cfg_path)
+    if actual_att_cfg_sha != FROZEN_ATTACKER_CONFIG_SHA and not unit_test_mode:
+        raise RuntimeError("Attacker config SHA mismatch: %s != %s" % (actual_att_cfg_sha, FROZEN_ATTACKER_CONFIG_SHA))
+
     with open(att_cfg_path) as f:
         attacker_cfg = json.load(f)
+
+    if not unit_test_mode:
+        if max_epochs != attacker_cfg.get('max_epochs', 100):
+            raise ValueError("Attacker max_epochs %d does not match frozen config %d" % (max_epochs, attacker_cfg.get('max_epochs', 100)))
+        if patience != attacker_cfg.get('early_stopping', 5):
+            raise ValueError("Attacker patience %d does not match frozen config %d" % (patience, attacker_cfg.get('early_stopping', 5)))
+        if attacker_seed != attacker_cfg.get('attacker_seed', 42):
+            raise ValueError("Attacker seed %d does not match frozen config %d" % (attacker_seed, attacker_cfg.get('attacker_seed', 42)))
 
     attacker_cfg['max_epochs'] = max_epochs
     attacker_cfg['early_stopping'] = patience
@@ -254,6 +285,16 @@ def evaluate_privacy_arm(arm, seed, attacker_seed, device, out_base_dir=None, un
 
     gen_ckpt = gen_manifest['selected_generator_checkpoint']
     attacker_ckpt = att_manifest['best_attacker_path']
+    expected_gen_sha = gen_manifest['selected_generator_sha256']
+    expected_att_sha = att_manifest['best_attacker_sha256']
+
+    # Explicit SHA revalidation before loading
+    actual_gen_sha = file_sha256(gen_ckpt)
+    actual_att_sha = file_sha256(attacker_ckpt)
+    if actual_gen_sha != expected_gen_sha:
+        raise RuntimeError("Generator checkpoint SHA mismatch before privacy eval: %s != expected %s" % (actual_gen_sha, expected_gen_sha))
+    if actual_att_sha != expected_att_sha:
+        raise RuntimeError("Attacker checkpoint SHA mismatch before privacy eval: %s != expected %s" % (actual_att_sha, expected_att_sha))
 
     cfg = {
         'batch_size': 32,
@@ -265,7 +306,9 @@ def evaluate_privacy_arm(arm, seed, attacker_seed, device, out_base_dir=None, un
         generator_checkpoint=gen_ckpt,
         device=device,
         unit_test_mode=unit_test_mode,
-        image_size=64 if unit_test_mode else None
+        image_size=64 if unit_test_mode else None,
+        expected_generator_sha=expected_gen_sha,
+        expected_attacker_sha=expected_att_sha
     )
 
     # Save raw predictions NPZ
@@ -273,7 +316,7 @@ def evaluate_privacy_arm(arm, seed, attacker_seed, device, out_base_dir=None, un
     np.savez_compressed(pred_npz_path, y_true=eval_res['y_true'], y_score=eval_res['y_score'])
     pred_sha = file_sha256(pred_npz_path)
 
-    # Return scalar summary dict with path references (no float-casting ndarrays)
+    # Return scalar summary dict with path references
     return {
         'roc_auc': float(eval_res['roc_auc']),
         'accuracy': float(eval_res['accuracy']),
@@ -298,6 +341,13 @@ def evaluate_classification_arm(arm, seed, device, out_base_dir=None, unit_test_
         gen_manifest = json.load(f)
 
     gen_ckpt = gen_manifest['selected_generator_checkpoint']
+    expected_gen_sha = gen_manifest['selected_generator_sha256']
+
+    # Explicit SHA revalidation before loading
+    actual_gen_sha = file_sha256(gen_ckpt)
+    if actual_gen_sha != expected_gen_sha:
+        raise RuntimeError("Generator checkpoint SHA mismatch before classification eval: %s != expected %s" % (actual_gen_sha, expected_gen_sha))
+
     cfg = {
         'batch_size': 32,
         'image_path': '/home/minhtt/datasets/nih/images/',
@@ -308,7 +358,8 @@ def evaluate_classification_arm(arm, seed, device, out_base_dir=None, unit_test_
         fold='val',
         generator_checkpoint=gen_ckpt,
         device=device,
-        image_size=64 if unit_test_mode else None
+        image_size=64 if unit_test_mode else None,
+        expected_generator_sha=expected_gen_sha
     )
     if clf_res['n_classes_valid'] != 14:
         raise RuntimeError("Classification evaluation returned %d valid classes, expected 14" % clf_res['n_classes_valid'])
@@ -320,24 +371,76 @@ def check_run_validity(b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manif
     """Verify that all completion artifacts, hashes, non-NaN values, and split invariants hold."""
     if not (b_dev_manifest and c4_manifest and b_att_manifest and c4_att_manifest):
         return False, "Missing manifest"
-    if not unit_test_mode and (b_dev_manifest.get('epochs_completed') != expected_epochs or c4_manifest.get('epochs_completed') != expected_epochs):
-        return False, "Anonymizer epochs incomplete"
-    if not (np.isfinite(b_priv['roc_auc']) and np.isfinite(c4_priv['roc_auc'])):
-        return False, "Non-finite privacy ROC-AUC"
-    if not (np.isfinite(b_class['macro_auc']) and np.isfinite(c4_class['macro_auc'])):
-        return False, "Non-finite classification Macro AUC"
-    if b_class['n_classes_valid'] != 14 or c4_class['n_classes_valid'] != 14:
-        return False, "Invalid class count in classification"
-    if not unit_test_mode and (b_priv['n_pairs'] != 2000 or c4_priv['n_pairs'] != 2000):
-        return False, "Privacy pairs count != 2000"
-    if not unit_test_mode and (b_class.get('n_images') != 10816 or c4_class.get('n_images') != 10816):
-        return False, "Classification images count != 10816"
+
+    # 1. Anonymizer completion contract
+    for name, m, exp_cfg_sha in [('B_dev', b_dev_manifest, FROZEN_B_DEV_CONFIG_SHA), ('C4', c4_manifest, FROZEN_C4_CONFIG_SHA)]:
+        if m.get('epochs_completed') is None:
+            return False, "%s manifest missing epochs_completed" % name
+        if m.get('epochs_completed') != expected_epochs:
+            return False, "%s epochs_completed (%s) != expected (%d)" % (name, m.get('epochs_completed'), expected_epochs)
+        if m.get('requested_max_epochs') != expected_epochs:
+            return False, "%s requested_max_epochs (%s) != expected (%d)" % (name, m.get('requested_max_epochs'), expected_epochs)
+        if m.get('numerical_validity') != 'PASS':
+            return False, "%s numerical_validity != PASS" % name
+        if m.get('nan_inf_detected') is not False:
+            return False, "%s nan_inf_detected is True" % name
+
+        gen_p = m.get('selected_generator_checkpoint')
+        if not gen_p or not os.path.exists(gen_p):
+            return False, "%s selected generator checkpoint missing: %s" % (name, gen_p)
+        actual_gen_sha = file_sha256(gen_p)
+        if actual_gen_sha != m.get('selected_generator_sha256'):
+            return False, "%s selected generator SHA mismatch: %s != manifest %s" % (name, actual_gen_sha, m.get('selected_generator_sha256'))
+        if not unit_test_mode and m.get('config_sha256') != exp_cfg_sha:
+            return False, "%s config_sha256 (%s) != frozen (%s)" % (name, m.get('config_sha256'), exp_cfg_sha)
+
+    # 2. Attacker completion contract
+    for name, att_m, gen_m in [('B_dev', b_att_manifest, b_dev_manifest), ('C4', c4_att_manifest, c4_manifest)]:
+        att_p = att_m.get('best_attacker_path')
+        if not att_p or not os.path.exists(att_p):
+            return False, "%s best attacker checkpoint missing: %s" % (name, att_p)
+        actual_att_sha = file_sha256(att_p)
+        if actual_att_sha != att_m.get('best_attacker_sha256'):
+            return False, "%s attacker SHA mismatch: %s != manifest %s" % (name, actual_att_sha, att_m.get('best_attacker_sha256'))
+        if att_m.get('generator_checkpoint_sha256') != gen_m.get('selected_generator_sha256'):
+            return False, "%s attacker generator SHA link mismatch" % name
+
+    # 3. Privacy Evaluation invariants
+    for name, p_res, gen_m, att_m in [('B_dev', b_priv, b_dev_manifest, b_att_manifest), ('C4', c4_priv, c4_manifest, c4_att_manifest)]:
+        if not np.isfinite(p_res.get('roc_auc', float('nan'))):
+            return False, "Non-finite %s privacy ROC-AUC" % name
+        if p_res.get('generator_checkpoint_sha256') != gen_m.get('selected_generator_sha256'):
+            return False, "%s privacy generator SHA link mismatch" % name
+        if p_res.get('attacker_checkpoint_sha256') != att_m.get('best_attacker_sha256'):
+            return False, "%s privacy attacker SHA link mismatch" % name
+        if not unit_test_mode and p_res.get('n_pairs') != 2000:
+            return False, "%s privacy pairs count != 2000" % name
+
+    # 4. Classification Evaluation invariants
+    for name, c_res, gen_m in [('B_dev', b_class, b_dev_manifest), ('C4', c4_class, c4_manifest)]:
+        if not np.isfinite(c_res.get('macro_auc', float('nan'))):
+            return False, "Non-finite %s classification Macro AUC" % name
+        if c_res.get('n_classes_valid') != 14:
+            return False, "Invalid class count (%s) in %s classification" % (c_res.get('n_classes_valid'), name)
+        if c_res.get('generator_checkpoint_sha256') != gen_m.get('selected_generator_sha256'):
+            return False, "%s classification generator SHA link mismatch" % name
+        if not unit_test_mode and c_res.get('classifier_checkpoint_sha256') != FROZEN_CLASSIFIER_SHA:
+            return False, "%s classification classifier SHA drift" % name
+        if not unit_test_mode and c_res.get('n_images') != 10816:
+            return False, "%s classification images count != 10816" % name
+
     return True, "VALID"
 
 
 def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
     """Core orchestration pipeline reusable across full runs and integration smoke tests."""
-    device = torch.device(args.device) if args.device else verify_environment_and_hashes()
+    # Preflight dependency & hash verification is UNCONDITIONAL in scientific mode / standard runs
+    if not unit_test_mode:
+        preflight_device = verify_environment_and_hashes()
+        device = torch.device(args.device) if args.device else preflight_device
+    else:
+        device = torch.device(args.device) if args.device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     base = out_base_dir or os.path.join(ROOT, 'research_runs', 'M2_S1')
 
     b_dev_config = os.path.join(ROOT, 'config_files', 'config_dev_restored_baseline.json')
@@ -395,10 +498,18 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
             b_priv, c4_priv, b_class, c4_class, expected_epochs=args.max_epochs, unit_test_mode=unit_test_mode
         )
 
-        privacy_gate_pass = (delta_priv <= 0.03)
-        class_gate_pass = (delta_class >= 0.0)
-
-        s1_verdict = "C4 S1: PROMOTE TO S2" if (run_valid and privacy_gate_pass and class_gate_pass) else "C4 S1: DO NOT PROMOTE"
+        if run_valid:
+            privacy_gate_pass = (delta_priv <= 0.03)
+            class_gate_pass = (delta_class >= 0.0)
+            s1_verdict = "C4 S1: PROMOTE TO S2" if (privacy_gate_pass and class_gate_pass) else "C4 S1: DO NOT PROMOTE"
+            privacy_status = 'PASS' if privacy_gate_pass else 'FAIL'
+            class_status = 'PASS' if class_gate_pass else 'FAIL'
+        else:
+            privacy_gate_pass = False
+            class_gate_pass = False
+            s1_verdict = "C4 S1: INVALID — NO SCIENTIFIC VERDICT"
+            privacy_status = 'NOT_EVALUATED_DUE_TO_INVALID_RUN'
+            class_status = 'NOT_EVALUATED_DUE_TO_INVALID_RUN'
 
         # Read peak VRAM from telemetry
         b_df_p = os.path.join(base, 'B_dev', 'seed_%d' % args.seed, 'epoch_metrics.csv')
@@ -446,8 +557,10 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
             },
             'gates': {
                 'privacy_gate_pass': bool(privacy_gate_pass),
+                'privacy_gate_status': privacy_status,
                 'privacy_gate_threshold': '<= +0.03',
                 'classification_gate_pass': bool(class_gate_pass),
+                'classification_gate_status': class_status,
                 'classification_gate_threshold': '>= 0.0',
                 'segmentation_status': 'NOT APPLICABLE — evaluator provenance not yet certified',
             },
@@ -495,8 +608,8 @@ def write_markdown_report(report_path, summary):
         "|---|---:|---:|---:|---|:---:|",
         "| **Selected Generator Epoch** | `%s` | `%s` | — | Method-neutral min total loss | diagnostic |" % (b['best_epoch'], c4['best_epoch']),
         "| **Val Selection Total Loss** | `%.5f` | `%.5f` | `%+.5f` | $L_{AC} + L_{priv}$ | diagnostic |" % (b['best_selection_total'], c4['best_selection_total'], c4['best_selection_total'] - b['best_selection_total']),
-        "| **Adaptive Re-ID VAL AUC** | `%.4f` | `%.4f` | `%+.4f` | $\\Delta_{priv} \\le +0.03$ | **%s** |" % (b['privacy_val_roc_auc'], c4['privacy_val_roc_auc'], d['delta_privacy_val_auc'], 'PASS' if g['privacy_gate_pass'] else 'FAIL'),
-        "| **Classification Macro VAL AUC** | `%.4f` | `%.4f` | `%+.4f` | $\\Delta_{class} \\ge 0.0$ | **%s** |" % (b['classification_val_macro_auc'], c4['classification_val_macro_auc'], d['delta_classification_val_macro_auc'], 'PASS' if g['classification_gate_pass'] else 'FAIL'),
+        "| **Adaptive Re-ID VAL AUC** | `%.4f` | `%.4f` | `%+.4f` | $\\Delta_{priv} \\le +0.03$ | **%s** |" % (b['privacy_val_roc_auc'], c4['privacy_val_roc_auc'], d['delta_privacy_val_auc'], g.get('privacy_gate_status', 'PASS' if g['privacy_gate_pass'] else 'FAIL')),
+        "| **Classification Macro VAL AUC** | `%.4f` | `%.4f` | `%+.4f` | $\\Delta_{class} \\ge 0.0$ | **%s** |" % (b['classification_val_macro_auc'], c4['classification_val_macro_auc'], d['delta_classification_val_macro_auc'], g.get('classification_gate_status', 'PASS' if g['classification_gate_pass'] else 'FAIL')),
         "| **Segmentation Dice** | *BLOCKED* | *BLOCKED* | — | Certified evaluator | **NOT APPLICABLE** |",
         "| **Peak VRAM (MB)** | `%.1f` | `%.1f` | `%+.1f` | < 16,000 MB | diagnostic |" % (b['peak_vram_mb'], c4['peak_vram_mb'], c4['peak_vram_mb'] - b['peak_vram_mb']),
         "| **Training Runtime (Hours)** | `%.2f` | `%.2f` | `%+.2f` | 250 epochs | diagnostic |" % (b.get('training_runtime_hours', 0), c4.get('training_runtime_hours', 0), c4.get('training_runtime_hours', 0) - b.get('training_runtime_hours', 0)),
@@ -549,10 +662,10 @@ def write_markdown_report(report_path, summary):
         "## 5. Frozen S1 Decision Gate Evaluation",
         "- **Run Validity**: `%s` (%s)" % (summary['run_status'], summary.get('validity_reason', '')),
         "- **Privacy Gate ($\\Delta_{priv} \\le +0.03$)**: `%s` ($\\Delta_{priv} = %+.4f$)" % (
-            'PASS' if g['privacy_gate_pass'] else 'FAIL', d['delta_privacy_val_auc']
+            g.get('privacy_gate_status', 'PASS' if g['privacy_gate_pass'] else 'FAIL'), d['delta_privacy_val_auc']
         ),
         "- **Classification Gate ($\\Delta_{class} \\ge 0.0$)**: `%s` ($\\Delta_{class} = %+.4f$)" % (
-            'PASS' if g['classification_gate_pass'] else 'FAIL', d['delta_classification_val_macro_auc']
+            g.get('classification_gate_status', 'PASS' if g['classification_gate_pass'] else 'FAIL'), d['delta_classification_val_macro_auc']
         ),
         "- **Segmentation**: `%s`" % g['segmentation_status'],
         "",

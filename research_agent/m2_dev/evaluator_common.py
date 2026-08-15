@@ -18,6 +18,7 @@ for _p in (ROOT, os.path.join(ROOT, 'research_agent')):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+import json
 import hashlib
 import numpy as np
 import pandas as pd
@@ -61,6 +62,19 @@ FROZEN_VERIFIER_SHA = '331efaed0c0433c69941ddc003a14a936c688d94fd4ecfbefd34e53bf
 REPAIRED_ACLOSS_PATH = os.path.join(ROOT, 'research_agent', 'm0_port', 'ACLoss.py')
 REPAIRED_ACLOSS_SHA = '3ed8483718c3ccffb59f76e9dece47e92295a553895e3fd43b1b18cd486b263c'
 
+# Frozen metadata and configs (M1.4b frozen)
+FROZEN_METADATA_PATH = os.path.join(ROOT, 'Data_Entry_2017_v2020.csv')
+FROZEN_METADATA_SHA = 'dc1d2df67fdc1c5a7601d48699cda2b13dc2c4841488b4183dcf04884dbaca11'
+
+FROZEN_B_DEV_CONFIG_PATH = os.path.join(ROOT, 'config_files', 'config_dev_restored_baseline.json')
+FROZEN_B_DEV_CONFIG_SHA = '14d3943f798d5855b4a49d55ecc6af858647f514f30c1cc7c803c7edebab30b6'
+
+FROZEN_C4_CONFIG_PATH = os.path.join(ROOT, 'config_files', 'config_dev_c4.json')
+FROZEN_C4_CONFIG_SHA = '7cbdfce84e41317dac73651d0d7d6080cf68871e0340a68ec0d9191383716a8a'
+
+FROZEN_ATTACKER_CONFIG_PATH = os.path.join(ROOT, 'config_files', 'config_dev_attacker_s1.json')
+FROZEN_ATTACKER_CONFIG_SHA = '72923582e6595103026ac0fa3488ace4888f70ca09aa91f7cdf49d8e53eb70e1'
+
 # Method-neutral anonymizer checkpoint filename (§11)
 METHOD_NEUTRAL_CKPT_NAME = 'generator_best_method_neutral.pth'
 
@@ -82,6 +96,121 @@ def verify_repaired_acloss():
         raise RuntimeError('ACLoss SHA mismatch: %s != %s' % (actual_sha, REPAIRED_ACLOSS_SHA))
     from research_agent.m0_port.ACLoss import ACLoss
     return ACLoss, actual_sha, REPAIRED_ACLOSS_PATH
+
+
+def verify_frozen_scientific_configs(lock_path=None):
+    """Verify exact SHA256 and semantic configuration invariants of frozen experiment configs."""
+    lock_path = lock_path or os.path.join(ROOT, 'research_agent', 'M2_S1_EXECUTION_LOCK.json')
+    if os.path.exists(lock_path):
+        with open(lock_path) as f:
+            lock = json.load(f)
+        prov = lock.get('artifact_provenance', {})
+        exp_b_sha = prov.get('b_dev_config_sha256', FROZEN_B_DEV_CONFIG_SHA)
+        exp_c4_sha = prov.get('c4_config_sha256', FROZEN_C4_CONFIG_SHA)
+        exp_att_sha = prov.get('attacker_config_sha256', FROZEN_ATTACKER_CONFIG_SHA)
+    else:
+        exp_b_sha = FROZEN_B_DEV_CONFIG_SHA
+        exp_c4_sha = FROZEN_C4_CONFIG_SHA
+        exp_att_sha = FROZEN_ATTACKER_CONFIG_SHA
+
+    # 1. B_dev config
+    if not os.path.exists(FROZEN_B_DEV_CONFIG_PATH):
+        raise FileNotFoundError("B_dev config not found: %s" % FROZEN_B_DEV_CONFIG_PATH)
+    actual_b_sha = file_sha256(FROZEN_B_DEV_CONFIG_PATH)
+    if actual_b_sha != exp_b_sha:
+        raise RuntimeError("B_dev config SHA mismatch: %s != %s" % (actual_b_sha, exp_b_sha))
+
+    # 2. C4 config
+    if not os.path.exists(FROZEN_C4_CONFIG_PATH):
+        raise FileNotFoundError("C4 config not found: %s" % FROZEN_C4_CONFIG_PATH)
+    actual_c4_sha = file_sha256(FROZEN_C4_CONFIG_PATH)
+    if actual_c4_sha != exp_c4_sha:
+        raise RuntimeError("C4 config SHA mismatch: %s != %s" % (actual_c4_sha, exp_c4_sha))
+
+    # 3. Attacker config
+    if not os.path.exists(FROZEN_ATTACKER_CONFIG_PATH):
+        raise FileNotFoundError("Attacker config not found: %s" % FROZEN_ATTACKER_CONFIG_PATH)
+    actual_att_sha = file_sha256(FROZEN_ATTACKER_CONFIG_PATH)
+    if actual_att_sha != exp_att_sha:
+        raise RuntimeError("Attacker config SHA mismatch: %s != %s" % (actual_att_sha, exp_att_sha))
+
+    # 4. Semantic Invariant Assertions
+    with open(FROZEN_B_DEV_CONFIG_PATH) as f:
+        b_cfg = json.load(f)
+    with open(FROZEN_C4_CONFIG_PATH) as f:
+        c4_cfg = json.load(f)
+    with open(FROZEN_ATTACKER_CONFIG_PATH) as f:
+        att_cfg = json.load(f)
+
+    # Common anonymizer assertions
+    for name, cfg, exp_feat_weight in [('B_dev', b_cfg, 0.0), ('C4', c4_cfg, 1.0)]:
+        if cfg.get('operator') != 'legacy':
+            raise RuntimeError("%s config operator must be 'legacy', got %r" % (name, cfg.get('operator')))
+        if cfg.get('transform_mode') != 'legacy':
+            raise RuntimeError("%s config transform_mode must be 'legacy', got %r" % (name, cfg.get('transform_mode')))
+        if cfg.get('mu') != 0.01:
+            raise RuntimeError("%s config mu must be 0.01, got %r" % (name, cfg.get('mu')))
+        if cfg.get('image_size') != 256:
+            raise RuntimeError("%s config image_size must be 256, got %r" % (name, cfg.get('image_size')))
+        if cfg.get('batch_size') != 16:
+            raise RuntimeError("%s config batch_size must be 16, got %r" % (name, cfg.get('batch_size')))
+        if cfg.get('accumulation_steps') != 1:
+            raise RuntimeError("%s config accumulation_steps must be 1, got %r" % (name, cfg.get('accumulation_steps')))
+        if cfg.get('optimizer') != 'Adam':
+            raise RuntimeError("%s config optimizer must be 'Adam', got %r" % (name, cfg.get('optimizer')))
+        if cfg.get('learning_rate') != 1e-4:
+            raise RuntimeError("%s config learning_rate must be 1e-4, got %r" % (name, cfg.get('learning_rate')))
+        if cfg.get('max_epochs') != 250:
+            raise RuntimeError("%s config max_epochs must be 250, got %r" % (name, cfg.get('max_epochs')))
+        if cfg.get('seed') != 42:
+            raise RuntimeError("%s config seed must be 42, got %r" % (name, cfg.get('seed')))
+        if cfg.get('feature_loss_weight') != exp_feat_weight:
+            raise RuntimeError("%s config feature_loss_weight must be %r, got %r" % (name, exp_feat_weight, cfg.get('feature_loss_weight')))
+        if cfg.get('use_budget_map') is not False:
+            raise RuntimeError("%s config use_budget_map must be False, got %r" % (name, cfg.get('use_budget_map')))
+        if cfg.get('stochastic_lambda') != 0.0:
+            raise RuntimeError("%s config stochastic_lambda must be 0.0, got %r" % (name, cfg.get('stochastic_lambda')))
+        if cfg.get('ver_ensemble_size') != 1:
+            raise RuntimeError("%s config ver_ensemble_size must be 1, got %r" % (name, cfg.get('ver_ensemble_size')))
+        if cfg.get('ver_restart_every') != 0:
+            raise RuntimeError("%s config ver_restart_every must be 0, got %r" % (name, cfg.get('ver_restart_every')))
+        if cfg.get('checkpoint_selection_rule') != 'lowest_validation_total_loss_method_neutral':
+            raise RuntimeError("%s config selection rule must be 'lowest_validation_total_loss_method_neutral', got %r" % (name, cfg.get('checkpoint_selection_rule')))
+        if cfg.get('checkpoint_selection_tiebreak') != 'earliest_epoch':
+            raise RuntimeError("%s config selection tiebreak must be 'earliest_epoch', got %r" % (name, cfg.get('checkpoint_selection_tiebreak')))
+
+    # C4-specific assertions
+    if c4_cfg.get('feature_loss') != 'mse':
+        raise RuntimeError("C4 config feature_loss must be 'mse', got %r" % c4_cfg.get('feature_loss'))
+    if c4_cfg.get('feature_loss_detach_source') is not True:
+        raise RuntimeError("C4 config feature_loss_detach_source must be True, got %r" % c4_cfg.get('feature_loss_detach_source'))
+    if c4_cfg.get('feature_representation') != 'densenet121_penultimate_pooled_1024':
+        raise RuntimeError("C4 config feature_representation must be 'densenet121_penultimate_pooled_1024', got %r" % c4_cfg.get('feature_representation'))
+
+    # Attacker assertions
+    if att_cfg.get('batch_size') != 32:
+        raise RuntimeError("Attacker config batch_size must be 32, got %r" % att_cfg.get('batch_size'))
+    if att_cfg.get('learning_rate') != 1e-4:
+        raise RuntimeError("Attacker config learning_rate must be 1e-4, got %r" % att_cfg.get('learning_rate'))
+    if att_cfg.get('max_epochs') != 100:
+        raise RuntimeError("Attacker config max_epochs must be 100, got %r" % att_cfg.get('max_epochs'))
+    if att_cfg.get('early_stopping') != 5:
+        raise RuntimeError("Attacker config early_stopping must be 5, got %r" % att_cfg.get('early_stopping'))
+    if att_cfg.get('attacker_seed') != 42:
+        raise RuntimeError("Attacker config attacker_seed must be 42, got %r" % att_cfg.get('attacker_seed'))
+    if att_cfg.get('train_geometry') != 'anon_anon':
+        raise RuntimeError("Attacker config train_geometry must be 'anon_anon', got %r" % att_cfg.get('train_geometry'))
+    if att_cfg.get('checkpoint_val_geometry') != 'anon_anon':
+        raise RuntimeError("Attacker config checkpoint_val_geometry must be 'anon_anon', got %r" % att_cfg.get('checkpoint_val_geometry'))
+    if att_cfg.get('scientific_val_geometry') != 'anon_real':
+        raise RuntimeError("Attacker config scientific_val_geometry must be 'anon_real', got %r" % att_cfg.get('scientific_val_geometry'))
+
+    return {
+        'status': 'PASS',
+        'b_dev_config_sha256': actual_b_sha,
+        'c4_config_sha256': actual_c4_sha,
+        'attacker_config_sha256': actual_att_sha,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +427,7 @@ class LazyPairDataset(torch.utils.data.Dataset):
     Fail-closed: raises FileNotFoundError if any referenced image is missing.
     """
 
-    def __init__(self, phase='training', image_path=None, image_size=IMAGE_SIZE, n_channels=1, max_pairs=None):
+    def __init__(self, phase='training', image_path=None, image_size=IMAGE_SIZE, n_channels=1, max_pairs=None, metadata_path=None):
         firewall_check('dev')
         assert_dev_phase(phase)
 
@@ -329,12 +458,13 @@ class LazyPairDataset(torch.utils.data.Dataset):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
-        csv_path = os.path.join(ROOT, 'Data_Entry_2017_v2020.csv')
-        if os.path.exists(csv_path):
-            meta_data = pd.read_csv(csv_path).values
-            file_to_finding = dict(zip(meta_data[:, 0], meta_data[:, 1]))
-        else:
-            file_to_finding = {}
+        csv_path = metadata_path or os.path.join(ROOT, 'Data_Entry_2017_v2020.csv')
+        if not os.path.exists(csv_path):
+            raise FileNotFoundError("Required metadata file Data_Entry_2017_v2020.csv not found at: %s" % csv_path)
+
+        df_meta = pd.read_csv(csv_path)
+        meta_data = df_meta[['Image Index', 'Finding Labels']].values
+        file_to_finding = dict(zip(meta_data[:, 0], meta_data[:, 1]))
 
         self.PRED_LABEL = [
             'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
@@ -347,7 +477,9 @@ class LazyPairDataset(torch.utils.data.Dataset):
         for i in range(len(self.image_pairs)):
             label = np.zeros(14, dtype=np.float32)
             fname = self.image_pairs[i, 0]
-            finding = file_to_finding.get(fname, 'No Finding')
+            if fname not in file_to_finding:
+                raise RuntimeError("Image %s at pair index %d absent from metadata Data_Entry_2017_v2020.csv" % (fname, i))
+            finding = file_to_finding[fname]
             if finding != 'No Finding' and isinstance(finding, str):
                 for d in finding.split('|'):
                     if d in self.PRED_LABEL:
@@ -384,18 +516,20 @@ class LazyPairDataset(torch.utils.data.Dataset):
         return img1, img2, self.ac_labels_1[index], self.labels_id[index]
 
 
-def build_dev_anonymizer_loaders(config, seed=42, num_workers=None):
-    """Build canonical anonymizer TRAIN and VAL loaders with FingerprintedRandomSampler.
-    Never constructs TEST loaders.
+def build_dev_anonymizer_loaders(config, seed=42, num_workers=0, pin_mem=False, max_pairs=None):
+    """Construct paired TRAIN and VAL anonymizer loaders with explicit single-source-of-truth
+    FingerprintedRandomSampler for TRAIN and sequential VAL.
+    Fail-closed: raises FileNotFoundError if image_path is missing or not a directory.
     """
     firewall_check('dev')
-    image_path = config.get('image_path', None)
+    image_path = config.get('image_path')
+    if not image_path:
+        raise ValueError("image_path must be explicitly specified in config (no implicit fallback allowed)")
+    if not os.path.isdir(image_path):
+        raise FileNotFoundError("Explicit image_path directory not found: %s" % image_path)
+
     image_size = config.get('image_size', IMAGE_SIZE)
     batch_size = config.get('batch_size', 16)
-    max_pairs = config.get('max_pairs', None)
-    if num_workers is None:
-        num_workers = config.get('num_workers', 4 if torch.cuda.is_available() else 0)
-    pin_mem = torch.cuda.is_available()
 
     train_dataset = LazyPairDataset(phase='training', image_size=image_size, n_channels=1,
                                     image_path=image_path, max_pairs=max_pairs)
@@ -425,7 +559,7 @@ def build_dev_anonymizer_loaders(config, seed=42, num_workers=None):
 
 def verify_scientific_dependencies(image_path=None):
     """Preflight check: verifies existence and SHAs of all frozen checkpoints,
-    repaired modules, pair splits, and 100% of referenced image files.
+    repaired modules, pair splits, metadata, configs, and 100% of referenced image files.
     Fail closed if any dependency is missing or drifted.
     """
     firewall_check('dev')
@@ -457,7 +591,10 @@ def verify_scientific_dependencies(image_path=None):
     # 4. Repaired ACLoss module
     _, actual_acloss_sha, _ = verify_repaired_acloss()
 
-    # 5. Pair split files
+    # 5. Frozen configs and semantic parameters
+    cfg_audit = verify_frozen_scientific_configs()
+
+    # 6. Pair split files
     train_pair_path = os.path.join(ROOT, 'image_pairs', 'image_pairs_training_10000.txt')
     val_pair_path = os.path.join(ROOT, 'image_pairs', 'image_pairs_validation_2000.txt')
     if not os.path.exists(train_pair_path):
@@ -474,22 +611,46 @@ def verify_scientific_dependencies(image_path=None):
     if val_pairs_sha != expected_val_sha:
         raise RuntimeError("VAL pair SHA mismatch: %s != %s" % (val_pairs_sha, expected_val_sha))
 
-    # 6. Verify image availability for all 10,000 TRAIN + 2,000 VAL pairs
+    # 7. Metadata file existence, SHA, and pair coverage
+    if not os.path.exists(FROZEN_METADATA_PATH):
+        raise FileNotFoundError("Metadata file missing: %s" % FROZEN_METADATA_PATH)
+    actual_meta_sha = file_sha256(FROZEN_METADATA_PATH)
+    if actual_meta_sha != FROZEN_METADATA_SHA:
+        raise RuntimeError("Metadata SHA mismatch: %s != %s" % (actual_meta_sha, FROZEN_METADATA_SHA))
+
+    df_meta = pd.read_csv(FROZEN_METADATA_PATH)
+    meta_fnames = set(df_meta['Image Index'].astype(str))
+    dup_count = int(df_meta['Image Index'].duplicated().sum())
+    if dup_count > 0:
+        raise RuntimeError("Metadata has %d duplicate Image Index entries" % dup_count)
+
     with open(train_pair_path) as f:
         train_lines = [line.strip().split() for line in f if line.strip()]
     with open(val_pair_path) as f:
         val_lines = [line.strip().split() for line in f if line.strip()]
 
     train_fnames = set()
+    train_image1 = set()
     for row in train_lines:
+        train_image1.add(row[0])
         train_fnames.add(row[0])
         train_fnames.add(row[1])
 
     val_fnames = set()
+    val_image1 = set()
     for row in val_lines:
+        val_image1.add(row[0])
         val_fnames.add(row[0])
         val_fnames.add(row[1])
 
+    missing_train_meta = train_image1 - meta_fnames
+    missing_val_meta = val_image1 - meta_fnames
+    if missing_train_meta:
+        raise RuntimeError("Missing %d TRAIN image1 in metadata (e.g. %s)" % (len(missing_train_meta), list(missing_train_meta)[:3]))
+    if missing_val_meta:
+        raise RuntimeError("Missing %d VAL image1 in metadata (e.g. %s)" % (len(missing_val_meta), list(missing_val_meta)[:3]))
+
+    # 8. Verify image availability for all 10,000 TRAIN + 2,000 VAL pairs
     existing_files = set(os.listdir(image_path))
     missing_train = train_fnames - existing_files
     missing_val = val_fnames - existing_files
@@ -506,10 +667,17 @@ def verify_scientific_dependencies(image_path=None):
         'classifier_sha256': actual_clf_sha,
         'verifier_sha256': actual_ver_sha,
         'acloss_sha256': actual_acloss_sha,
+        'b_dev_config_sha256': cfg_audit['b_dev_config_sha256'],
+        'c4_config_sha256': cfg_audit['c4_config_sha256'],
+        'attacker_config_sha256': cfg_audit['attacker_config_sha256'],
+        'metadata_sha256': actual_meta_sha,
         'train_pairs_sha256': train_pairs_sha,
         'val_pairs_sha256': val_pairs_sha,
         'train_pairs_count': len(train_lines),
         'val_pairs_count': len(val_lines),
         'missing_train_images': 0,
         'missing_val_images': 0,
+        'train_image1_metadata_missing': 0,
+        'val_image1_metadata_missing': 0,
+        'metadata_duplicate_image_index_count': dup_count,
     }

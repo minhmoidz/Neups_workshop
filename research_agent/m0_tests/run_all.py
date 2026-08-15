@@ -17,6 +17,8 @@ TESTS = [
     'test_m12_dev_evaluators.py',
     'test_m13_execution_preflight.py',
     'test_m14_final_hardening.py',
+    'test_m14a_execution_harness.py',
+    'test_m14b_execution_integrity.py',
 ]
 ALL_OK = True
 for t in TESTS:

@@ -36,9 +36,12 @@ from m2_dev.evaluator_common import (
     build_dev_anonymizer_loaders,
     make_flow_field_components,
     FROZEN_CLASSIFIER_PATH,
+    FROZEN_CLASSIFIER_SHA,
     FROZEN_VERIFIER_PATH,
     INITIAL_GENERATOR_PATH,
     REPAIRED_ACLOSS_PATH,
+    FROZEN_B_DEV_CONFIG_SHA,
+    FROZEN_C4_CONFIG_SHA,
     verify_scientific_dependencies,
 )
 from m2_dev.dev_attacker import DevAttacker, SiameseNetwork, load_frozen_anonymizer
@@ -503,27 +506,47 @@ def test_t103_scientific_cli_rejects_non_5_attacker_patience():
 # ---------------------------------------------------------------------------
 def test_t104_run_validity_dynamically_computed():
     """T104: check_run_validity returns False when artifacts or AUC counts are corrupted."""
-    b_man = {'epochs_completed': 250}
-    c4_man = {'epochs_completed': 250}
-    b_att = {'best_attacker_sha256': 'sha'}
-    c4_att = {'best_attacker_sha256': 'sha'}
-    b_priv = {'roc_auc': 0.55, 'n_pairs': 2000}
-    c4_priv = {'roc_auc': 0.56, 'n_pairs': 2000}
-    b_class = {'macro_auc': 0.75, 'n_classes_valid': 14, 'n_images': 10816}
-    c4_class = {'macro_auc': 0.76, 'n_classes_valid': 14, 'n_images': 10816}
+    with tempfile.NamedTemporaryFile() as f_gen, tempfile.NamedTemporaryFile() as f_att:
+        gen_sha = file_sha256(f_gen.name)
+        att_sha = file_sha256(f_att.name)
 
-    valid, reason = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv, c4_priv, b_class, c4_class, 250, False)
-    assert valid is True
+        b_man = {
+            'epochs_completed': 250, 'requested_max_epochs': 250, 'numerical_validity': 'PASS', 'nan_inf_detected': False,
+            'selected_generator_checkpoint': f_gen.name, 'selected_generator_sha256': gen_sha,
+            'config_sha256': FROZEN_B_DEV_CONFIG_SHA
+        }
+        c4_man = {
+            'epochs_completed': 250, 'requested_max_epochs': 250, 'numerical_validity': 'PASS', 'nan_inf_detected': False,
+            'selected_generator_checkpoint': f_gen.name, 'selected_generator_sha256': gen_sha,
+            'config_sha256': FROZEN_C4_CONFIG_SHA
+        }
+        b_att = {
+            'best_attacker_path': f_att.name, 'best_attacker_sha256': att_sha,
+            'generator_checkpoint_sha256': gen_sha
+        }
+        c4_att = {
+            'best_attacker_path': f_att.name, 'best_attacker_sha256': att_sha,
+            'generator_checkpoint_sha256': gen_sha
+        }
+        b_priv = {'roc_auc': 0.55, 'n_pairs': 2000, 'generator_checkpoint_sha256': gen_sha, 'attacker_checkpoint_sha256': att_sha}
+        c4_priv = {'roc_auc': 0.56, 'n_pairs': 2000, 'generator_checkpoint_sha256': gen_sha, 'attacker_checkpoint_sha256': att_sha}
+        b_class = {'macro_auc': 0.75, 'n_classes_valid': 14, 'n_images': 10816, 'generator_checkpoint_sha256': gen_sha, 'classifier_checkpoint_sha256': FROZEN_CLASSIFIER_SHA}
+        c4_class = {'macro_auc': 0.76, 'n_classes_valid': 14, 'n_images': 10816, 'generator_checkpoint_sha256': gen_sha, 'classifier_checkpoint_sha256': FROZEN_CLASSIFIER_SHA}
 
-    # Test invalid on NaN
-    b_priv_bad = {'roc_auc': float('nan'), 'n_pairs': 2000}
-    valid_bad, _ = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv_bad, c4_priv, b_class, c4_class, 250, False)
-    assert valid_bad is False
+        valid, reason = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv, c4_priv, b_class, c4_class, 250, False)
+        assert valid is True, "Expected valid, got: %s" % reason
 
-    # Test invalid on class count != 14
-    b_class_bad = {'macro_auc': 0.75, 'n_classes_valid': 13, 'n_images': 10816}
-    valid_bad_class, _ = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv, c4_priv, b_class_bad, c4_class, 250, False)
-    assert valid_bad_class is False
+        # Test invalid on NaN
+        b_priv_bad = dict(b_priv)
+        b_priv_bad['roc_auc'] = float('nan')
+        valid_bad, _ = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv_bad, c4_priv, b_class, c4_class, 250, False)
+        assert valid_bad is False
+
+        # Test invalid on class count != 14
+        b_class_bad = dict(b_class)
+        b_class_bad['n_classes_valid'] = 13
+        valid_bad_class, _ = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv, c4_priv, b_class_bad, c4_class, 250, False)
+        assert valid_bad_class is False
     return True
 
 
@@ -639,17 +662,19 @@ def test_t109_classification_requires_10816_images_in_scientific_mode():
     with tempfile.TemporaryDirectory() as tmp_dir:
         fake_gen_p = os.path.join(tmp_dir, 'gen.pth')
         torch.save(UNet(1, 2, 32).state_dict(), fake_gen_p)
+        ds = SyntheticClassificationDataset(size=100, image_size=64)
+        loader = torch.utils.data.DataLoader(ds, batch_size=16)
 
         try:
             evaluate_classification_val(
-                config={'image_path': tmp_dir, 'unit_test_mode': False},
+                config={'image_path': tmp_dir, 'dataloader': loader, 'unit_test_mode': False},
                 fold='val',
                 generator_checkpoint=fake_gen_p,
                 device='cpu'
             )
             assert False, "Should have raised RuntimeError on images count != 10816"
-        except (RuntimeError, FileNotFoundError):
-            pass
+        except RuntimeError as e:
+            assert "Classification scientific VAL requires exactly 10,816 images" in str(e)
     return True
 
 

@@ -80,7 +80,8 @@ def evaluate_reid_val_mixed(anonymize_fn, attacker_net, validation_loader, devic
 
 
 def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoint=None, device=None,
-                      validation_loader=None, unit_test_mode=False, image_size=256):
+                      validation_loader=None, unit_test_mode=False, image_size=256,
+                      expected_generator_sha=None, expected_attacker_sha=None):
     """End-to-end evaluation helper for scientific VAL privacy.
     Loads generator from generator_checkpoint and attacker from attacker_checkpoint,
     then evaluates on the fixed 2,000 validation pairs under anon/real threat model.
@@ -97,8 +98,18 @@ def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoin
     if not attacker_checkpoint:
         raise ValueError("attacker_checkpoint must be explicitly specified")
 
+    if not os.path.exists(generator_checkpoint):
+        raise FileNotFoundError("Generator checkpoint not found: %s" % generator_checkpoint)
+    if not os.path.exists(attacker_checkpoint):
+        raise FileNotFoundError("Attacker checkpoint not found: %s" % attacker_checkpoint)
+
     gen_sha = file_sha256(generator_checkpoint)
     att_sha = file_sha256(attacker_checkpoint)
+
+    if expected_generator_sha is not None and gen_sha != expected_generator_sha:
+        raise RuntimeError("Generator checkpoint SHA mismatch before privacy eval: %s != expected %s" % (gen_sha, expected_generator_sha))
+    if expected_attacker_sha is not None and att_sha != expected_attacker_sha:
+        raise RuntimeError("Attacker checkpoint SHA mismatch before privacy eval: %s != expected %s" % (att_sha, expected_attacker_sha))
 
     _, anonymize_fn = load_frozen_anonymizer(device=device, checkpoint_path=generator_checkpoint, image_size=image_size)
 

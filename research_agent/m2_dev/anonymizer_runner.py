@@ -63,7 +63,8 @@ class M2AnonymizerRunner:
     def __init__(self, arm='B_dev', config=None, output_dir=None, device=None,
                  seed=42, initial_generator_path=None, ac_model=None,
                  verification_model=None, training_loader=None, validation_loader=None,
-                 train_sampler=None, unit_test_mode=False, gradient_diagnostics_enabled=True):
+                 train_sampler=None, unit_test_mode=False, gradient_diagnostics_enabled=True,
+                 config_path=None):
         """Paired M2 Anonymizer Runner for B_dev and C4.
 
         :param arm: 'B_dev' (control) or 'C4' (feature preservation).
@@ -78,6 +79,7 @@ class M2AnonymizerRunner:
         :param validation_loader: optional pre-built loader (for testing).
         :param train_sampler: optional pre-built sampler.
         :param unit_test_mode: bool, if False (default) enforces strict scientific fail-closed checks.
+        :param config_path: optional explicit path to config file.
         """
         firewall_check('dev')
         if arm not in ('B_dev', 'C4'):
@@ -88,21 +90,27 @@ class M2AnonymizerRunner:
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.unit_test_mode = unit_test_mode
         self.gradient_diagnostics_enabled = gradient_diagnostics_enabled and arm == 'C4'
+        self.nan_inf_detected = False
 
         # 1. Load config
         if config is None:
             cfg_file = 'config_dev_c4.json' if arm == 'C4' else 'config_dev_restored_baseline.json'
-            config_path = os.path.join(ROOT, 'config_files', cfg_file)
-            with open(config_path) as f:
+            c_path = os.path.join(ROOT, 'config_files', cfg_file)
+            with open(c_path) as f:
                 self.config = json.load(f)
-            self.config_path = config_path
+            self.config_path = c_path
         elif isinstance(config, str):
             with open(config) as f:
                 self.config = json.load(f)
             self.config_path = config
         else:
             self.config = config
-            self.config_path = None
+            if config_path is not None:
+                self.config_path = config_path
+            else:
+                cfg_file = 'config_dev_c4.json' if arm == 'C4' else 'config_dev_restored_baseline.json'
+                default_p = os.path.join(ROOT, 'config_files', cfg_file)
+                self.config_path = default_p if os.path.exists(default_p) else None
 
         self.output_dir = output_dir or os.path.join(ROOT, 'research_runs', 'M2_S1', arm, 'seed_%d' % seed)
         os.makedirs(self.output_dir, exist_ok=True)
@@ -111,6 +119,7 @@ class M2AnonymizerRunner:
         self.batch_size = self.config.get('batch_size', 16)
         self.learning_rate = self.config.get('learning_rate', 1e-4)
         self.max_epochs = self.config.get('max_epochs', 250)
+        self.requested_max_epochs = self.max_epochs
         self.image_size = self.config.get('image_size', IMAGE_SIZE)
         self.ac_loss_weight = self.config.get('ac_loss_weight', 1.0)
         self.ver_loss_weight = self.config.get('ver_loss_weight', 1.0)
@@ -477,9 +486,9 @@ class M2AnonymizerRunner:
 
     def run(self, max_epochs=None):
         """Execute the full training and validation loop with method-neutral selection."""
-        max_epochs = max_epochs or self.max_epochs
+        self.requested_max_epochs = max_epochs or self.max_epochs
 
-        for epoch in range(self.start_epoch, max_epochs):
+        for epoch in range(self.start_epoch, self.requested_max_epochs):
             t0 = time.time()
             train_m = self.train_epoch(epoch)
             val_m = self.validate_epoch(epoch)
@@ -487,9 +496,13 @@ class M2AnonymizerRunner:
             peak_vram = torch.cuda.max_memory_allocated(self.device) / (1024 * 1024) if (torch.cuda.is_available() and getattr(self.device, 'type', '') == 'cuda') else 0.0
             order_sha = self.train_sampler.get_epoch_order_hash(epoch) if self.train_sampler is not None else None
 
-            # Check for NaN / Inf
+            # Check for NaN / Inf in all load-bearing and diagnostic scalars
             all_vals = list(train_m.values()) + list(val_m.values())
-            has_nan_inf = any(not np.isfinite(v) for v in all_vals if isinstance(v, (int, float)))
+            if self.arm == 'C4' and epoch in self.gradient_norm_diagnostics:
+                diag = self.gradient_norm_diagnostics[epoch]
+                all_vals.extend([diag.get('base_grad_norm'), diag.get('feature_grad_norm'), diag.get('feature_base_ratio')])
+
+            has_nan_inf = any(not np.isfinite(v) for v in all_vals if (v is not None and isinstance(v, (int, float, np.floating, np.integer))))
 
             combined = {
                 'epoch': epoch,
@@ -503,6 +516,11 @@ class M2AnonymizerRunner:
             }
             if self.arm == 'C4' and epoch in self.gradient_norm_diagnostics:
                 combined['feature_grad_ratio'] = self.gradient_norm_diagnostics[epoch].get('feature_base_ratio')
+
+            # Scientific Fail-Closed on NaN/Inf
+            if has_nan_inf:
+                self.nan_inf_detected = True
+                raise FloatingPointError("Non-finite loss/diagnostic detected in epoch %d (arm %s): %s" % (epoch, self.arm, combined))
 
             self.epoch_metrics.append(combined)
 
@@ -534,6 +552,9 @@ class M2AnonymizerRunner:
         except Exception:
             git_head = None
 
+        epochs_done = len(self.epoch_metrics)
+        final_ep = self.epoch_metrics[-1]['epoch'] if self.epoch_metrics else None
+
         manifest = {
             'arm': self.arm,
             'selected_generator_checkpoint': os.path.abspath(self.best_checkpoint_path),
@@ -541,9 +562,16 @@ class M2AnonymizerRunner:
             'best_epoch': self.best_epoch,
             'best_selection_total': self.best_selection_total,
             'initial_generator_sha256': self.initial_generator_sha,
+            'config_path': os.path.abspath(self.config_path) if self.config_path else None,
             'config_sha256': config_sha,
             'git_head': git_head,
-            'total_epochs': max_epochs,
+            'requested_max_epochs': self.requested_max_epochs,
+            'start_epoch': self.start_epoch,
+            'epochs_completed': epochs_done,
+            'final_completed_epoch': final_ep,
+            'total_epochs': self.requested_max_epochs,
+            'nan_inf_detected': self.nan_inf_detected,
+            'numerical_validity': 'PASS' if (not self.nan_inf_detected and epochs_done > 0) else 'FAIL',
             'seed': self.seed,
             'acloss_sha256': self.acloss_sha,
             'gradient_norm_diagnostics': self.gradient_norm_diagnostics,
