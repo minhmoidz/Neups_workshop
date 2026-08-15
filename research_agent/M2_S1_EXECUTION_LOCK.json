@@ -2,7 +2,7 @@
   "protocol": "M2_S1_EXECUTION_LOCK",
   "version": "1.4.0",
   "branch": "research/method-restart",
-  "git_head_at_preflight": "7127b6690ebbfdd3e5aa5e1dc8472935c5e974f1",
+  "git_head_at_preflight": "64f66124398582414fcf9040a677f43009909fa7",
   "execution_mode": "paired_control_vs_c4_s1",
   "test_firewall": "CLOSED",
   "dataset_root": "/home/minhtt/datasets/nih/images/",
