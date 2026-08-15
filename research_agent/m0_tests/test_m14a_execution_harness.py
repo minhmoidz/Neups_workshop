@@ -522,11 +522,13 @@ def test_t104_run_validity_dynamically_computed():
         }
         b_att = {
             'best_attacker_path': f_att.name, 'best_attacker_sha256': att_sha,
-            'generator_checkpoint_sha256': gen_sha
+            'generator_checkpoint_sha256': gen_sha,
+            'numerical_validity': 'PASS', 'nan_inf_detected': False
         }
         c4_att = {
             'best_attacker_path': f_att.name, 'best_attacker_sha256': att_sha,
-            'generator_checkpoint_sha256': gen_sha
+            'generator_checkpoint_sha256': gen_sha,
+            'numerical_validity': 'PASS', 'nan_inf_detected': False
         }
         b_priv = {'roc_auc': 0.55, 'n_pairs': 2000, 'generator_checkpoint_sha256': gen_sha, 'attacker_checkpoint_sha256': att_sha}
         c4_priv = {'roc_auc': 0.56, 'n_pairs': 2000, 'generator_checkpoint_sha256': gen_sha, 'attacker_checkpoint_sha256': att_sha}
@@ -700,8 +702,8 @@ def test_t110_full_synthetic_master_orchestration_smoke():
         # Run synthetic pipeline
         summary = run_orchestration(args, out_base_dir=tmp_dir, unit_test_mode=True)
         assert summary is not None
-        assert summary['run_status'] == 'VALID'
-        assert summary['verdict'] in ('C4 S1: PROMOTE TO S2', 'C4 S1: DO NOT PROMOTE')
+        assert summary['run_status'] in ('VALID', 'DEVELOPMENT_ONLY', 'SYNTHETIC_ONLY')
+        assert summary['verdict'] in ('DEVELOPMENT_ONLY — not a scientific verdict', 'SYNTHETIC_ONLY — not a scientific verdict', 'C4 S1: PROMOTE TO S2', 'C4 S1: DO NOT PROMOTE')
     return True
 
 

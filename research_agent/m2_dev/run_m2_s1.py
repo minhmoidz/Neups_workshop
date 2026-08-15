@@ -17,6 +17,8 @@ import os
 import sys
 import json
 import time
+import hashlib
+import subprocess
 import argparse
 import numpy as np
 import pandas as pd
@@ -92,6 +94,13 @@ def parse_args():
             raise ValueError("Scientific M2-S1 mode requires seed == 42, got %d" % args.seed)
         if args.attacker_seed != 42:
             raise ValueError("Scientific M2-S1 mode requires attacker_seed == 42, got %d" % args.attacker_seed)
+
+    # F1 (M1.4c): Canonical M2-S1 output namespace may ONLY be used with --scientific-m2-s1
+    if not args.scientific_m2_s1:
+        # Allow unit_test_mode to bypass (set at orchestration level, not here)
+        args._require_scientific_gate = True
+    else:
+        args._require_scientific_gate = False
 
     return args
 
@@ -363,6 +372,17 @@ def evaluate_classification_arm(arm, seed, device, out_base_dir=None, unit_test_
     )
     if clf_res['n_classes_valid'] != 14:
         raise RuntimeError("Classification evaluation returned %d valid classes, expected 14" % clf_res['n_classes_valid'])
+
+    # F13 (M1.4c): Persist raw predictions and per-pathology AUCs
+    pred_csv_path = os.path.join(arm_dir, 'classification_val_predictions.csv')
+    auc_csv_path = os.path.join(arm_dir, 'classification_val_aucs.csv')
+    clf_res['pred_df'].to_csv(pred_csv_path, index=False)
+    clf_res['auc_df'].to_csv(auc_csv_path, index=False)
+    clf_res['predictions_file'] = pred_csv_path
+    clf_res['predictions_file_sha256'] = file_sha256(pred_csv_path)
+    clf_res['aucs_file'] = auc_csv_path
+    clf_res['aucs_file_sha256'] = file_sha256(auc_csv_path)
+
     return clf_res
 
 
@@ -404,6 +424,11 @@ def check_run_validity(b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manif
             return False, "%s attacker SHA mismatch: %s != manifest %s" % (name, actual_att_sha, att_m.get('best_attacker_sha256'))
         if att_m.get('generator_checkpoint_sha256') != gen_m.get('selected_generator_sha256'):
             return False, "%s attacker generator SHA link mismatch" % name
+        # §30 / F5 (M1.4c): Attacker numerical validity
+        if att_m.get('numerical_validity') != 'PASS':
+            return False, "%s attacker numerical_validity != PASS" % name
+        if att_m.get('nan_inf_detected') is not False:
+            return False, "%s attacker nan_inf_detected is True" % name
 
     # 3. Privacy Evaluation invariants
     for name, p_res, gen_m, att_m in [('B_dev', b_priv, b_dev_manifest, b_att_manifest), ('C4', c4_priv, c4_manifest, c4_att_manifest)]:
@@ -432,8 +457,106 @@ def check_run_validity(b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manif
     return True, "VALID"
 
 
+# F4 (M1.4c): Stale scientific artifacts that must not pre-exist
+SCIENTIFIC_STALE_ARTIFACTS = [
+    'M2_S1_summary.json', 'M2_S1_C4_RESULT.md', 'checkpoint_manifest.json',
+    'generator_best_method_neutral.pth', 'checkpoint_latest.pth',
+    'best_attacker.pth', 'attacker_manifest.json',
+    'privacy_val_predictions.npz', 'classification_val_predictions.csv',
+]
+
+
+def check_scientific_output_freshness(base_dir):
+    """F4 (M1.4c): Scientific output directory must be fresh — no stale artifacts."""
+    if not os.path.exists(base_dir):
+        return True
+    for root, dirs, files in os.walk(base_dir):
+        for fname in files:
+            if fname in SCIENTIFIC_STALE_ARTIFACTS:
+                raise RuntimeError(
+                    "Scientific output directory is not fresh: found stale artifact '%s' in %s. "
+                    "Remove old results before a new scientific run." % (fname, root)
+                )
+    return True
+
+
+def check_git_source_guard(required_ancestor='851c3f1a6912255c97345a7f53ed138e7ae7981d'):
+    """F9 (M1.4c): Verify tracked tree is clean and HEAD descends from certified execution code."""
+    try:
+        # Tracked tree must be clean
+        result = subprocess.run(['git', 'diff', '--quiet'], cwd=ROOT, capture_output=True)
+        if result.returncode != 0:
+            raise RuntimeError("Scientific git source guard: tracked tree has uncommitted changes")
+        result = subprocess.run(['git', 'diff', '--cached', '--quiet'], cwd=ROOT, capture_output=True)
+        if result.returncode != 0:
+            raise RuntimeError("Scientific git source guard: index has staged changes")
+        # HEAD must descend from certified execution code commit
+        result = subprocess.run(
+            ['git', 'merge-base', '--is-ancestor', required_ancestor, 'HEAD'],
+            cwd=ROOT, capture_output=True
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Scientific git source guard: HEAD does not descend from certified execution code %s" % required_ancestor
+            )
+    except FileNotFoundError:
+        raise RuntimeError("Scientific git source guard: git not found")
+    return True
+
+
+def compute_classification_val_fingerprints():
+    """§5 (M1.4c): Compute deterministic SHA256 fingerprints of classification VAL cohort."""
+    csv_path = os.path.join(ROOT, 'chexnet', 'nih_labels.csv')
+    if not os.path.exists(csv_path):
+        return None
+    df = pd.read_csv(csv_path)
+    val_df = df[df['fold'] == 'val'].copy()
+    val_df = val_df.sort_values('Image Index').reset_index(drop=True)
+
+    # Image Index fingerprint
+    h_img = hashlib.sha256()
+    for idx in val_df['Image Index']:
+        h_img.update((str(idx) + '\n').encode('utf-8'))
+
+    # Patient ID fingerprint
+    h_pat = hashlib.sha256()
+    patient_ids = []
+    for idx in val_df['Image Index']:
+        pid = str(idx).split('_')[0]
+        patient_ids.append(pid)
+        h_pat.update((pid + '\n').encode('utf-8'))
+
+    # Label matrix fingerprint
+    PRED_LABEL = [
+        'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
+        'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
+        'Pleural_Thickening', 'Hernia'
+    ]
+    h_lbl = hashlib.sha256()
+    for _, row in val_df.iterrows():
+        label_vec = [str(int(row.get(p, 0))) for p in PRED_LABEL]
+        h_lbl.update((','.join(label_vec) + '\n').encode('utf-8'))
+
+    return {
+        'classification_val_n_images': len(val_df),
+        'classification_val_n_patients': len(set(patient_ids)),
+        'classification_val_image_index_sha256': h_img.hexdigest(),
+        'classification_val_patient_sequence_sha256': h_pat.hexdigest(),
+        'classification_val_label_matrix_sha256': h_lbl.hexdigest(),
+    }
+
+
 def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
     """Core orchestration pipeline reusable across full runs and integration smoke tests."""
+    # F1 (M1.4c): Canonical M2-S1 requires --scientific-m2-s1
+    is_canonical_output = (out_base_dir is None or
+                           os.path.abspath(out_base_dir) == os.path.abspath(os.path.join(ROOT, 'research_runs', 'M2_S1')))
+    if not unit_test_mode and is_canonical_output and not getattr(args, 'scientific_m2_s1', False):
+        raise RuntimeError(
+            "Canonical M2-S1 execution requires --scientific-m2-s1. "
+            "Without this flag, the canonical output namespace research_runs/M2_S1/ is protected."
+        )
+
     # Preflight dependency & hash verification is UNCONDITIONAL in scientific mode / standard runs
     if not unit_test_mode:
         preflight_device = verify_environment_and_hashes()
@@ -442,6 +565,14 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
         device = torch.device(args.device) if args.device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     base = out_base_dir or os.path.join(ROOT, 'research_runs', 'M2_S1')
+
+    # F4 (M1.4c): Scientific output directory must be fresh
+    if getattr(args, 'scientific_m2_s1', False) and not unit_test_mode:
+        check_scientific_output_freshness(base)
+
+    # F9 (M1.4c): Git source guard in scientific mode
+    if getattr(args, 'scientific_m2_s1', False) and not unit_test_mode:
+        check_git_source_guard()
 
     b_dev_config = os.path.join(ROOT, 'config_files', 'config_dev_restored_baseline.json')
     c4_config = os.path.join(ROOT, 'config_files', 'config_dev_c4.json')
@@ -501,7 +632,11 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
         if run_valid:
             privacy_gate_pass = (delta_priv <= 0.03)
             class_gate_pass = (delta_class >= 0.0)
-            s1_verdict = "C4 S1: PROMOTE TO S2" if (privacy_gate_pass and class_gate_pass) else "C4 S1: DO NOT PROMOTE"
+            # F1 (M1.4c): Only scientific mode may issue PROMOTE / DO NOT PROMOTE verdicts
+            if unit_test_mode:
+                s1_verdict = "DEVELOPMENT_ONLY — not a scientific verdict"
+            else:
+                s1_verdict = "C4 S1: PROMOTE TO S2" if (privacy_gate_pass and class_gate_pass) else "C4 S1: DO NOT PROMOTE"
             privacy_status = 'PASS' if privacy_gate_pass else 'FAIL'
             class_status = 'PASS' if class_gate_pass else 'FAIL'
         else:
@@ -524,6 +659,14 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
             'protocol': 'M2-S1',
             'run_status': 'VALID' if run_valid else 'INVALID',
             'validity_reason': val_reason,
+            'provenance': {
+                'generator_optimizer': 'Adam(lr=1e-4)',
+                'verifier_critic_optimizer': 'Adam(lr=1e-4)',
+                'classifier_critic_optimizer': 'SGD(lr=1e-4, momentum=0.9, weight_decay=1e-4)',
+                'classification_split_csv_path': 'chexnet/nih_labels.csv',
+                'classification_split_csv_sha256': file_sha256(os.path.join(ROOT, 'chexnet', 'nih_labels.csv')) if os.path.exists(os.path.join(ROOT, 'chexnet', 'nih_labels.csv')) else None,
+                'classification_val_structural_fingerprints': compute_classification_val_fingerprints(),
+            },
             'b_dev': {
                 'seed': args.seed,
                 'best_epoch': b_dev_manifest['best_epoch'],
@@ -536,6 +679,10 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
                 'privacy_val_metrics': b_priv,
                 'classification_val_macro_auc': float(auc_b_class),
                 'classification_val_disease_aucs': {k: float(v) for k, v in b_dis_aucs.items()},
+                'classification_val_predictions_file': b_class.get('predictions_file'),
+                'classification_val_predictions_sha256': b_class.get('predictions_file_sha256'),
+                'classification_val_aucs_file': b_class.get('aucs_file'),
+                'classification_val_aucs_sha256': b_class.get('aucs_file_sha256'),
             },
             'c4': {
                 'seed': args.seed,
@@ -550,6 +697,10 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
                 'privacy_val_metrics': c4_priv,
                 'classification_val_macro_auc': float(auc_c4_class),
                 'classification_val_disease_aucs': {k: float(v) for k, v in c4_dis_aucs.items()},
+                'classification_val_predictions_file': c4_class.get('predictions_file'),
+                'classification_val_predictions_sha256': c4_class.get('predictions_file_sha256'),
+                'classification_val_aucs_file': c4_class.get('aucs_file'),
+                'classification_val_aucs_sha256': c4_class.get('aucs_file_sha256'),
             },
             'deltas': {
                 'delta_privacy_val_auc': float(delta_priv),

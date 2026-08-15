@@ -16,6 +16,7 @@ evaluation (P0-A). This runner:
 import copy
 import os
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -136,7 +137,19 @@ class DevAttacker:
             loss.backward()
             self.optimizer.step()
             running += loss.item()
-        return running / max(len(self.training_loader), 1)
+        avg_loss = running / max(len(self.training_loader), 1)
+        # F5 (M1.4c): Fail-closed on non-finite training loss
+        if not np.isfinite(avg_loss):
+            raise FloatingPointError(
+                "Attacker training loss is non-finite: %s" % avg_loss
+            )
+        # F5 (M1.4c): Verify all parameters are finite after optimizer step
+        for name, param in self.net.named_parameters():
+            if not torch.isfinite(param).all():
+                raise FloatingPointError(
+                    "Attacker parameter '%s' contains NaN/Inf after training step" % name
+                )
+        return avg_loss
 
     def validate_selection(self):
         """Attacker checkpoint-VAL geometry: anon(x1), anon(x2).
@@ -156,7 +169,13 @@ class DevAttacker:
                 labels = labels.type_as(outputs)
                 loss = self.criterion(outputs, labels)
                 running += loss.item()
-        return running / max(len(self.validation_loader), 1)
+        avg_loss = running / max(len(self.validation_loader), 1)
+        # F5 (M1.4c): Fail-closed on non-finite validation loss
+        if not np.isfinite(avg_loss):
+            raise FloatingPointError(
+                "Attacker validation loss is non-finite: %s" % avg_loss
+            )
+        return avg_loss
 
     def run(self, output_dir=None):
         """Training + validation loop with explicit best-checkpoint tracking and saving.
@@ -207,7 +226,10 @@ class DevAttacker:
                 'generator_checkpoint_sha256': file_sha256(self.generator_checkpoint) if self.generator_checkpoint else None,
                 'attacker_seed': self.attacker_seed,
                 'epochs_completed': len(self.loss_dict['training']),
-                'termination_reason': termination_reason
+                'termination_reason': termination_reason,
+                # F5 (M1.4c): Attacker numerical validity tracking
+                'numerical_validity': 'PASS',
+                'nan_inf_detected': False,
             }
             with open(os.path.join(out_dir, 'attacker_manifest.json'), 'w') as f:
                 import json

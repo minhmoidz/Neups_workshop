@@ -647,8 +647,33 @@ def test_t82_classification_val_split_contamination_invariant():
 
 
 def test_t83_classification_evaluator_requires_14_finite_aucs():
-    """T83: Classification evaluator produces 14 valid finite AUCs."""
-    assert True
+    """T83: Classification evaluator produces exactly 14 valid finite AUCs without silent class dropping."""
+    PRED_LABEL = ['Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
+                  'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
+                  'Pleural_Thickening', 'Hernia']
+    class SyntheticEvalDataset(torch.utils.data.Dataset):
+        def __init__(self, size=28):
+            self.size = size
+        def __len__(self):
+            return self.size
+        def __getitem__(self, idx):
+            # Alternating positive/negative for each class to ensure both classes present
+            lbl = torch.zeros(14)
+            for c in range(14):
+                lbl[c] = float((idx + c) % 2)
+            img = torch.rand(1, 64, 64)
+            return img, lbl, "img_%04d.png" % idx
+
+    from torchvision.models import densenet121
+    clf = densenet121(num_classes=14)
+    clf.eval()
+    loader = torch.utils.data.DataLoader(SyntheticEvalDataset(28), batch_size=4)
+    pred_df, auc_df, macro_auc = classify_val_dataset(clf, loader, anonymize_fn=None, perturbation_type='none', device='cpu')
+    assert len(auc_df) == 14, "Expected exactly 14 AUC rows, got %d" % len(auc_df)
+    assert set(auc_df['label']) == set(PRED_LABEL), "Class labels mismatch or silently dropped"
+    for _, row in auc_df.iterrows():
+        assert np.isfinite(row['auc']), "Non-finite AUC for class %s: %s" % (row['label'], row['auc'])
+    assert np.isfinite(macro_auc), "Non-finite macro AUC: %s" % macro_auc
     return True
 
 

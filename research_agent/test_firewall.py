@@ -18,7 +18,7 @@ def is_test_request(mode):
     """True iff a mode string requests the closed TEST benchmark."""
     if mode is None:
         return False
-    return str(mode).lower() in ('test', 'final_test')
+    return str(mode).lower() in ('test', 'testing', 'final_test')
 
 
 class TestFirewall:

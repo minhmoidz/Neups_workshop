@@ -78,6 +78,9 @@ FROZEN_ATTACKER_CONFIG_SHA = '72923582e6595103026ac0fa3488ace4888f70ca09aa91f7cd
 # Method-neutral anonymizer checkpoint filename (§11)
 METHOD_NEUTRAL_CKPT_NAME = 'generator_best_method_neutral.pth'
 
+# F2 (M1.4c): Frozen classification split CSV
+FROZEN_NIH_LABELS_PATH = os.path.join(ROOT, 'chexnet', 'nih_labels.csv')
+
 
 def file_sha256(path):
     h = hashlib.sha256()
@@ -380,6 +383,10 @@ class FingerprintedRandomSampler(torch.utils.data.Sampler):
         return iter(indices)
 
     def get_epoch_order_hash(self, epoch=0, pair_identifiers=None):
+        """F8 (M1.4c): Compute SHA256 of epoch order using pair rows (not indices).
+        When pair_identifiers is provided, hashes actual pair data for semantic parity
+        with compute_epoch_order_hash().
+        """
         if epoch >= len(self.epoch_indices):
             raise IndexError("Epoch %d order not recorded yet (total recorded: %d)" % (epoch, len(self.epoch_indices)))
         indices = self.epoch_indices[epoch]
@@ -392,6 +399,9 @@ class FingerprintedRandomSampler(torch.utils.data.Sampler):
                 else:
                     h.update(str(item).encode('utf-8'))
             else:
+                # F8 (M1.4c): Without pair_identifiers, fall back to index hashing
+                # NOTE: For semantic parity with compute_epoch_order_hash, callers
+                # SHOULD provide pair_identifiers (the actual pair rows).
                 h.update(str(idx).encode('utf-8'))
             h.update(b'\n')
         return h.hexdigest()
@@ -482,8 +492,13 @@ class LazyPairDataset(torch.utils.data.Dataset):
             finding = file_to_finding[fname]
             if finding != 'No Finding' and isinstance(finding, str):
                 for d in finding.split('|'):
-                    if d in self.PRED_LABEL:
-                        label[self.PRED_LABEL.index(d)] = 1.0
+                    # §24 (M1.4c): Unknown pathology token → HARD FAIL
+                    if d not in self.PRED_LABEL:
+                        raise RuntimeError(
+                            "Unknown pathology token '%s' in image %s at pair index %d. "
+                            "All tokens except 'No Finding' must be in PRED_LABEL." % (d, fname, i)
+                        )
+                    label[self.PRED_LABEL.index(d)] = 1.0
             self.ac_labels_1.append(label)
             self.labels_id.append(float(self.image_pairs[i][2]))
 

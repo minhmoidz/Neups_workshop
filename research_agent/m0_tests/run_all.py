@@ -19,14 +19,15 @@ TESTS = [
     'test_m14_final_hardening.py',
     'test_m14a_execution_harness.py',
     'test_m14b_execution_integrity.py',
+    'test_m14c_certification.py',
 ]
 ALL_OK = True
 for t in TESTS:
     r = subprocess.run([sys.executable, os.path.join(HERE, t)], capture_output=True, text=True)
-    print(r.stdout, end='')
+    print(r.stdout, end='', flush=True)
     if r.returncode != 0:
-        print(r.stderr, end='')
+        print(r.stderr, end='', flush=True)
         ALL_OK = False
-print('=' * 60)
-print('M0 SUITE:', 'ALL PASS' if ALL_OK else 'FAILURES PRESENT')
+print('=' * 60, flush=True)
+print('M0 SUITE:', 'ALL PASS' if ALL_OK else 'FAILURES PRESENT', flush=True)
 sys.exit(0 if ALL_OK else 1)

@@ -59,8 +59,7 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
     model = model.to(device)
     model.eval()
 
-    pred_df = pd.DataFrame(columns=['Image Index'])
-    true_df = pd.DataFrame(columns=['Image Index'])
+    pred_rows = []
     PRED_LABEL = ['Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
                   'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
                   'Pleural_Thickening', 'Hernia']
@@ -86,16 +85,15 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
             for j in range(bs):
                 idx_name = idx_names[j] if isinstance(idx_names, (list, tuple)) else str(idx_names)
                 thisrow = {'Image Index': idx_name}
-                truerow = {'Image Index': idx_name}
                 for k, lbl in enumerate(PRED_LABEL):
-                    thisrow['prob_' + lbl] = probs[j, k]
-                    truerow[lbl] = true_labels[j, k]
-                pred_df = pd.concat([pred_df, pd.DataFrame(thisrow, index=[0])], ignore_index=True)
-                true_df = pd.concat([true_df, pd.DataFrame(truerow, index=[0])], ignore_index=True)
+                    thisrow[lbl] = int(true_labels[j, k])
+                    thisrow['prob_' + lbl] = float(probs[j, k])
+                pred_rows.append(thisrow)
 
-    auc_df = pd.DataFrame(columns=['label', 'auc'])
+    pred_df = pd.DataFrame(pred_rows)
+    auc_rows = []
     for column in PRED_LABEL:
-        y_true_col = true_df[column].values.astype(int)
+        y_true_col = pred_df[column].values.astype(int)
         y_score_col = pred_df['prob_' + column].values.astype(float)
         unique_classes = np.unique(y_true_col)
         if len(unique_classes) < 2:
@@ -111,8 +109,9 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
         except Exception as exc:
             raise RuntimeError("Classification VAL pathology %r failed AUC calculation: %s" % (column, exc)) from exc
 
-        auc_df = pd.concat([auc_df, pd.DataFrame({'label': [column], 'auc': [auc]}, index=[0])], ignore_index=True)
+        auc_rows.append({'label': column, 'auc': auc})
 
+    auc_df = pd.DataFrame(auc_rows)
     n_valid = len(auc_df['auc'].dropna())
     if n_valid != 14:
         raise RuntimeError("Classification VAL requires exactly 14 valid AUCs, got %d" % n_valid)

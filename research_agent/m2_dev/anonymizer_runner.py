@@ -9,7 +9,10 @@ Implements the exact paired execution path for M2-S1 (B_dev and C4 on seed 42):
   - Canonical anonymizer DataLoader with FingerprintedRandomSampler (single source of truth for batch order)
   - Method-neutral checkpoint selection: minimum selection_total (ac_bce + privacy_term) across validation epochs,
     saving generator_best_method_neutral.pth
-  - Full-state resumable checkpoint saving (checkpoint_latest.pth) with exact trajectory recovery
+  - Full-state resumable checkpoint saving (checkpoint_latest.pth)
+    WARNING (F7 M1.4c): Resume is NOT certified for scientific use. Sampler epoch_indices
+    are not restored, so resumed runs cannot guarantee exact trajectory recovery.
+    Scientific runs MUST restart from epoch 0 if interrupted.
   - TEST firewall fail-closed check before dataset construction
 """
 import os
