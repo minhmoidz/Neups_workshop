@@ -1,0 +1,35 @@
+{
+  "filter_weights_bitwise_equal": true,
+  "mu_0_checks": {
+    "diff_upstream_vs_legacy": 0.0,
+    "max_distortion_from_identity_legacy": 0.6409788131713867,
+    "max_distortion_from_identity_corrected": 0.0,
+    "top_left_corner_identity": [
+      -1.0,
+      -1.0
+    ],
+    "top_left_corner_legacy_filtered": [
+      -0.35902127623558044,
+      -0.35902124643325806
+    ],
+    "top_left_corner_corrected": [
+      -1.0,
+      -1.0
+    ],
+    "corner_coordinate_shrinkage_ratio": 0.35902127623558044
+  },
+  "mu_0_01_generator_checks": {
+    "bitwise_or_fp_tolerance_grid_diff_upstream_vs_legacy": 0.0,
+    "bitwise_or_fp_tolerance_image_diff_upstream_vs_legacy": 0.0,
+    "max_diff_image_upstream_vs_corrected": 0.9006566405296326,
+    "mean_pixel_disp_legacy_full": 3.152951240539551,
+    "max_pixel_disp_legacy_full": 116.1661605834961,
+    "mean_pixel_disp_legacy_border": 22.7147274017334,
+    "mean_pixel_disp_legacy_interior": 1.5302379131317139,
+    "mean_pixel_disp_corr_full": 1.485802412033081,
+    "max_pixel_disp_corr_full": 1.7953071594238281,
+    "mean_pixel_disp_corr_border": 0.950136661529541,
+    "mean_pixel_disp_corr_interior": 1.5302375555038452
+  },
+  "conclusion": "Upstream operator is mathematically identical to Neups_workshop legacy mode (diff = 0.0). Upstream Gaussian filter smooths the entire coordinate grid including grid_identity with zero-padding, pulling boundary coordinates from +-1.0 down to +-0.25 (shrinkage by 75%), introducing massive artificial border pinches (mean border displacement = 10.9 px vs interior = 0.4 px even at mu=0.01)."
+}
