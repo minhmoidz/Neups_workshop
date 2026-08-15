@@ -63,7 +63,7 @@ class M2AnonymizerRunner:
     def __init__(self, arm='B_dev', config=None, output_dir=None, device=None,
                  seed=42, initial_generator_path=None, ac_model=None,
                  verification_model=None, training_loader=None, validation_loader=None,
-                 train_sampler=None, unit_test_mode=False):
+                 train_sampler=None, unit_test_mode=False, gradient_diagnostics_enabled=True):
         """Paired M2 Anonymizer Runner for B_dev and C4.
 
         :param arm: 'B_dev' (control) or 'C4' (feature preservation).
@@ -87,6 +87,7 @@ class M2AnonymizerRunner:
         self.seed = seed
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.unit_test_mode = unit_test_mode
+        self.gradient_diagnostics_enabled = gradient_diagnostics_enabled and arm == 'C4'
 
         # 1. Load config
         if config is None:
@@ -281,8 +282,11 @@ class M2AnonymizerRunner:
             # Selection total (feature term EXCLUDED for both arms)
             sel_loss_val = self.ac_loss_weight * ac_bce_val + self.ver_loss_weight * privacy_term.item()
 
-            # Optional C4 diagnostic: gradient norm ratio at epoch 0, 1, and every 25 epochs (batch 0 only)
-            if self.arm == 'C4' and (epoch in (0, 1) or epoch % 25 == 0) and n_batches == 0 and feat_loss is not None:
+            # Optional C4 diagnostic: gradient norm ratio at epoch 0, 1, and every 25 epochs (batch 0 only).
+            # Gated by an explicit flag (NOT by arm) so the diagnostic can be disabled without
+            # altering the scientific feature-loss objective (non-interference contract, §5).
+            if self.gradient_diagnostics_enabled and self.arm == 'C4' and (
+                    epoch in (0, 1) or epoch % 25 == 0) and n_batches == 0 and feat_loss is not None:
                 try:
                     base_loss = self.ac_loss_weight * ac_bce_loss + self.ver_loss_weight * privacy_term
                     base_grads = torch.autograd.grad(base_loss, self.generator.parameters(), retain_graph=True, allow_unused=True)

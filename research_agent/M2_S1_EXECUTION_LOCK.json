@@ -1,8 +1,8 @@
 {
   "protocol": "M2_S1_EXECUTION_LOCK",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "branch": "research/method-restart",
-  "git_head_at_preflight": "64f66124398582414fcf9040a677f43009909fa7",
+  "git_head_at_preflight": "3a5425973ed82df2b02d74e6ebce87052a474230",
   "execution_mode": "paired_control_vs_c4_s1",
   "test_firewall": "CLOSED",
   "dataset_root": "/home/minhtt/datasets/nih/images/",
@@ -77,6 +77,19 @@
     "b_dev_loss_finite": true,
     "c4_loss_finite": true,
     "optimization_status": "PASS"
+  },
+  "m1_4a_certification": {
+    "version": "1.4.1",
+    "master_runner_e2e_smoke": "PASS",
+    "attacker_privacy_contracts": "PASS",
+    "gradient_diagnostic_noninterference": "PASS",
+    "true_gradient_parity": "PASS",
+    "scientific_cli_frozen": true,
+    "run_validity_computed": true,
+    "manifest_handoffs": true,
+    "test_firewall": "CLOSED",
+    "m0_m1_4_regression": "86/86 PASS",
+    "m1_4a_gates": "26/26 PASS"
   },
   "lock_status": "LOCKED"
 }

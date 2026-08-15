@@ -121,7 +121,7 @@ def test_t87_dev_attacker_run_structured_dict():
         ds = SyntheticAttackerPairDataset(8)
         loader = torch.utils.data.DataLoader(ds, batch_size=4)
         cfg = {'image_path': tmp_dir, 'batch_size': 4, 'learning_rate': 1e-4, 'max_epochs': 2, 'early_stopping': 2}
-        attacker = DevAttacker(config=cfg, device='cpu', generator_checkpoint=fake_ckpt,
+        attacker = DevAttacker(config=cfg, device='cpu', generator_checkpoint=fake_ckpt, image_size=64,
                                training_loader=loader, validation_loader=loader)
         hist = attacker.run(output_dir=tmp_dir)
 
@@ -143,7 +143,7 @@ def test_t88_dev_attacker_saves_best_checkpoint():
         ds = SyntheticAttackerPairDataset(8)
         loader = torch.utils.data.DataLoader(ds, batch_size=4)
         cfg = {'image_path': tmp_dir, 'batch_size': 4, 'learning_rate': 1e-4, 'max_epochs': 2, 'early_stopping': 2}
-        attacker = DevAttacker(config=cfg, device='cpu', generator_checkpoint=fake_ckpt,
+        attacker = DevAttacker(config=cfg, device='cpu', generator_checkpoint=fake_ckpt, image_size=64,
                                training_loader=loader, validation_loader=loader)
         hist = attacker.run(output_dir=tmp_dir)
 
@@ -167,7 +167,7 @@ def test_t89_attacker_manifest_sha_matches_checkpoint():
         ds = SyntheticAttackerPairDataset(8)
         loader = torch.utils.data.DataLoader(ds, batch_size=4)
         cfg = {'image_path': tmp_dir, 'batch_size': 4, 'learning_rate': 1e-4, 'max_epochs': 1, 'early_stopping': 1}
-        attacker = DevAttacker(config=cfg, device='cpu', generator_checkpoint=fake_ckpt,
+        attacker = DevAttacker(config=cfg, device='cpu', generator_checkpoint=fake_ckpt, image_size=64,
                                training_loader=loader, validation_loader=loader)
         hist = attacker.run(output_dir=tmp_dir)
 
@@ -270,9 +270,15 @@ def test_t93_m2_summary_json_serializes_cleanly():
 # T94–T95: C4 Gradient Diagnostic Non-Interference
 # ---------------------------------------------------------------------------
 def test_t94_gradient_diagnostics_do_not_alter_scientific_update():
-    """T94: Enabling C4 gradient diagnostic produces IDENTICAL generator update to disabling it."""
+    """T94: Enabling C4 gradient diagnostic produces IDENTICAL generator update to disabling it.
+
+    Runs on CPU because CUDA conv backward is not bitwise deterministic: two identical
+    runs on CUDA differ at ~2e-4 (measured), so the strict identical-update assertion is
+    only meaningful on CPU (section 7: strongest deterministic test on CPU first).
+    """
+    torch.set_num_threads(8)
+    device = torch.device('cpu')
     torch.manual_seed(42)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     inputs1 = torch.rand(4, 1, 64, 64, device=device)
     inputs2 = torch.rand(4, 1, 64, 64, device=device)
@@ -281,29 +287,35 @@ def test_t94_gradient_diagnostics_do_not_alter_scientific_update():
     labels_id = torch.tensor([1.0, 0.0, 1.0, 0.0], device=device)
     ds = [(inputs1, inputs2, labels, labels_id)]
 
-    # Runner 1: with diagnostic
+    # Runner 1: with diagnostic enabled. Capture INITIAL weights BEFORE training so
+    # runner 2 starts from the exact same pre-step state (no post-step contamination).
+    torch.manual_seed(42)
     runner1 = M2AnonymizerRunner(
         arm='C4', config={'image_size': 64, 'batch_size': 4, 'learning_rate': 1e-4, 'mu': 0.01},
         device=device, training_loader=ds, validation_loader=ds, unit_test_mode=True
     )
-    m1 = runner1.train_epoch(0)
+    init_gen = copy.deepcopy(runner1.generator.state_dict())
+    init_ac = copy.deepcopy(runner1.ac_model.state_dict())
+    init_ver = copy.deepcopy(runner1.verification_loss.verification_model.state_dict())
 
-    # Runner 2: without diagnostic (arm='B_dev' style bypass or disabled diagnostic)
+    # Runner 2: WITHOUT diagnostic (disabled via the explicit non-interference flag;
+    # the scientific C4 feature-loss objective remains active on arm='C4'), identical init.
     torch.manual_seed(42)
     runner2 = M2AnonymizerRunner(
         arm='C4', config={'image_size': 64, 'batch_size': 4, 'learning_rate': 1e-4, 'mu': 0.01},
-        device=device, training_loader=ds, validation_loader=ds, unit_test_mode=True
+        device=device, training_loader=ds, validation_loader=ds, unit_test_mode=True,
+        gradient_diagnostics_enabled=False
     )
-    # Clone runner1 initial weights to runner2
-    runner2.generator.load_state_dict(runner1.generator.state_dict())
-    runner2.ac_model.load_state_dict(runner1.ac_model.state_dict())
-    runner2.verification_loss.verification_model.load_state_dict(runner1.verification_loss.verification_model.state_dict())
+    runner2.generator.load_state_dict(init_gen)
+    runner2.ac_model.load_state_dict(init_ac)
+    runner2.verification_loss.verification_model.load_state_dict(init_ver)
 
-    # Mock diagnostic bypass on runner2
-    old_arm = runner2.arm
-    runner2.arm = 'C4_nodiag'
+    m1 = runner1.train_epoch(0)
     m2 = runner2.train_epoch(0)
-    runner2.arm = old_arm
+
+    # Sanity: the feature objective is genuinely active in both runners
+    assert m1['train_feature_term'] > 0.0
+    assert m2['train_feature_term'] > 0.0
 
     # Check that generator parameters updated identically
     for p1, p2 in zip(runner1.generator.parameters(), runner2.generator.parameters()):
@@ -602,12 +614,18 @@ def test_t108_privacy_requires_2000_pairs_in_scientific_mode():
         torch.save(UNet(1, 2, 32).state_dict(), fake_gen_p)
 
         try:
-            # In scientific mode (unit_test_mode=False), evaluated with fake loader of size 8
+            # In scientific mode (unit_test_mode=False) with an explicit 8-pair loader,
+            # the evaluator must fail fast before evaluating any pairs.
+            syn_loader = torch.utils.data.DataLoader(
+                [(torch.rand(1, 64, 64), torch.rand(1, 64, 64), torch.tensor(float(i % 2))) for i in range(8)],
+                batch_size=4
+            )
             evaluate_reid_val(
                 config={'image_path': tmp_dir},
                 attacker_checkpoint=fake_att_p,
                 generator_checkpoint=fake_gen_p,
                 device='cpu',
+                validation_loader=syn_loader,
                 unit_test_mode=False
             )
             assert False, "Should have raised RuntimeError on pair count != 2000"
@@ -653,7 +671,7 @@ class MockArgs:
 def test_t110_full_synthetic_master_orchestration_smoke():
     """T110: Full synthetic master orchestration completes end-to-end without exception."""
     with tempfile.TemporaryDirectory() as tmp_dir:
-        args = MockArgs(arm='all', max_epochs=1, attacker_epochs=1, attacker_patience=1, seed=42, attacker_seed=42, device='cpu')
+        args = MockArgs(arm='all', max_epochs=1, attacker_epochs=1, attacker_patience=1, seed=42, attacker_seed=42, device='cuda' if torch.cuda.is_available() else 'cpu')
         # Run synthetic pipeline
         summary = run_orchestration(args, out_base_dir=tmp_dir, unit_test_mode=True)
         assert summary is not None
@@ -665,7 +683,7 @@ def test_t110_full_synthetic_master_orchestration_smoke():
 def test_t111_master_orchestration_creates_all_artifacts():
     """T111: Master orchestration creates JSON summary, Markdown report, and NPZ files."""
     with tempfile.TemporaryDirectory() as tmp_dir:
-        args = MockArgs(arm='all', max_epochs=1, attacker_epochs=1, attacker_patience=1, seed=42, attacker_seed=42, device='cpu')
+        args = MockArgs(arm='all', max_epochs=1, attacker_epochs=1, attacker_patience=1, seed=42, attacker_seed=42, device='cuda' if torch.cuda.is_available() else 'cpu')
         _ = run_orchestration(args, out_base_dir=tmp_dir, unit_test_mode=True)
 
         summary_p = os.path.join(tmp_dir, 'M2_S1_summary.json')
@@ -683,7 +701,7 @@ def test_t111_master_orchestration_creates_all_artifacts():
 def test_t112_master_orchestration_never_touches_test():
     """T112: Master orchestration passes strict dev firewall and test_touched is False."""
     with tempfile.TemporaryDirectory() as tmp_dir:
-        args = MockArgs(arm='all', max_epochs=1, attacker_epochs=1, attacker_patience=1, seed=42, attacker_seed=42, device='cpu')
+        args = MockArgs(arm='all', max_epochs=1, attacker_epochs=1, attacker_patience=1, seed=42, attacker_seed=42, device='cuda' if torch.cuda.is_available() else 'cpu')
         summary = run_orchestration(args, out_base_dir=tmp_dir, unit_test_mode=True)
         assert summary['test_touched'] is False
         assert summary['gates']['segmentation_status'] == 'NOT APPLICABLE — evaluator provenance not yet certified'

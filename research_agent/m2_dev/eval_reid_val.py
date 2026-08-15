@@ -13,6 +13,8 @@ This is the metric that becomes AUC_Bdev_VAL / AUC_C4_VAL for the M1.1 S1 gate.
 It is NOT the attacker checkpoint-selection metric (that is BCE loss on
 anon/anon validation, see dev_attacker.validate_selection).
 """
+import os
+
 import torch
 import numpy as np
 from sklearn import metrics
@@ -78,7 +80,7 @@ def evaluate_reid_val_mixed(anonymize_fn, attacker_net, validation_loader, devic
 
 
 def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoint=None, device=None,
-                      validation_loader=None, unit_test_mode=False):
+                      validation_loader=None, unit_test_mode=False, image_size=256):
     """End-to-end evaluation helper for scientific VAL privacy.
     Loads generator from generator_checkpoint and attacker from attacker_checkpoint,
     then evaluates on the fixed 2,000 validation pairs under anon/real threat model.
@@ -98,7 +100,7 @@ def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoin
     gen_sha = file_sha256(generator_checkpoint)
     att_sha = file_sha256(attacker_checkpoint)
 
-    _, anonymize_fn = load_frozen_anonymizer(device=device, checkpoint_path=generator_checkpoint)
+    _, anonymize_fn = load_frozen_anonymizer(device=device, checkpoint_path=generator_checkpoint, image_size=image_size)
 
     attacker_net = SiameseNetwork().to(device)
     attacker_net.load_state_dict(torch.load(attacker_checkpoint, map_location=device, weights_only=False))
@@ -107,16 +109,23 @@ def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoin
         validation_loader = config.get('validation_loader')
 
     if validation_loader is None:
-        if unit_test_mode and not os.path.exists(config.get('image_path', '')):
-            # Synthetic loader for unit test mode
-            from m2_dev.evaluator_common import LazyPairDataset
-            # Generate synthetic pairs loader
-            syn_ds = [(torch.rand(1, 64, 64), torch.rand(1, 64, 64), torch.tensor(float(i % 2))) for i in range(8)]
+        if unit_test_mode:
+            # Unit-test mode ALWAYS uses a synthetic loader (never real dataset loaders).
+            syn_ds = [(torch.rand(1, image_size, image_size), torch.rand(1, image_size, image_size),
+                       torch.tensor(float(i % 2))) for i in range(8)]
             val_loader = torch.utils.data.DataLoader(syn_ds, batch_size=4)
         else:
             _, val_loader, _ = build_dev_anonymizer_loaders(config, seed=42)
     else:
         val_loader = validation_loader
+
+    # Scientific fail-fast: verify the VAL pair count BEFORE running the eval loop,
+    # so a wrong-sized loader can never silently evaluate a non-2000-pair run.
+    if not unit_test_mode:
+        ds = getattr(val_loader, 'dataset', None)
+        n_pairs_known = len(ds) if (ds is not None and hasattr(ds, '__len__')) else None
+        if n_pairs_known is not None and n_pairs_known != 2000:
+            raise RuntimeError("Scientific privacy evaluation requires exactly 2000 validation pairs, got %d" % n_pairs_known)
 
     res = evaluate_reid_val_mixed(anonymize_fn, attacker_net, val_loader, device=device)
     if not unit_test_mode and res['n_pairs'] != 2000:

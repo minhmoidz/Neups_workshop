@@ -33,7 +33,7 @@ from .evaluator_common import (
 from utils import utils
 
 
-def load_frozen_anonymizer(config=None, device=None, checkpoint_path=None):
+def load_frozen_anonymizer(config=None, device=None, checkpoint_path=None, image_size=None):
     """Load the frozen generator + legacy operator components for the attacker.
     Requires explicit checkpoint_path (no scientific fallback allowed).
     """
@@ -46,12 +46,15 @@ def load_frozen_anonymizer(config=None, device=None, checkpoint_path=None):
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError("Selected generator checkpoint not found: %s" % ckpt_path)
 
+    if image_size is None:
+        image_size = (config or {}).get('image_size', 256)
+
     generator = UNet(1, 2, 32).to(device)
     generator.load_state_dict(torch.load(ckpt_path, map_location=device, weights_only=False))
     generator.eval()
     for p in generator.parameters():
         p.requires_grad = False
-    grid_identity, gauss_filter = make_flow_field_components(device)
+    grid_identity, gauss_filter = make_flow_field_components(device, image_size=image_size)
     anonymize_fn = build_anonymize_fn(generator, grid_identity, gauss_filter, MU)
     return generator, anonymize_fn
 
@@ -59,7 +62,7 @@ def load_frozen_anonymizer(config=None, device=None, checkpoint_path=None):
 class DevAttacker:
     def __init__(self, config, attacker_seed=42, device=None,
                  anonymize_fn=None, training_loader=None, validation_loader=None,
-                 net_factory=None, generator_checkpoint=None):
+                 net_factory=None, generator_checkpoint=None, image_size=None):
         """Development attacker runner.
 
         :param config: dev config dict.
@@ -88,7 +91,9 @@ class DevAttacker:
         if anonymize_fn is None:
             if not generator_checkpoint:
                 raise RuntimeError("generator_checkpoint must be explicitly provided to DevAttacker")
-            _, self.anonymize_fn = load_frozen_anonymizer(config, self.device, checkpoint_path=generator_checkpoint)
+            _, self.anonymize_fn = load_frozen_anonymizer(
+                config, self.device, checkpoint_path=generator_checkpoint,
+                image_size=image_size if image_size is not None else config.get('image_size'))
         else:
             self.anonymize_fn = anonymize_fn
 

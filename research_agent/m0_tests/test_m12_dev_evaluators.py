@@ -206,6 +206,7 @@ def t33_val_selection_geometry_anon_anon():
 def t34_scientific_val_geometry_anon_real():
     spy = SpyAnonymize()
     attacker = _make_attacker(spy, seed=42, n_batches=2)
+    attacker.best_net = RecNet()
 
     class _DataLoader:
         def __len__(self):

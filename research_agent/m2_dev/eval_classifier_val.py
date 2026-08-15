@@ -123,7 +123,7 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
 
 def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
                                 perturbation_type='flow_field', batch_size=16,
-                                generator_checkpoint=None):
+                                generator_checkpoint=None, image_size=None):
     """VAL-only classification evaluation. fold is validated BEFORE dataset init.
 
     :param config: dev config dict (image_path, ...).
@@ -131,6 +131,7 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
         released pretrained_classifier.pth.
     :param fold: development fold; MUST be 'val'.
     :param generator_checkpoint: explicit path to selected M2 generator checkpoint (required for flow_field).
+    :param image_size: legacy flow-field grid size; defaults to config image_size or 256.
     """
     assert_dev_fold(fold)          # reject TEST before dataset construction
     firewall_check('dev')
@@ -167,15 +168,19 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
         selected_gen_sha = file_sha256(gen_path)
         generator = UNet(1, 2, 32).to(device)
         generator.load_state_dict(torch.load(gen_path, map_location=device, weights_only=False))
-        grid_identity, gauss_filter = make_flow_field_components(device)
+        if image_size is None:
+            image_size = config.get('image_size', 256)
+        grid_identity, gauss_filter = make_flow_field_components(device, image_size=image_size)
         anonymize_fn = build_anonymize_fn(generator, grid_identity, gauss_filter, MU)
 
     if config.get('dataloader') is not None:
         dataloader = config['dataloader']
         n_images = len(dataloader.dataset)
-    elif config.get('unit_test_mode', False) and not os.path.exists(config.get('image_path', '')):
+    elif config.get('unit_test_mode', False):
         from m0_tests.test_m14a_execution_harness import SyntheticClassificationDataset
-        dataset = SyntheticClassificationDataset(size=28, image_size=64)
+        if image_size is None:
+            image_size = 64
+        dataset = SyntheticClassificationDataset(size=28, image_size=image_size)
         n_images = len(dataset)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     else:

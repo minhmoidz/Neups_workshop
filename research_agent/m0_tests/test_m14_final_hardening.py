@@ -428,10 +428,13 @@ def independent_upstream_reference_one_step(generator, ac_model, verifier,
     verifier.eval()
 
     # Step 6: Update AC critic
+    # The frozen classifier head ALREADY ends with Sigmoid(), so its output is a
+    # probability in [0,1] and upstream applies nn.BCELoss() directly (agents/Agent.py).
+    # Applying torch.sigmoid() again would be a double sigmoid and break gradient parity.
     ac_model.train()
     in_ac_c = normalize(resize_224(fakes_1.detach().expand(-1, 3, -1, -1)))
-    ac_logits_c = ac_model(in_ac_c)
-    loss_ac = crit_ac(torch.sigmoid(ac_logits_c), labels)
+    ac_probs_c = ac_model(in_ac_c)
+    loss_ac = crit_ac(ac_probs_c, labels)
     opt_ac.zero_grad()
     loss_ac.backward()
     ac_grads = [p.grad.detach().clone() for p in ac_model.parameters() if p.requires_grad and p.grad is not None]

@@ -138,6 +138,7 @@ def run_anonymizer_arm(arm, config_path, max_epochs, seed, device, out_base_dir=
     val_loader = None
     if unit_test_mode:
         from m0_tests.test_m14a_execution_harness import SyntheticPairDataset
+        cfg['image_size'] = 64
         ds = SyntheticPairDataset(8, image_size=64)
         train_loader = torch.utils.data.DataLoader(ds, batch_size=4)
         val_loader = torch.utils.data.DataLoader(ds, batch_size=4)
@@ -215,7 +216,8 @@ def train_s1_attacker_arm(arm, seed, attacker_seed, max_epochs, patience, device
         attacker_seed=attacker_seed,
         generator_checkpoint=gen_ckpt,
         training_loader=train_loader,
-        validation_loader=val_loader
+        validation_loader=val_loader,
+        image_size=64 if unit_test_mode else None
     )
 
     t0 = time.time()
@@ -262,7 +264,8 @@ def evaluate_privacy_arm(arm, seed, attacker_seed, device, out_base_dir=None, un
         attacker_checkpoint=attacker_ckpt,
         generator_checkpoint=gen_ckpt,
         device=device,
-        unit_test_mode=unit_test_mode
+        unit_test_mode=unit_test_mode,
+        image_size=64 if unit_test_mode else None
     )
 
     # Save raw predictions NPZ
@@ -304,7 +307,8 @@ def evaluate_classification_arm(arm, seed, device, out_base_dir=None, unit_test_
         config=cfg,
         fold='val',
         generator_checkpoint=gen_ckpt,
-        device=device
+        device=device,
+        image_size=64 if unit_test_mode else None
     )
     if clf_res['n_classes_valid'] != 14:
         raise RuntimeError("Classification evaluation returned %d valid classes, expected 14" % clf_res['n_classes_valid'])
@@ -344,11 +348,11 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
 
     # Step 1: Run B_dev Anonymizer Training
     if args.arm in ('B_dev', 'all'):
-        b_dev_manifest = run_anonymizer_arm('B_dev', b_dev_config, args.max_epochs, args.seed, device, out_base_dir=base)
+        b_dev_manifest = run_anonymizer_arm('B_dev', b_dev_config, args.max_epochs, args.seed, device, out_base_dir=base, unit_test_mode=unit_test_mode)
 
     # Step 2: Run C4 Anonymizer Training
     if args.arm in ('C4', 'all'):
-        c4_manifest = run_anonymizer_arm('C4', c4_config, args.max_epochs, args.seed, device, out_base_dir=base)
+        c4_manifest = run_anonymizer_arm('C4', c4_config, args.max_epochs, args.seed, device, out_base_dir=base, unit_test_mode=unit_test_mode)
 
     # Step 3: Run S1 Evaluators
     if args.arm in ('all', 'eval_only'):
@@ -365,9 +369,9 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
 
         # 3a. Train Adaptive Attackers
         b_att_manifest = train_s1_attacker_arm('B_dev', args.seed, args.attacker_seed,
-                                               args.attacker_epochs, args.attacker_patience, device, out_base_dir=base)
+                                               args.attacker_epochs, args.attacker_patience, device, out_base_dir=base, unit_test_mode=unit_test_mode)
         c4_att_manifest = train_s1_attacker_arm('C4', args.seed, args.attacker_seed,
-                                                args.attacker_epochs, args.attacker_patience, device, out_base_dir=base)
+                                                args.attacker_epochs, args.attacker_patience, device, out_base_dir=base, unit_test_mode=unit_test_mode)
 
         # 3b. Scientific Privacy VAL Evaluation
         b_priv = evaluate_privacy_arm('B_dev', args.seed, args.attacker_seed, device, out_base_dir=base, unit_test_mode=unit_test_mode)
