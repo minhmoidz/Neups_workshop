@@ -12,6 +12,7 @@ TESTS = [
     'test_t9_t10_c2_budget.py',
     'test_t11_t12_operator.py',
     'test_t13_t14_t15_firewall_provenance.py',
+    'test_m01_provenance_hashes.py',
 ]
 ALL_OK = True
 for t in TESTS:
