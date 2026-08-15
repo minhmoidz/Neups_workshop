@@ -246,27 +246,28 @@ class M2AnonymizerRunner:
             labels = labels.to(self.device)
             labels_id = labels_id.to(self.device)
 
-            # Anonymize input1
+            # 1. Anonymize source image
             fakes_1 = self.anonymize_tensor(inputs1)
 
-            # 1. Auxiliary classifier loss & feature loss
-            if self.arm == 'C4':
-                # C4: pass real_image=inputs1 to compute detached source penultimate MSE
-                ac_total_loss = self.ac_loss(fakes_1, labels, real_image=inputs1)
-                # Compute feature component separately for logging
-                with torch.no_grad():
-                    def_feat = self.ac_loss._features(self.ac_loss._preprocess(fakes_1))
-                    real_feat = self.ac_loss._features(self.ac_loss._preprocess(inputs1)).detach()
-                    feat_val = F.mse_loss(def_feat, real_feat).item()
-                    ac_bce_val = (ac_total_loss.item() - self.feature_loss_weight * feat_val)
+            # 2. Auxiliary classification loss
+            self.ac_loss.refresh()
+            deformed_features = self.ac_loss._features(self.ac_loss._preprocess(fakes_1))
+            ac_predictions = self.ac_loss.loss_model.classifier(deformed_features)
+            ac_bce_loss = self.ac_loss.bce_loss(ac_predictions, labels)
+
+            if self.arm == 'C4' and self.feature_loss_weight > 0:
+                real_features = self.ac_loss._features(self.ac_loss._preprocess(inputs1)).detach()
+                feat_loss = self.feature_loss_weight * F.mse_loss(deformed_features, real_features)
+                ac_total_loss = ac_bce_loss + feat_loss
+                feat_val = feat_loss.item()
             else:
-                ac_total_loss = self.ac_loss(fakes_1, labels)
-                ac_bce_val = ac_total_loss.item()
+                ac_total_loss = ac_bce_loss
+                feat_loss = None
                 feat_val = 0.0
 
-            # 2. Verification loss (privacy term)
-            # Upstream: ver_loss = verification_loss(fakes_1, inputs2), log_likelihood = -log(1 - ver_loss)
-            # Exact mathematical & stable identity: -log(1 - sigmoid(z)) == softplus(z)
+            ac_bce_val = ac_bce_loss.item()
+
+            # Verifier privacy loss
             inputs1_snn_g = self.imagenet_normalize(fakes_1.expand(-1, 3, -1, -1))
             inputs2_snn_g = self.imagenet_normalize(inputs2.expand(-1, 3, -1, -1))
             raw_verifier_logits = self.verification_loss.verification_model(inputs1_snn_g, inputs2_snn_g).squeeze()
@@ -281,21 +282,16 @@ class M2AnonymizerRunner:
             sel_loss_val = self.ac_loss_weight * ac_bce_val + self.ver_loss_weight * privacy_term.item()
 
             # Optional C4 diagnostic: gradient norm ratio at epoch 0, 1, and every 25 epochs (batch 0 only)
-            if self.arm == 'C4' and (epoch in (0, 1) or epoch % 25 == 0) and n_batches == 0:
+            if self.arm == 'C4' and (epoch in (0, 1) or epoch % 25 == 0) and n_batches == 0 and feat_loss is not None:
                 try:
-                    # 1. Base loss gradient
-                    base_loss = self.ac_loss_weight * (ac_total_loss - self.feature_loss_weight * feat_val) + self.ver_loss_weight * privacy_term
-                    self.optimizer_g.zero_grad()
-                    base_loss.backward(retain_graph=True)
-                    base_grads = [p.grad.detach().clone() for p in self.generator.parameters() if p.grad is not None]
-                    norm_base = torch.norm(torch.stack([torch.norm(g) for g in base_grads])).item() if base_grads else 0.0
+                    base_loss = self.ac_loss_weight * ac_bce_loss + self.ver_loss_weight * privacy_term
+                    base_grads = torch.autograd.grad(base_loss, self.generator.parameters(), retain_graph=True, allow_unused=True)
+                    base_grads_valid = [g for g in base_grads if g is not None]
+                    norm_base = torch.norm(torch.stack([torch.norm(g) for g in base_grads_valid])).item() if base_grads_valid else 0.0
 
-                    # 2. Feature loss gradient
-                    self.optimizer_g.zero_grad()
-                    feat_loss_t = self.feature_loss_weight * F.mse_loss(def_feat, real_feat)
-                    feat_loss_t.backward(retain_graph=True)
-                    feat_grads = [p.grad.detach().clone() for p in self.generator.parameters() if p.grad is not None]
-                    norm_feat = torch.norm(torch.stack([torch.norm(g) for g in feat_grads])).item() if feat_grads else 0.0
+                    feat_grads = torch.autograd.grad(feat_loss, self.generator.parameters(), retain_graph=True, allow_unused=True)
+                    feat_grads_valid = [g for g in feat_grads if g is not None]
+                    norm_feat = torch.norm(torch.stack([torch.norm(g) for g in feat_grads_valid])).item() if feat_grads_valid else 0.0
 
                     ratio = norm_feat / max(norm_base, 1e-12)
                     self.gradient_norm_diagnostics[epoch] = {
@@ -310,6 +306,7 @@ class M2AnonymizerRunner:
             # Optimize Generator
             self.optimizer_g.zero_grad()
             gen_loss.backward()
+            self.last_gen_grads = [p.grad.detach().clone() for p in self.generator.parameters() if p.grad is not None]
             self.optimizer_g.step()
 
             # 4. Update Verification Critic
@@ -322,6 +319,7 @@ class M2AnonymizerRunner:
             labels_id_cast = labels_id.type_as(outputs_snn)
             loss_ver_critic = self.criterion_ver(outputs_snn, labels_id_cast)
             loss_ver_critic.backward()
+            self.last_ver_grads = [p.grad.detach().clone() for p in self.verification_loss.verification_model.parameters() if p.grad is not None]
             self.optimizer_ver.step()
             self.verification_loss.verification_model.eval()
 
@@ -333,6 +331,7 @@ class M2AnonymizerRunner:
             outputs_ac = self.ac_loss.ac_model(inputs_ac)
             loss_ac_critic = self.criterion_ac(outputs_ac, labels)
             loss_ac_critic.backward()
+            self.last_clf_grads = [p.grad.detach().clone() for p in self.ac_loss.ac_model.parameters() if p.requires_grad and p.grad is not None]
             self.optimizer_ac.step()
             self.ac_loss.ac_model.eval()
 

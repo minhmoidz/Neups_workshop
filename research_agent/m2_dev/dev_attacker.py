@@ -102,7 +102,7 @@ class DevAttacker:
 
         net = net_factory() if net_factory is not None else SiameseNetwork()
         self.net = net.to(self.device)
-        self.best_net = copy.deepcopy(self.net)
+        self.best_net = None
         self.criterion = nn.BCEWithLogitsLoss().to(self.device)
         self.optimizer = optim.Adam(self.net.parameters(), lr=config['learning_rate'])
 
@@ -110,6 +110,7 @@ class DevAttacker:
         self.max_epochs = config['max_epochs']
         self.early_stopping = config['early_stopping']
         self.best_val_loss = float('inf')
+        self.best_epoch = None
         self.patience = 0
         self.loss_dict = {'training': [], 'validation': []}
 
@@ -152,25 +153,76 @@ class DevAttacker:
                 running += loss.item()
         return running / max(len(self.validation_loader), 1)
 
-    def run(self):
-        """Training + validation loop ONLY. No testing_evaluation(), no run() of
-        the upstream AgentSiameseNetwork."""
+    def run(self, output_dir=None):
+        """Training + validation loop with explicit best-checkpoint tracking and saving.
+        Returns a structured dictionary with full history and checkpoint metadata.
+        """
+        out_dir = output_dir or self.config.get('attacker_output_dir')
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+
+        checkpoint_path = None
+        checkpoint_sha256 = None
+        termination_reason = 'max_epochs_completed'
+
         for epoch in range(self.start_epoch, self.max_epochs):
             train_loss = self.train_epoch()
             val_loss = self.validate_selection()
-            self.loss_dict['training'].append(train_loss)
-            self.loss_dict['validation'].append(val_loss)
+            self.loss_dict['training'].append(float(train_loss))
+            self.loss_dict['validation'].append(float(val_loss))
 
             if val_loss < self.best_val_loss:
-                self.best_val_loss = val_loss
+                self.best_val_loss = float(val_loss)
+                self.best_epoch = epoch
                 self.best_net = copy.deepcopy(self.net)
                 self.patience = 0
+                if out_dir:
+                    checkpoint_path = os.path.join(out_dir, 'best_attacker.pth')
+                    torch.save(self.best_net.state_dict(), checkpoint_path)
             else:
                 self.patience += 1
 
             if self.early_stopping and self.patience >= self.early_stopping:
+                termination_reason = 'early_stopping'
                 print('Early stopping at epoch %d (patience %d)' % (epoch, self.early_stopping))
                 break
 
-        print('Finished attacker TRAIN/VALIDATION!')
-        return self.best_net
+        if self.best_epoch is None or self.best_net is None:
+            raise RuntimeError("No valid best attacker checkpoint saved during training")
+
+        if out_dir and checkpoint_path and os.path.exists(checkpoint_path):
+            from .evaluator_common import file_sha256
+            checkpoint_sha256 = file_sha256(checkpoint_path)
+            manifest = {
+                'best_attacker_path': checkpoint_path,
+                'best_attacker_sha256': checkpoint_sha256,
+                'best_epoch': self.best_epoch,
+                'best_val_loss': float(self.best_val_loss),
+                'generator_checkpoint': self.generator_checkpoint,
+                'generator_checkpoint_sha256': file_sha256(self.generator_checkpoint) if self.generator_checkpoint else None,
+                'attacker_seed': self.attacker_seed,
+                'epochs_completed': len(self.loss_dict['training']),
+                'termination_reason': termination_reason
+            }
+            with open(os.path.join(out_dir, 'attacker_manifest.json'), 'w') as f:
+                import json
+                json.dump(manifest, f, indent=2)
+
+        print('Finished attacker TRAIN/VALIDATION! Best Epoch: %s, Best Val BCE: %.5f' % (
+            self.best_epoch, self.best_val_loss
+        ))
+
+        return {
+            'best_epoch': self.best_epoch,
+            'best_val_loss': float(self.best_val_loss),
+            'epochs_completed': len(self.loss_dict['training']),
+            'termination_reason': termination_reason,
+            'training_loss': self.loss_dict['training'],
+            'validation_loss': self.loss_dict['validation'],
+            'checkpoint_path': checkpoint_path,
+            'checkpoint_sha256': checkpoint_sha256,
+            'best_net': self.best_net,
+        }
+
+    # Backward compatibility alias
+    train = run

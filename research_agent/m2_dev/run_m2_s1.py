@@ -19,6 +19,7 @@ import json
 import time
 import argparse
 import numpy as np
+import pandas as pd
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
@@ -50,6 +51,8 @@ from m2_dev.eval_classifier_val import evaluate_classification_val
 
 def parse_args():
     parser = argparse.ArgumentParser(description="M2-S1 Master Execution Runner")
+    parser.add_argument('--scientific-m2-s1', action='store_true', default=False,
+                        help="Run full frozen scientific M2-S1 protocol (locks all parameters)")
     parser.add_argument('--arm', choices=['B_dev', 'C4', 'all', 'eval_only'], default='all',
                         help="Which phase to execute (default: all)")
     parser.add_argument('--max_epochs', type=int, default=250,
@@ -64,7 +67,22 @@ def parse_args():
                         help="Attacker seed (default: 42)")
     parser.add_argument('--device', type=str, default=None,
                         help="Compute device (cuda / cpu)")
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.scientific_m2_s1:
+        # Strictly enforce frozen scientific hyperparameters
+        if args.max_epochs != 250:
+            raise ValueError("Scientific M2-S1 mode requires max_epochs == 250, got %d" % args.max_epochs)
+        if args.attacker_epochs != 100:
+            raise ValueError("Scientific M2-S1 mode requires attacker_epochs == 100, got %d" % args.attacker_epochs)
+        if args.attacker_patience != 5:
+            raise ValueError("Scientific M2-S1 mode requires attacker_patience == 5, got %d" % args.attacker_patience)
+        if args.seed != 42:
+            raise ValueError("Scientific M2-S1 mode requires seed == 42, got %d" % args.seed)
+        if args.attacker_seed != 42:
+            raise ValueError("Scientific M2-S1 mode requires attacker_seed == 42, got %d" % args.attacker_seed)
+
+    return args
 
 
 def assert_m2_scientific_mode_ready(image_path='/home/minhtt/datasets/nih/images/'):
@@ -104,7 +122,7 @@ def verify_environment_and_hashes():
     return device
 
 
-def run_anonymizer_arm(arm, config_path, max_epochs, seed, device):
+def run_anonymizer_arm(arm, config_path, max_epochs, seed, device, out_base_dir=None, unit_test_mode=False):
     """Execute anonymizer training for one arm."""
     print("\n" + "#" * 70)
     print("STARTING ANONYMIZER TRAINING: ARM %s (seed=%d, epochs=%d)" % (arm, seed, max_epochs))
@@ -112,8 +130,17 @@ def run_anonymizer_arm(arm, config_path, max_epochs, seed, device):
     with open(config_path) as f:
         cfg = json.load(f)
 
-    out_dir = os.path.join(ROOT, 'research_runs', 'M2_S1', arm, 'seed_%d' % seed)
+    base = out_base_dir or os.path.join(ROOT, 'research_runs', 'M2_S1')
+    out_dir = os.path.join(base, arm, 'seed_%d' % seed)
     os.makedirs(out_dir, exist_ok=True)
+
+    train_loader = None
+    val_loader = None
+    if unit_test_mode:
+        from m0_tests.test_m14a_execution_harness import SyntheticPairDataset
+        ds = SyntheticPairDataset(8, image_size=64)
+        train_loader = torch.utils.data.DataLoader(ds, batch_size=4)
+        val_loader = torch.utils.data.DataLoader(ds, batch_size=4)
 
     runner = M2AnonymizerRunner(
         arm=arm,
@@ -121,7 +148,9 @@ def run_anonymizer_arm(arm, config_path, max_epochs, seed, device):
         output_dir=out_dir,
         device=device,
         seed=seed,
-        unit_test_mode=False
+        training_loader=train_loader,
+        validation_loader=val_loader,
+        unit_test_mode=unit_test_mode
     )
 
     t0 = time.time()
@@ -141,16 +170,27 @@ def run_anonymizer_arm(arm, config_path, max_epochs, seed, device):
     return manifest
 
 
-def train_s1_attacker_arm(arm, seed, attacker_seed, max_epochs, patience, device):
+def train_s1_attacker_arm(arm, seed, attacker_seed, max_epochs, patience, device, out_base_dir=None, unit_test_mode=False):
     """Train S1 adaptive attacker for one arm using its selected generator."""
     print("\n" + "-" * 70)
     print("TRAINING S1 ADAPTIVE ATTACKER FOR %s (seed=%d, max_epochs=%d)" % (arm, attacker_seed, max_epochs))
     print("-" * 70)
-    gen_ckpt = os.path.join(ROOT, 'research_runs', 'M2_S1', arm, 'seed_%d' % seed, METHOD_NEUTRAL_CKPT_NAME)
-    if not os.path.exists(gen_ckpt):
-        raise FileNotFoundError("Selected generator checkpoint not found: %s" % gen_ckpt)
+    base = out_base_dir or os.path.join(ROOT, 'research_runs', 'M2_S1')
+    arm_dir = os.path.join(base, arm, 'seed_%d' % seed)
+    manifest_p = os.path.join(arm_dir, 'checkpoint_manifest.json')
+    if not os.path.exists(manifest_p):
+        raise FileNotFoundError("Generator checkpoint manifest not found: %s" % manifest_p)
 
-    attacker_out_dir = os.path.join(ROOT, 'research_runs', 'M2_S1', arm, 'seed_%d' % seed, 'attacker_%d' % attacker_seed)
+    with open(manifest_p) as f:
+        gen_manifest = json.load(f)
+
+    gen_ckpt = gen_manifest['selected_generator_checkpoint']
+    expected_gen_sha = gen_manifest['selected_generator_sha256']
+    actual_gen_sha = file_sha256(gen_ckpt)
+    if actual_gen_sha != expected_gen_sha:
+        raise RuntimeError("Generator checkpoint SHA mismatch: %s != %s" % (actual_gen_sha, expected_gen_sha))
+
+    attacker_out_dir = os.path.join(arm_dir, 'attacker_%d' % attacker_seed)
     os.makedirs(attacker_out_dir, exist_ok=True)
 
     att_cfg_path = os.path.join(ROOT, 'config_files', 'config_dev_attacker_s1.json')
@@ -159,48 +199,59 @@ def train_s1_attacker_arm(arm, seed, attacker_seed, max_epochs, patience, device
 
     attacker_cfg['max_epochs'] = max_epochs
     attacker_cfg['early_stopping'] = patience
-    attacker_cfg['checkpoint_path'] = os.path.join(attacker_out_dir, 'best_attacker.pth')
+    attacker_cfg['attacker_output_dir'] = attacker_out_dir
+
+    train_loader = None
+    val_loader = None
+    if unit_test_mode:
+        from m0_tests.test_m14a_execution_harness import SyntheticAttackerPairDataset
+        ds = SyntheticAttackerPairDataset(8, image_size=64)
+        train_loader = torch.utils.data.DataLoader(ds, batch_size=4)
+        val_loader = torch.utils.data.DataLoader(ds, batch_size=4)
 
     attacker = DevAttacker(
         config=attacker_cfg,
         device=device,
         attacker_seed=attacker_seed,
         generator_checkpoint=gen_ckpt,
+        training_loader=train_loader,
+        validation_loader=val_loader
     )
 
     t0 = time.time()
-    hist = attacker.train()
+    hist = attacker.run(output_dir=attacker_out_dir)
     elapsed = time.time() - t0
 
-    best_attacker_path = attacker_cfg['checkpoint_path']
-    best_attacker_sha = file_sha256(best_attacker_path) if os.path.exists(best_attacker_path) else None
+    best_attacker_path = hist['checkpoint_path']
+    if not best_attacker_path or not os.path.exists(best_attacker_path):
+        raise RuntimeError("Best attacker checkpoint file missing: %s" % best_attacker_path)
 
-    attacker_manifest = {
-        'arm': arm,
-        'anonymizer_seed': seed,
-        'attacker_seed': attacker_seed,
-        'generator_checkpoint': gen_ckpt,
-        'generator_checkpoint_sha256': file_sha256(gen_ckpt),
-        'best_attacker_path': best_attacker_path,
-        'best_attacker_sha256': best_attacker_sha,
-        'best_epoch': hist.get('best_epoch'),
-        'best_val_loss': hist.get('best_val_loss'),
-        'training_runtime_sec': round(elapsed, 2),
-        'training_history': hist,
-    }
-    with open(os.path.join(attacker_out_dir, 'attacker_manifest.json'), 'w') as f:
-        json.dump(attacker_manifest, f, indent=2)
+    attacker_manifest_path = os.path.join(attacker_out_dir, 'attacker_manifest.json')
+    with open(attacker_manifest_path) as f:
+        attacker_manifest = json.load(f)
 
     print("Attacker training finished in %.2fs. Best Val BCE: %.5f at Epoch %s" % (
-        elapsed, hist.get('best_val_loss', -1), hist.get('best_epoch')
+        elapsed, hist['best_val_loss'], hist['best_epoch']
     ))
     return attacker_manifest
 
 
-def evaluate_privacy_arm(arm, seed, attacker_seed, device):
-    """Evaluate scientific VAL Re-ID AUC (anon(img1), real(img2))."""
-    gen_ckpt = os.path.join(ROOT, 'research_runs', 'M2_S1', arm, 'seed_%d' % seed, METHOD_NEUTRAL_CKPT_NAME)
-    attacker_ckpt = os.path.join(ROOT, 'research_runs', 'M2_S1', arm, 'seed_%d' % seed, 'attacker_%d' % attacker_seed, 'best_attacker.pth')
+def evaluate_privacy_arm(arm, seed, attacker_seed, device, out_base_dir=None, unit_test_mode=False):
+    """Evaluate scientific VAL Re-ID AUC (anon(img1), real(img2)) and save predictions NPZ."""
+    base = out_base_dir or os.path.join(ROOT, 'research_runs', 'M2_S1')
+    arm_dir = os.path.join(base, arm, 'seed_%d' % seed)
+    att_dir = os.path.join(arm_dir, 'attacker_%d' % attacker_seed)
+
+    gen_manifest_p = os.path.join(arm_dir, 'checkpoint_manifest.json')
+    att_manifest_p = os.path.join(att_dir, 'attacker_manifest.json')
+
+    with open(gen_manifest_p) as f:
+        gen_manifest = json.load(f)
+    with open(att_manifest_p) as f:
+        att_manifest = json.load(f)
+
+    gen_ckpt = gen_manifest['selected_generator_checkpoint']
+    attacker_ckpt = att_manifest['best_attacker_path']
 
     cfg = {
         'batch_size': 32,
@@ -210,17 +261,44 @@ def evaluate_privacy_arm(arm, seed, attacker_seed, device):
         config=cfg,
         attacker_checkpoint=attacker_ckpt,
         generator_checkpoint=gen_ckpt,
-        device=device
+        device=device,
+        unit_test_mode=unit_test_mode
     )
-    return eval_res
+
+    # Save raw predictions NPZ
+    pred_npz_path = os.path.join(att_dir, 'privacy_val_predictions.npz')
+    np.savez_compressed(pred_npz_path, y_true=eval_res['y_true'], y_score=eval_res['y_score'])
+    pred_sha = file_sha256(pred_npz_path)
+
+    # Return scalar summary dict with path references (no float-casting ndarrays)
+    return {
+        'roc_auc': float(eval_res['roc_auc']),
+        'accuracy': float(eval_res['accuracy']),
+        'precision': float(eval_res['precision']),
+        'recall': float(eval_res['recall']),
+        'f1': float(eval_res['f1']),
+        'n_pairs': int(eval_res['n_pairs']),
+        'generator_checkpoint_sha256': eval_res['generator_checkpoint_sha256'],
+        'attacker_checkpoint_sha256': eval_res['attacker_checkpoint_sha256'],
+        'prediction_file': pred_npz_path,
+        'prediction_file_sha256': pred_sha,
+    }
 
 
-def evaluate_classification_arm(arm, seed, device):
+def evaluate_classification_arm(arm, seed, device, out_base_dir=None, unit_test_mode=False):
     """Evaluate clinical utility classification VAL Macro AUC & 14 disease AUCs."""
-    gen_ckpt = os.path.join(ROOT, 'research_runs', 'M2_S1', arm, 'seed_%d' % seed, METHOD_NEUTRAL_CKPT_NAME)
+    base = out_base_dir or os.path.join(ROOT, 'research_runs', 'M2_S1')
+    arm_dir = os.path.join(base, arm, 'seed_%d' % seed)
+    gen_manifest_p = os.path.join(arm_dir, 'checkpoint_manifest.json')
+
+    with open(gen_manifest_p) as f:
+        gen_manifest = json.load(f)
+
+    gen_ckpt = gen_manifest['selected_generator_checkpoint']
     cfg = {
         'batch_size': 32,
         'image_path': '/home/minhtt/datasets/nih/images/',
+        'unit_test_mode': unit_test_mode
     }
     clf_res = evaluate_classification_val(
         config=cfg,
@@ -233,9 +311,30 @@ def evaluate_classification_arm(arm, seed, device):
     return clf_res
 
 
-def main():
-    args = parse_args()
+def check_run_validity(b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manifest,
+                       b_priv, c4_priv, b_class, c4_class, expected_epochs=250, unit_test_mode=False):
+    """Verify that all completion artifacts, hashes, non-NaN values, and split invariants hold."""
+    if not (b_dev_manifest and c4_manifest and b_att_manifest and c4_att_manifest):
+        return False, "Missing manifest"
+    if not unit_test_mode and (b_dev_manifest.get('epochs_completed') != expected_epochs or c4_manifest.get('epochs_completed') != expected_epochs):
+        return False, "Anonymizer epochs incomplete"
+    if not (np.isfinite(b_priv['roc_auc']) and np.isfinite(c4_priv['roc_auc'])):
+        return False, "Non-finite privacy ROC-AUC"
+    if not (np.isfinite(b_class['macro_auc']) and np.isfinite(c4_class['macro_auc'])):
+        return False, "Non-finite classification Macro AUC"
+    if b_class['n_classes_valid'] != 14 or c4_class['n_classes_valid'] != 14:
+        return False, "Invalid class count in classification"
+    if not unit_test_mode and (b_priv['n_pairs'] != 2000 or c4_priv['n_pairs'] != 2000):
+        return False, "Privacy pairs count != 2000"
+    if not unit_test_mode and (b_class.get('n_images') != 10816 or c4_class.get('n_images') != 10816):
+        return False, "Classification images count != 10816"
+    return True, "VALID"
+
+
+def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
+    """Core orchestration pipeline reusable across full runs and integration smoke tests."""
     device = torch.device(args.device) if args.device else verify_environment_and_hashes()
+    base = out_base_dir or os.path.join(ROOT, 'research_runs', 'M2_S1')
 
     b_dev_config = os.path.join(ROOT, 'config_files', 'config_dev_restored_baseline.json')
     c4_config = os.path.join(ROOT, 'config_files', 'config_dev_c4.json')
@@ -243,86 +342,83 @@ def main():
     b_dev_manifest = None
     c4_manifest = None
 
-    # -----------------------------------------------------------------------
     # Step 1: Run B_dev Anonymizer Training
-    # -----------------------------------------------------------------------
     if args.arm in ('B_dev', 'all'):
-        b_dev_manifest = run_anonymizer_arm('B_dev', b_dev_config, args.max_epochs, args.seed, device)
+        b_dev_manifest = run_anonymizer_arm('B_dev', b_dev_config, args.max_epochs, args.seed, device, out_base_dir=base)
 
-    # -----------------------------------------------------------------------
     # Step 2: Run C4 Anonymizer Training
-    # -----------------------------------------------------------------------
     if args.arm in ('C4', 'all'):
-        c4_manifest = run_anonymizer_arm('C4', c4_config, args.max_epochs, args.seed, device)
+        c4_manifest = run_anonymizer_arm('C4', c4_config, args.max_epochs, args.seed, device, out_base_dir=base)
 
-    # -----------------------------------------------------------------------
-    # Step 3: Run S1 Evaluators (Adaptive Attacker + Privacy + Classification)
-    # -----------------------------------------------------------------------
+    # Step 3: Run S1 Evaluators
     if args.arm in ('all', 'eval_only'):
         print("\n" + "=" * 70)
         print("M2-S1: SCIENTIFIC EVALUATION SUITE (ATTACKER SEED %d)" % args.attacker_seed)
         print("=" * 70)
 
-        # Load manifests if not already in memory
         if b_dev_manifest is None:
-            b_manifest_p = os.path.join(ROOT, 'research_runs', 'M2_S1', 'B_dev', 'seed_%d' % args.seed, 'checkpoint_manifest.json')
+            b_manifest_p = os.path.join(base, 'B_dev', 'seed_%d' % args.seed, 'checkpoint_manifest.json')
             b_dev_manifest = json.load(open(b_manifest_p))
         if c4_manifest is None:
-            c4_manifest_p = os.path.join(ROOT, 'research_runs', 'M2_S1', 'C4', 'seed_%d' % args.seed, 'checkpoint_manifest.json')
+            c4_manifest_p = os.path.join(base, 'C4', 'seed_%d' % args.seed, 'checkpoint_manifest.json')
             c4_manifest = json.load(open(c4_manifest_p))
 
         # 3a. Train Adaptive Attackers
         b_att_manifest = train_s1_attacker_arm('B_dev', args.seed, args.attacker_seed,
-                                               args.attacker_epochs, args.attacker_patience, device)
+                                               args.attacker_epochs, args.attacker_patience, device, out_base_dir=base)
         c4_att_manifest = train_s1_attacker_arm('C4', args.seed, args.attacker_seed,
-                                                args.attacker_epochs, args.attacker_patience, device)
+                                                args.attacker_epochs, args.attacker_patience, device, out_base_dir=base)
 
         # 3b. Scientific Privacy VAL Evaluation
-        b_priv = evaluate_privacy_arm('B_dev', args.seed, args.attacker_seed, device)
-        c4_priv = evaluate_privacy_arm('C4', args.seed, args.attacker_seed, device)
+        b_priv = evaluate_privacy_arm('B_dev', args.seed, args.attacker_seed, device, out_base_dir=base, unit_test_mode=unit_test_mode)
+        c4_priv = evaluate_privacy_arm('C4', args.seed, args.attacker_seed, device, out_base_dir=base, unit_test_mode=unit_test_mode)
 
         auc_b_priv = b_priv['roc_auc']
         auc_c4_priv = c4_priv['roc_auc']
         delta_priv = auc_c4_priv - auc_b_priv
 
         # 3c. Clinical Utility Classification VAL Evaluation
-        b_class = evaluate_classification_arm('B_dev', args.seed, device)
-        c4_class = evaluate_classification_arm('C4', args.seed, device)
+        b_class = evaluate_classification_arm('B_dev', args.seed, device, out_base_dir=base, unit_test_mode=unit_test_mode)
+        c4_class = evaluate_classification_arm('C4', args.seed, device, out_base_dir=base, unit_test_mode=unit_test_mode)
 
         auc_b_class = b_class['macro_auc']
         auc_c4_class = c4_class['macro_auc']
         delta_class = auc_c4_class - auc_b_class
 
-        # 3d. Evaluate Decision Gates
+        # 3d. Check Run Validity
+        run_valid, val_reason = check_run_validity(
+            b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manifest,
+            b_priv, c4_priv, b_class, c4_class, expected_epochs=args.max_epochs, unit_test_mode=unit_test_mode
+        )
+
         privacy_gate_pass = (delta_priv <= 0.03)
         class_gate_pass = (delta_class >= 0.0)
-        run_valid = True  # Verified by preflight and finite outputs
 
         s1_verdict = "C4 S1: PROMOTE TO S2" if (run_valid and privacy_gate_pass and class_gate_pass) else "C4 S1: DO NOT PROMOTE"
 
         # Read peak VRAM from telemetry
-        b_df_p = os.path.join(ROOT, 'research_runs', 'M2_S1', 'B_dev', 'seed_%d' % args.seed, 'epoch_metrics.csv')
-        c4_df_p = os.path.join(ROOT, 'research_runs', 'M2_S1', 'C4', 'seed_%d' % args.seed, 'epoch_metrics.csv')
+        b_df_p = os.path.join(base, 'B_dev', 'seed_%d' % args.seed, 'epoch_metrics.csv')
+        c4_df_p = os.path.join(base, 'C4', 'seed_%d' % args.seed, 'epoch_metrics.csv')
         b_peak_vram = pd.read_csv(b_df_p)['peak_vram_mb'].max() if os.path.exists(b_df_p) else 0.0
         c4_peak_vram = pd.read_csv(c4_df_p)['peak_vram_mb'].max() if os.path.exists(c4_df_p) else 0.0
 
         b_dis_aucs = dict(zip(b_class['auc_df']['label'], b_class['auc_df']['auc']))
         c4_dis_aucs = dict(zip(c4_class['auc_df']['label'], c4_class['auc_df']['auc']))
 
-        # Build Summary JSON
         summary = {
             'protocol': 'M2-S1',
             'run_status': 'VALID' if run_valid else 'INVALID',
+            'validity_reason': val_reason,
             'b_dev': {
                 'seed': args.seed,
                 'best_epoch': b_dev_manifest['best_epoch'],
                 'best_selection_total': b_dev_manifest['best_selection_total'],
-                'selected_checkpoint_sha256': b_dev_manifest.get('selected_generator_sha256', b_dev_manifest.get('best_checkpoint_sha256')),
+                'selected_checkpoint_sha256': b_dev_manifest['selected_generator_sha256'],
                 'training_runtime_hours': b_dev_manifest.get('training_runtime_hours'),
                 'peak_vram_mb': float(b_peak_vram),
                 'attacker_seed42_checkpoint_sha256': b_att_manifest['best_attacker_sha256'],
                 'privacy_val_roc_auc': float(auc_b_priv),
-                'privacy_val_metrics': {k: float(v) for k, v in b_priv.items() if k != 'eval_mode'},
+                'privacy_val_metrics': b_priv,
                 'classification_val_macro_auc': float(auc_b_class),
                 'classification_val_disease_aucs': {k: float(v) for k, v in b_dis_aucs.items()},
             },
@@ -330,13 +426,13 @@ def main():
                 'seed': args.seed,
                 'best_epoch': c4_manifest['best_epoch'],
                 'best_selection_total': c4_manifest['best_selection_total'],
-                'selected_checkpoint_sha256': c4_manifest.get('selected_generator_sha256', c4_manifest.get('best_checkpoint_sha256')),
+                'selected_checkpoint_sha256': c4_manifest['selected_generator_sha256'],
                 'training_runtime_hours': c4_manifest.get('training_runtime_hours'),
                 'peak_vram_mb': float(c4_peak_vram),
                 'gradient_norm_diagnostics': c4_manifest.get('gradient_norm_diagnostics', {}),
                 'attacker_seed42_checkpoint_sha256': c4_att_manifest['best_attacker_sha256'],
                 'privacy_val_roc_auc': float(auc_c4_priv),
-                'privacy_val_metrics': {k: float(v) for k, v in c4_priv.items() if k != 'eval_mode'},
+                'privacy_val_metrics': c4_priv,
                 'classification_val_macro_auc': float(auc_c4_class),
                 'classification_val_disease_aucs': {k: float(v) for k, v in c4_dis_aucs.items()},
             },
@@ -356,13 +452,13 @@ def main():
         }
 
         # Save summary JSON
-        summary_path = os.path.join(ROOT, 'research_runs', 'M2_S1', 'M2_S1_summary.json')
+        summary_path = os.path.join(base, 'M2_S1_summary.json')
         os.makedirs(os.path.dirname(summary_path), exist_ok=True)
         with open(summary_path, 'w') as f:
             json.dump(summary, f, indent=2)
 
         # Build Markdown Report
-        report_path = os.path.join(ROOT, 'research_agent', 'M2_S1_C4_RESULT.md')
+        report_path = os.path.join(ROOT, 'research_agent', 'M2_S1_C4_RESULT.md') if out_base_dir is None else os.path.join(base, 'M2_S1_C4_RESULT.md')
         write_markdown_report(report_path, summary)
 
         print("\n" + "=" * 70)
@@ -371,6 +467,7 @@ def main():
         print("Markdown Report: %s" % report_path)
         print("Verdict: %s" % s1_verdict)
         print("=" * 70)
+        return summary
 
 
 def write_markdown_report(report_path, summary):
@@ -446,7 +543,7 @@ def write_markdown_report(report_path, summary):
         "---",
         "",
         "## 5. Frozen S1 Decision Gate Evaluation",
-        "- **Run Validity**: `%s`" % summary['run_status'],
+        "- **Run Validity**: `%s` (%s)" % (summary['run_status'], summary.get('validity_reason', '')),
         "- **Privacy Gate ($\\Delta_{priv} \\le +0.03$)**: `%s` ($\\Delta_{priv} = %+.4f$)" % (
             'PASS' if g['privacy_gate_pass'] else 'FAIL', d['delta_privacy_val_auc']
         ),
@@ -462,7 +559,10 @@ def write_markdown_report(report_path, summary):
         f.write('\n'.join(lines) + '\n')
 
 
-import pandas as pd
+def main():
+    args = parse_args()
+    run_orchestration(args)
+
 
 if __name__ == '__main__':
     main()

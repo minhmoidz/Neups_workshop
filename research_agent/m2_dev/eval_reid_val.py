@@ -54,6 +54,7 @@ def evaluate_reid_val_mixed(anonymize_fn, attacker_net, validation_loader, devic
 
     y_true = np.concatenate(y_true)
     y_score = np.concatenate(y_score)
+    n_pairs = int(len(y_true))
 
     roc_auc = float(metrics.roc_auc_score(y_true, y_score))
 
@@ -67,6 +68,7 @@ def evaluate_reid_val_mixed(anonymize_fn, attacker_net, validation_loader, devic
     return {
         'y_true': y_true,
         'y_score': y_score,
+        'n_pairs': n_pairs,
         'roc_auc': roc_auc,
         'accuracy': accuracy,
         'precision': precision,
@@ -75,7 +77,8 @@ def evaluate_reid_val_mixed(anonymize_fn, attacker_net, validation_loader, devic
     }
 
 
-def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoint=None, device=None):
+def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoint=None, device=None,
+                      validation_loader=None, unit_test_mode=False):
     """End-to-end evaluation helper for scientific VAL privacy.
     Loads generator from generator_checkpoint and attacker from attacker_checkpoint,
     then evaluates on the fixed 2,000 validation pairs under anon/real threat model.
@@ -85,18 +88,40 @@ def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoin
     config = config or {}
 
     from .dev_attacker import load_frozen_anonymizer, SiameseNetwork
-    from .evaluator_common import build_dev_anonymizer_loaders
+    from .evaluator_common import build_dev_anonymizer_loaders, file_sha256
 
     if not generator_checkpoint:
         raise ValueError("generator_checkpoint must be explicitly specified")
     if not attacker_checkpoint:
         raise ValueError("attacker_checkpoint must be explicitly specified")
 
+    gen_sha = file_sha256(generator_checkpoint)
+    att_sha = file_sha256(attacker_checkpoint)
+
     _, anonymize_fn = load_frozen_anonymizer(device=device, checkpoint_path=generator_checkpoint)
 
     attacker_net = SiameseNetwork().to(device)
     attacker_net.load_state_dict(torch.load(attacker_checkpoint, map_location=device, weights_only=False))
 
-    _, val_loader, _ = build_dev_anonymizer_loaders(config, seed=42)
+    if validation_loader is None:
+        validation_loader = config.get('validation_loader')
 
-    return evaluate_reid_val_mixed(anonymize_fn, attacker_net, val_loader, device=device)
+    if validation_loader is None:
+        if unit_test_mode and not os.path.exists(config.get('image_path', '')):
+            # Synthetic loader for unit test mode
+            from m2_dev.evaluator_common import LazyPairDataset
+            # Generate synthetic pairs loader
+            syn_ds = [(torch.rand(1, 64, 64), torch.rand(1, 64, 64), torch.tensor(float(i % 2))) for i in range(8)]
+            val_loader = torch.utils.data.DataLoader(syn_ds, batch_size=4)
+        else:
+            _, val_loader, _ = build_dev_anonymizer_loaders(config, seed=42)
+    else:
+        val_loader = validation_loader
+
+    res = evaluate_reid_val_mixed(anonymize_fn, attacker_net, val_loader, device=device)
+    if not unit_test_mode and res['n_pairs'] != 2000:
+        raise RuntimeError("Scientific privacy evaluation requires exactly 2000 validation pairs, got %d" % res['n_pairs'])
+
+    res['generator_checkpoint_sha256'] = gen_sha
+    res['attacker_checkpoint_sha256'] = att_sha
+    return res

@@ -170,14 +170,27 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
         grid_identity, gauss_filter = make_flow_field_components(device)
         anonymize_fn = build_anonymize_fn(generator, grid_identity, gauss_filter, MU)
 
-    # Build VAL-only dataset + loader (fold must be 'val'; never 'test')
-    dataset = CXR.CXRDataset(
-        path_to_images=config['image_path'],
-        fold=fold,
-        transform=None,
-        perturbation_type=perturbation_type)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
-                                             shuffle=False, num_workers=0)
+    if config.get('dataloader') is not None:
+        dataloader = config['dataloader']
+        n_images = len(dataloader.dataset)
+    elif config.get('unit_test_mode', False) and not os.path.exists(config.get('image_path', '')):
+        from m0_tests.test_m14a_execution_harness import SyntheticClassificationDataset
+        dataset = SyntheticClassificationDataset(size=28, image_size=64)
+        n_images = len(dataset)
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    else:
+        # Build VAL-only dataset + loader (fold must be 'val'; never 'test')
+        dataset = CXR.CXRDataset(
+            path_to_images=config['image_path'],
+            fold=fold,
+            transform=None,
+            perturbation_type=perturbation_type)
+        n_images = len(dataset)
+        if not config.get('unit_test_mode', False) and fold == 'val' and n_images != 10816:
+            raise RuntimeError("Classification scientific VAL requires exactly 10,816 images, got %d" % n_images)
+
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
+                                                 shuffle=False, num_workers=0)
 
     pred_df, auc_df, macro_auc = classify_val_dataset(
         model, dataloader, anonymize_fn, perturbation_type, device=device, batch_size=batch_size)
@@ -186,6 +199,7 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
         'pred_df': pred_df,
         'auc_df': auc_df,
         'macro_auc': macro_auc,
+        'n_images': n_images,
         'n_classes_expected': 14,
         'n_classes_valid': 14,
         'generator_checkpoint_sha256': selected_gen_sha,
