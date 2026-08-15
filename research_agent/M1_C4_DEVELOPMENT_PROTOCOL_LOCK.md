@@ -1,5 +1,6 @@
 # M1 — C4 Development Protocol Lock
 
+- **Protocol version:** **1.1.0** (M1.1: scientific promotion gate repair; seed/cost consistency repair; segmentation provenance recovery attempt)
 - **Task:** Freeze a scientifically defensible TRAIN/VALIDATION-only protocol to compare **restored PriCheXy-Net baseline (B_dev)** vs **C4 (feature-preservation term, `L_feat`, DenseNet-121 penultimate-pooled 1024-d, MSELoss, detached source, feature_loss_weight=1.0)** before any re-run.
 - **Absolute execution lock:** NO training of B_dev / C4 / C2 / C2+C4 / C3 / anonymizer / attacker; NO TEST access; NO mu or feature-loss-weight sweeps; NO architecture change. This document only READs code/configs, runs M0 suite, and performs tiny non-scientific probes.
 - **Reproducibility index:** R6 (READ + tiny probes) → "R5-SCI/READ" boundary (finalize → RUN with same configs).
@@ -14,8 +15,9 @@
 | M0 committed `6d9b5ba76e1312e54ec1c10934d3a9bfd7f42f43` (17 files) | OK |
 | Branch manifest committed `14f6715c922e2fc27338d265fcede1f48eb58298` | OK |
 | M0.1 provenance-hash repair committed `9af21e0189d7b57d5575d3ffd8fc4604fea56ffd` | OK |
-| M0 test suite PASS (27/27) at lock time | OK |
-| Tracked working tree modified | ONLY the two dev configs being finalized in this M1 step |
+| M1 protocol lock committed `7156d8506468e7adec037d62143923a33cbce3e4` | OK |
+| M0 test suite PASS (27/27) at M1 lock; re-verified 28/28 at M1.1 lock | OK |
+| Tracked working tree modified at M1.1 | ONLY M1.1-related files staged for this commit |
 | `OFFICIAL_TEST_LOCK.md` respected (TEST never read/touched) | OK |
 
 > Note: untracked `archive/`, `chexnet/results/`, `reproduction/`, `logs/`, `data/`, `networks/corrected_baseline/` and assorted `research_agent/*` working files predate this restart (earlier sessions). They are NOT part of the M1 freeze and must NOT be consumed for any M1 decision. Only the tracked M0/M0.1 artifacts plus the configs finalized below are authoritative.
@@ -72,11 +74,11 @@ The released generator (`generator_lowest_total_loss_mu_0.01.pth`) is the TRAINE
 | A4 | Auxiliary classifier (critic) semantics | Upstream: `optimizer_ac = SGD(lr=1e-4, momentum=0.9, wd=1e-4)` updates `ac_model` EVERY iteration; ACLoss deepcopies `ac_model` each forward → generator faces current classifier. Repaired `m0_port/ACLoss.py` reproduces this (refresh at forward start). **Same for both arms; C4 must NOT change critic update cadence.** |
 | A5 | Feature term for C4 | `L_feat = MSELoss(r_detached_source(224), r_gen(224))` on DenseNet-121 penultimate pooled (1024-d) features; source branch detached (`feature_loss_detach_source=true`). weight `1.0`. Only delta from B_dev. |
 | A6 | Privacy critic input | Raw anonymized 256px → Resize 224 → ImageNet normalize (batch norm). Verifier = SiameseNetwork; labels from SiameseDataset (1.0 = same patient). |
-| A7 | Seed policy | **S1: anonymizer seed 42 for both arms; attacker seed 42.** S2 (if gates pass): anonymizer seeds 42,43,44; attacker seeds 42,43,44. Upstream hardcodes `seed_all(42)` (Agent.py `utils.seed_all(42)`); 42/42 is the faithful primary. |
+| A7 | Seed policy | **S1: anonymizer seed 42 for both arms; attacker seed 42.** **S2: anonymizer seed 42 ONLY (reuse frozen S1 generators, NO retraining); adaptive attacker seeds 42,43,44 per arm.** Paired: B_dev-attacker-42 ↔ C4-attacker-42, 43↔43, 44↔44. Upstream hardcodes `seed_all(42)` (Agent.py `utils.seed_all(42)`); 42 is the faithful primary. Multi-anonymizer-seed robustness (43/44) is NOT part of S2; if ever needed it is a separate later pre-registered stage. |
 | A8 | C2/C3 during dev | **OFF** (`ver_ensemble_size=1`, `ver_restart_every=0`, `ver_warmup_iters=0`, `use_budget_map=false`). mu fixed 0.01. |
 | A9 | Initial generator for retraining | `networks/pretrained_generator_prichexy_net.pth` (upstream init; SHA `101226890c...`), identical for both arms. Released generator is the baseline OUTPUT reference, not the init. |
 | A10 | Verification/Siamese init for attacker | Fresh ImageNet-init ResNet-50 per run (canonical attacker recipe). |
-| A11 | Segmentation evaluator | **BLOCKED** — see §15. |
+| A11 | Segmentation evaluator | **STILL_BLOCKED after recovery audit** — see §15 and `research_agent/M1_1_SEGMENTATION_PROVENANCE.md`. Segmentation gate is **NOT APPLICABLE while BLOCKED** and must NOT be silently treated as PASS; if the evaluator becomes certified, it becomes REQUIRED with frozen thresholds. |
 
 ---
 
@@ -113,18 +115,19 @@ The released generator (`generator_lowest_total_loss_mu_0.01.pth`) is the TRAINE
 - Only acceptable difference from B_dev.
 
 ### 5.3 Evaluators (VALIDATION only; TEST CLOSED)
-- **Classification:** `config_eval_classifier.json` pattern, DenseNet-121 `pretrained_classifier.pth`, run on anon train/val images (NOT test images). Metric: mean ROC-AUC over 14 classes.
+- **Classification:** `config_eval_classifier.json` pattern, DenseNet-121 `pretrained_classifier.pth`, run on anon train/val images (NOT test images). Metric: **mean ROC-AUC over 14 classes** (primary).
 - **Privacy/Re-ID:** attacker recipe §2.2 run on train/val pairs only; metric mean AUC. Exact protocol (incl. seed) frozen pre-run.
-- **Segmentation: BLOCKED** — `archive/train_seg_unet/best.pth` (SHA `2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0`, UNet 1→3 ch, init_features 16, epoch 20, mean_dice 0.9548) has NO training script/config/TRAIN-VAL provenance in repo → evaluator provenance not certifiable without TEST contamination. Report `SEGMENTATION EVALUATOR: BLOCKED`; repair requirements: provide training script + config + TRAIN/VAL split provenance in the branch, then re-certify under a new M-step. Does NOT block the privacy/classification protocol.
+- **Segmentation: STILL BLOCKED (see §15 and `M1_1_SEGMENTATION_PROVENANCE.md`).** Checkpoint `archive/train_seg_unet/best.pth` (SHA `2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0`, UNet 1→3 ch, init_features 16, epoch 20, mean_dice 0.9548). Recovery audit found the training script (`train_seg.py`), dataset class (`chexnet/seg_dataset.py`), mask loader (`utils/segmask.py`), model (`networks/UNetSeg.py`), metric code (`eval_seg.py`) and documentation chain (HANDOVER/GOALS.md, RESEARCH_BRIEF.md, 03H audit) recoverable from git history with checkpoint self-metadata matching documented val dice. **Still BLOCKED because:** (1) the actual training log for the checkpoint run is NOT preserved — the only segmenter log (`logs/train_seg.log`) is a different broken run (best mean val dice ≈ 0.06); (2) the exact training CLI/config for the checkpoint run is not reconstructable (checkpoint records only init_features=16 ≠ code default 32, epoch, dice; not lr/batch/seed/epochs). Does NOT block the privacy/classification protocol. Repair: commit canonical seg source onto the branch and/or re-run under a certified protocol with preserved config+log+split, then re-certify with a new checkpoint SHA.
 
 ---
 
 ## §6 Registries & fingerprints
 
 - Frozen config SHAs (lock-time): B_dev `1f7df9e5...`, C4 `e63f0a9e...`. Re-verify at RUN start.
-- M0/M0.1 commits: `6d9b5ba`, `14f6715`, `9af21e0`. Branch HEAD at lock: `9af21e0189d7b57d5575d3ffd8fc4604fea56ffd`.
+- M0/M0.1/M1 commits: `6d9b5ba`, `14f6715`, `9af21e0`, `7156d85`. Branch HEAD at M1.1 lock: `7156d8506468e7adec037d62143923a33cbce3e4`.
 - Data hashes fixed (§2.1). No dataset files tracked (LFS).
-- `M1_C4_PROTOCOL_LOCK.json` carries machine-readable frozen values.
+- `M1_C4_PROTOCOL_LOCK.json` (v1.1.0) carries machine-readable frozen values.
+- `M1_1_SEGMENTATION_PROVENANCE.md` carries the segmentation recovery audit.
 
 ---
 
@@ -136,35 +139,107 @@ The released generator (`generator_lowest_total_loss_mu_0.01.pth`) is the TRAINE
 
 ---
 
-## §8 S1 / S2 gates
+## §8 S1 / S2 gates (v1.1.0 — RUN VALIDITY separated from SCIENTIFIC PROMOTION)
 
-- **S1 (single seed, 42/42):** run B_dev and C4 with §6-frozen configs; compute classification ROC-AUC and attacker AUC on VAL pairs. This is the only training step allowed and it is still NOT part of this M1 step — it happens in the M1-follow-up RUN phase after this lock is committed.
-- **S2:** only if S1 is internally consistent (no NaN/OOM/config drift). Attacker seeds 42,43,44; anonymizer seeds 42,43,44 (kept same as S1 for the attacker's core seed).
+### 8.1 S1 validity (RUN VALIDITY ONLY — NOT scientific promotion)
+Both arms must: complete normally; have no NaN/Inf; use frozen config hashes (§6);
+use identical paired training semantics (same batch/iter order/seed); produce valid
+checkpoints; respect the TEST firewall.
+- If not: **S1 = INVALID**. Fix infrastructure only; do **NOT** interpret metrics.
+- A valid run can scientifically FAIL. A valid run and scientific promotion are separate.
+
+### 8.2 S1 scientific promotion (attacker seed 42; frozen pre-result, thresholds immutable after results)
+- **Privacy non-regression:** `AUC_C4_VAL <= AUC_Bdev_VAL + 0.03`.
+- **Classification utility:** `macro_AUC_C4_VAL >= macro_AUC_Bdev_VAL` (primary metric =
+  mean ROC-AUC over 14 pathologies, DenseNet-121 `pretrained_classifier.pth`, VAL split).
+- **Segmentation:** NOT silently treated as PASS. Segmentation is REQUIRED-IF-CERTIFIED:
+  `Dice_C4 >= Dice_Bdev - 0.005` AND no material HD95 degradation — but while the evaluator
+  is BLOCKED (§15), this criterion is **NOT APPLICABLE**.
+- **Promotion decision:** C4 progresses only if **RUN_VALID AND privacy non-regression AND
+  classification utility non-regression/improvement** (plus segmentation criterion only if
+  certified).
+- If `Delta_priv <= -0.03` (i.e. `AUC_C4_VAL <= AUC_Bdev_VAL - 0.03`), record that as a
+  **STRONG PRIVACY SIGNAL** — but it is NOT mandatory, because C4's primary hypothesis is
+  utility preservation.
+
+### 8.3 S2 seed semantics and promotion (frozen before results)
+- **S2 anonymizer seeds:** `[42]` ONLY (same frozen S1 generators; NO anonymizer retraining).
+- **S2 attacker seeds:** `[42, 43, 44]` per arm — 3 fresh adaptive attacker restarts per arm.
+- **Paired:** B_dev-attacker-42 ↔ C4-attacker-42, 43↔43, 44↔44.
+- **S2 reuses frozen S1 generator checkpoints** (one frozen B_dev generator, one frozen C4
+  generator); seed-42 attacker reused from S1 when valid.
+- **Primary S2 statistic:** mean adaptive VAL Re-ID AUC over seeds 42,43,44. Also report:
+  sample SD, median, min, max, paired per-seed delta.
+- **No hidden factorial seed expansion:** anonymizer seeds 43/44 are NOT introduced in
+  M2/S2. Multi-anonymizer-seed robustness, if eventually needed for publication, is a
+  separate later pre-registered stage.
+
+### 8.4 S2 promotion rule (frozen before results)
+- `Delta_priv = mean(AUC_C4_VAL seeds 42,43,44) - mean(AUC_Bdev_VAL seeds 42,43,44)`.
+- Promotion to later stronger-deformation/C2 investigation requires: **mean privacy does not
+  materially regress** AND **classification advantage/non-regression remains**.
+- Privacy non-regression ceiling: **`Delta_priv <= +0.03`**.
+- Strong privacy improvement: **`Delta_priv <= -0.03`**.
+- **If `Delta_priv > +0.03`, C4 FAILS promotion even if classification is better.**
+- Do not redefine these rules afterward.
 
 ---
 
-## §9 Final verdict format (for the M1 step itself)
+## §9 Final verdict format (for the M1.1 step itself)
 
 ```
-M1 VERDICT: {PASS|BLOCKED}
-- Batch size: 16 (frozen; 64/32 OOM, probe evidence)
-- Checkpoint rule: lowest validation total loss, method-neutral (feature term excluded from selection metric in both arms)
-- Attacker recipe: frozen canonical (batch 32, lr 1e-4, max_epochs 100, patience 5, fresh ImageNet ResNet-50)
-- Segmentation: BLOCKED (no provenance for archive/train_seg_unet/best.pth) — does not block privacy/classification
-- Configs finalized: config_dev_restored_baseline.json / config_dev_c4.json (SHAs in §6)
-- Protocol lock files committed+ pushed on research/method-restart @ <new-commit>
-- Next step (NOT started): M1-follow-up RUN — execute B_dev/C4 under frozen configs, then report.
+M1.1 VERDICT: {PASS|BLOCKED}
+- Protocol version: 1.1.0
+- S1 validity separated from scientific promotion (valid run can scientifically FAIL)
+- S1 privacy ceiling: AUC_C4_VAL <= AUC_Bdev_VAL + 0.03 (attacker seed 42)
+- S1 classification gate: macro_AUC_C4_VAL >= macro_AUC_Bdev_VAL (mean ROC-AUC over 14 labels)
+- S1 segmentation gate: REQUIRED-IF-CERTIFIED (Dice_C4 >= Dice_Bdev - 0.005, no material HD95 degradation); NOT APPLICABLE while BLOCKED
+- S2 anonymizer seeds: [42] only (reuse frozen S1 generators; no retrain)
+- S2 attacker seeds: [42, 43, 44] per arm, paired per seed
+- S2 privacy promotion ceiling: Delta_priv <= +0.03 (Delta_priv > +0.03 => FAIL even if classification better)
+- Segmentation: STILL_BLOCKED (recovery audit in M1_1_SEGMENTATION_PROVENANCE.md)
+- S1 GPU cost: ~32.6 h; S2 incremental: ~12 h; total through S2: ~44.6 h
+- Protocol lock files updated to v1.1.0, committed+ pushed on research/method-restart @ <new-commit>
+- Next step (NOT started): M2-S1 — paired B_dev vs C4, anonymizer seed42 only, TRAIN/VALIDATION ONLY.
 ```
 
 ---
 
-## §10 Cost estimate (from probe, batch 16)
+## §10 Cost estimate (corrected for M1.1 design, from probe at batch 16)
 
-| Arm | GPU time |
+### S1
+| Item | GPU time |
 |---|---|
-| Anonymizer B_dev (250 ep, 625 it/ep @0.296s) | ~12.8 h compute |
-| Anonymizer C4 (same budget) | ~12.8 h compute |
-| Attacker per run (batch 32, ≤100 ep, ~313 it/ep, ResNet-50 pair) | ~2–4 h |
-| Classification eval (val set) | minutes |
+| Anonymizer B_dev seed42 (250 ep, 625 it/ep @0.296s) | ~12.8 h |
+| Anonymizer C4 seed42 (same budget) | ~12.8 h |
+| Adaptive attacker per arm (seed 42) | ~3 h each |
+| Classification VAL per arm | ~0.5 h each |
+| **S1 total** | **~32.6 h** |
 
-Total S1 ≈ 26 h + attacker; S2 attacker ×3 ≈ 6–12 h. Feasible on the 5070 Ti 16GB.
+### S2 incremental (after S1 PASS; NO anonymizer retrain)
+| Item | GPU time |
+|---|---|
+| Reuse frozen S1 generator checkpoints (both arms) | 0 h |
+| Reuse S1 seed-42 attacker (both arms, when valid) | 0 h |
+| Attacker seed 43 × 2 arms | ~6 h |
+| Attacker seed 44 × 2 arms | ~6 h |
+| **S2 incremental total** | **~12 h** |
+
+**Total through S2: ~44.6 h.** Feasible on the 5070 Ti 16GB. No under-reporting; S2
+incremental contains only additional attacker runs + evaluator cost.
+
+---
+
+## §15 Segmentation evaluator (recovered provenance, STILL BLOCKED)
+
+See `research_agent/M1_1_SEGMENTATION_PROVENANCE.md` (added in M1.1) for the full audit.
+Summary: `archive/train_seg_unet/best.pth` (SHA `2dfdcf9b…`) self-records epoch 20,
+init_features 16, mean_dice 0.9548, dice [0.9544, 0.9639, 0.9462] which exactly match the
+documentation in `HANDOVER/GOALS.md` and `RESEARCH_BRIEF.md`. Training script, dataset
+class, mask loader, model and metric code are recoverable from git history (commit
+`9eaa5fd`). Certification remains **BLOCKED** because the checkpoint run's own training log
+is not preserved (the only log `logs/train_seg.log` is a different broken run, best dice
+≈ 0.06) and the exact training CLI/config is unreconstructable. Historical TEST results
+(03H fold==test) are explicitly not certification. Segmentation is therefore NOT silently
+treated as PASS; the gate stays REQUIRED-IF-CERTIFIED and is NOT APPLICABLE while BLOCKED.
+This does not block the privacy/classification protocol.

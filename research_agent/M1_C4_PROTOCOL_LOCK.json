@@ -1,13 +1,19 @@
 {
   "protocol": "M1_C4_DEVELOPMENT_PROTOCOL_LOCK",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "lock_date": "2026-08-15",
+  "m1_1_reason": [
+    "scientific promotion gate repair (RUN_VALID != SCIENTIFIC_PROMOTION)",
+    "seed/cost consistency repair (S2 anonymizer seed42 only; attacker 42/43/44)",
+    "segmentation provenance recovery attempt (STILL_BLOCKED, manifest added)"
+  ],
   "branch": "research/method-restart",
-  "git_head_at_lock": "9af21e0189d7b57d5575d3ffd8fc4604fea56ffd",
+  "git_head_at_lock": "7156d8506468e7adec037d62143923a33cbce3e4",
   "git_commit_chain": {
     "m0": "6d9b5ba76e1312e54ec1c10934d3a9bfd7f42f43",
     "m0_branch_manifest": "14f6715c922e2fc27338d265fcede1f48eb58298",
-    "m0_1": "9af21e0189d7b57d5575d3ffd8fc4604fea56ffd"
+    "m0_1": "9af21e0189d7b57d5575d3ffd8fc4604fea56ffd",
+    "m1": "7156d8506468e7adec037d62143923a33cbce3e4"
   },
   "execution_lock": {
     "no_training": true,
@@ -56,8 +62,10 @@
       "use_budget_map": false
     },
     "seeds": {
-      "s1": {"anonymizer": 42, "attacker": 42},
-      "s2": {"anonymizer": [42, 43, 44], "attacker": [42, 43, 44]}
+      "s1": {"anonymizer": [42], "attacker": 42},
+      "s2": {"anonymizer": [42], "attacker": [42, 43, 44]},
+      "s2_reuses_s1_generators": true,
+      "s2_anonymizer_requires_retrain": false
     }
   },
   "attacker_recipe": {
@@ -95,16 +103,16 @@
     "A4_critic_semantics": "online SGD every iter; ACLoss deepcopy/refresh each forward (repaired m0_port ACLoss); unchanged in C4",
     "A5_feature_term": "MSELoss 1024-d penultimate, detached source, weight 1.0",
     "A6_verifier_input": "raw 256 -> Resize 224 -> ImageNet normalize",
-    "A7_seeds": "S1 42/42; S2 42,43,44 both",
+    "A7_seeds": "S1 anonymizer 42, attacker 42; S2 anonymizer 42 ONLY (reuse S1 generators), attacker 42,43,44 per arm; paired per-seed 42<->42, 43<->43, 44<->44",
     "A8_c2c3": "off",
     "A9_initial_generator": "pretrained_generator_prichexy_net.pth (upstream init) both arms",
     "A10_attacker_init": "fresh ImageNet ResNet-50 per run",
-    "A11_segmentation": "BLOCKED"
+    "A11_segmentation": "STILL_BLOCKED after recovery audit (see M1_1_SEGMENTATION_PROVENANCE.md); segmentation gate NOT APPLICABLE while BLOCKED, REQUIRED-IF-CERTIFIED with frozen thresholds"
   },
   "evaluators": {
     "classification": "DenseNet-121 pretrained_classifier.pth on TRAIN/VAL anonymized images only",
     "reid_privacy": "attacker recipe on TRAIN/VAL pairs only",
-    "segmentation": "BLOCKED — archive/train_seg_unet/best.pth sha 2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0 has no training script/config/VAL provenance in repo"
+    "segmentation": "STILL_BLOCKED — see M1_1_SEGMENTATION_PROVENANCE.md; checkpoint sha 2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0; training log matching checkpoint NOT preserved, exact training CLI unreconstructable"
   },
   "false_positive_control": {
     "required": true,
@@ -116,7 +124,71 @@
   },
   "gates": {
     "s1_required": true,
-    "s2_condition": "only if S1 internally consistent (no NaN/OOM/config drift)"
+    "s1_run_validity": {
+      "description": "RUN VALIDITY ONLY — NOT scientific promotion. A valid run can scientifically FAIL.",
+      "must": [
+        "both arms complete normally",
+        "no NaN/Inf",
+        "frozen config hashes match (B_dev 1f7df9e5..., C4 e63f0a9e...)",
+        "identical paired training semantics (same batch/iter order/seed)",
+        "valid checkpoints produced",
+        "TEST firewall respected"
+      ],
+      "if_false": "S1 = INVALID; fix infrastructure only; do NOT interpret metrics"
+    },
+    "s1_scientific_promotion": {
+      "description": "SCIENTIFIC PROMOTION — separate from RUN VALIDITY. Frozen pre-result, thresholds immutable after results.",
+      "attacker_seed": 42,
+      "privacy_non_regression": "AUC_C4_VAL <= AUC_Bdev_VAL + 0.03",
+      "classification_utility": "macro_AUC_C4_VAL >= macro_AUC_Bdev_VAL",
+      "classification_primary_metric": "mean ROC-AUC over 14 pathologies (DenseNet-121 pretrained_classifier.pth, VAL split)",
+      "segmentation": {
+        "status": "NOT_APPLICABLE_WHILE_BLOCKED",
+        "if_certified_require": "Dice_C4 >= Dice_Bdev - 0.005 AND no material HD95 degradation",
+        "never_silently_pass": true
+      },
+      "promotes_only_if": [
+        "RUN_VALID",
+        "privacy non-regression (AUC_C4_VAL <= AUC_Bdev_VAL + 0.03)",
+        "classification utility non-regression/improvement (macro_AUC_C4_VAL >= macro_AUC_Bdev_VAL)",
+        "plus segmentation criterion ONLY if evaluator certified"
+      ],
+      "strong_privacy_signal": "Delta_priv <= -0.03 (record but not mandatory; C4 primary hypothesis is utility preservation)"
+    },
+    "s2": {
+      "promotion_requires": [
+        "S1 promotion passed",
+        "mean privacy does not materially regress",
+        "classification advantage/non-regression remains"
+      ],
+      "privacy_promotion_ceiling": "Delta_priv <= +0.03",
+      "Delta_priv_definition": "mean(AUC_C4_VAL seeds 42,43,44) - mean(AUC_Bdev_VAL seeds 42,43,44)",
+      "strong_privacy_improvement": "Delta_priv <= -0.03",
+      "failure_rule": "if Delta_priv > +0.03 C4 FAILS promotion even if classification is better",
+      "anonymizer_seeds": [42],
+      "attacker_seeds": [42, 43, 44],
+      "reuses_s1_generators": true,
+      "no_anonymizer_retrain": true,
+      "primary_statistic": "mean adaptive VAL Re-ID AUC over seeds 42,43,44",
+      "report": ["sample SD", "median", "min", "max", "paired per-seed delta"]
+    }
+  },
+  "gpu_cost_estimate": {
+    "s1": {
+      "description": "B_dev anonymizer seed42 + C4 anonymizer seed42 + 1 adaptive attacker per arm + classification VAL per arm",
+      "anonymizer_per_arm_hours": 12.8,
+      "attacker_per_arm_hours": 3.0,
+      "classification_val_hours": 0.5,
+      "s1_total_hours": 32.6
+    },
+    "s2_incremental": {
+      "description": "NO anonymizer retrain; reuse frozen S1 generators. Only attacker seeds 43 and 44 per arm (seed 42 reused if valid) + evaluator cost.",
+      "attacker_per_arm_seed_hours": 3.0,
+      "attacker_runs_incremental": 4,
+      "s2_incremental_hours": 12.0,
+      "note": "seed-42 attacker reused from S1 when valid; incremental = seeds 43,44 x 2 arms = 4 runs"
+    },
+    "total_through_s2_hours": 44.6
   },
   "test_lock": "OFFICIAL_TEST_LOCK.md respected; TEST closed"
 }
