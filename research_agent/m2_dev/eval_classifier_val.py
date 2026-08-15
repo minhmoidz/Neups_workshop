@@ -41,7 +41,7 @@ def load_frozen_classifier(device=None):
     from networks.UNet_PriCheXyNet import UNet  # noqa: F401  (import guard for compatibility)
     checkpoint = torch.load(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                          '..', 'networks', 'pretrained_classifier.pth'),
-                            map_location='cpu')
+                            map_location='cpu', weights_only=False)
     model = checkpoint['model']
     if device is not None:
         model = model.to(device)
@@ -111,13 +111,15 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
 
 
 def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
-                                perturbation_type='flow_field', batch_size=16):
+                                perturbation_type='flow_field', batch_size=16,
+                                generator_checkpoint=None):
     """VAL-only classification evaluation. fold is validated BEFORE dataset init.
 
     :param config: dev config dict (image_path, generator_checkpoint_path, ...).
     :param model: optional injected frozen classifier (tests); defaults to the
         released pretrained_classifier.pth.
     :param fold: development fold; MUST be 'val'.
+    :param generator_checkpoint: explicit path to selected M2 generator checkpoint.
     """
     assert_dev_fold(fold)          # reject TEST before dataset construction
     firewall_check('dev')
@@ -142,8 +144,11 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
 
     anonymize_fn = None
     if perturbation_type == 'flow_field':
+        gen_path = generator_checkpoint or (config.get('generator_checkpoint_path') if config else None)
+        if not gen_path:
+            raise ValueError("generator checkpoint path must be explicitly provided")
         generator = UNet(1, 2, 32).to(device)
-        generator.load_state_dict(torch.load(config['generator_checkpoint_path'], map_location=device))
+        generator.load_state_dict(torch.load(gen_path, map_location=device))
         grid_identity, gauss_filter = make_flow_field_components(device)
         anonymize_fn = build_anonymize_fn(generator, grid_identity, gauss_filter, MU)
 

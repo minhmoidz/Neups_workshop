@@ -32,12 +32,19 @@ from .evaluator_common import (
 from utils import utils
 
 
-def load_frozen_anonymizer(config, device):
-    """Load the frozen generator + legacy operator components for the attacker."""
+def load_frozen_anonymizer(config=None, device=None, checkpoint_path=None):
+    """Load the frozen generator + legacy operator components for the attacker.
+    Requires checkpoint_path or config['generator_checkpoint_path'].
+    """
     from networks.UNet_PriCheXyNet import UNet
 
+    device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    ckpt_path = checkpoint_path or (config.get('generator_checkpoint_path') if config else None)
+    if not ckpt_path:
+        raise ValueError("generator checkpoint path must be explicitly provided")
+
     generator = UNet(1, 2, 32).to(device)
-    generator.load_state_dict(torch.load(config['generator_checkpoint_path'], map_location=device))
+    generator.load_state_dict(torch.load(ckpt_path, map_location=device))
     generator.eval()
     for p in generator.parameters():
         p.requires_grad = False
@@ -49,7 +56,7 @@ def load_frozen_anonymizer(config, device):
 class DevAttacker:
     def __init__(self, config, attacker_seed=42, device=None,
                  anonymize_fn=None, training_loader=None, validation_loader=None,
-                 net_factory=None):
+                 net_factory=None, generator_checkpoint=None):
         """Development attacker runner.
 
         :param config: dev config dict (image_path, batch_size, learning_rate,
@@ -58,6 +65,7 @@ class DevAttacker:
         :param device: torch device; defaults to CUDA if available.
         :param anonymize_fn: optional injected anonymizer (tests); defaults to
             the frozen legacy flow_field operator from config.
+        :param generator_checkpoint: explicit path to selected M2 generator checkpoint.
         :param training_loader / validation_loader: optional injected loaders
             (tests); defaults to TRAIN/VAL retrainSNN loaders. TEST loader is
             NEVER constructed here.
@@ -75,7 +83,7 @@ class DevAttacker:
         utils.seed_all(attacker_seed)
 
         if anonymize_fn is None:
-            _, self.anonymize_fn = load_frozen_anonymizer(config, self.device)
+            _, self.anonymize_fn = load_frozen_anonymizer(config, self.device, checkpoint_path=generator_checkpoint)
         else:
             self.anonymize_fn = anonymize_fn
 

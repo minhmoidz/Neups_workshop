@@ -20,6 +20,7 @@ for _p in (ROOT, os.path.join(ROOT, 'research_agent')):
 
 import hashlib
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
@@ -48,6 +49,18 @@ DEV_FORBIDDEN_FOLDS = {'test', 'testing', 'final_test'}
 FROZEN_CLASSIFIER_PATH = os.path.join(ROOT, 'networks', 'pretrained_classifier.pth')
 FROZEN_CLASSIFIER_SHA = '8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663'
 
+# Initial generator checkpoint (M0/M1 frozen)
+INITIAL_GENERATOR_PATH = os.path.join(ROOT, 'networks', 'pretrained_generator_prichexy_net.pth')
+INITIAL_GENERATOR_SHA = '101226890c061ba5917db7a56a300d1a53988f6eda8767856f10863e2a20aacb'
+
+# Pretrained verification model (M0/M1 frozen)
+FROZEN_VERIFIER_PATH = os.path.join(ROOT, 'networks', 'pretrained_verification_model.pth')
+FROZEN_VERIFIER_SHA = '331efaed0c0433c69941ddc003a14a936c688d94fd4ecfbefd34e53bfa7c051a'
+
+# Repaired ACLoss SHA (m0_port/ACLoss.py)
+REPAIRED_ACLOSS_PATH = os.path.join(ROOT, 'research_agent', 'm0_port', 'ACLoss.py')
+REPAIRED_ACLOSS_SHA = '3ed8483718c3ccffb59f76e9dece47e92295a553895e3fd43b1b18cd486b263c'
+
 # Method-neutral anonymizer checkpoint filename (§11)
 METHOD_NEUTRAL_CKPT_NAME = 'generator_best_method_neutral.pth'
 
@@ -58,6 +71,17 @@ def file_sha256(path):
         for block in iter(lambda: f.read(1 << 20), b''):
             h.update(block)
     return h.hexdigest()
+
+
+def verify_repaired_acloss():
+    """Verify and import the repaired m0_port/ACLoss module. Fail closed on stale ACLoss."""
+    if not os.path.exists(REPAIRED_ACLOSS_PATH):
+        raise RuntimeError('Repaired ACLoss not found at %s' % REPAIRED_ACLOSS_PATH)
+    actual_sha = file_sha256(REPAIRED_ACLOSS_PATH)
+    if actual_sha != REPAIRED_ACLOSS_SHA:
+        raise RuntimeError('ACLoss SHA mismatch: %s != %s' % (actual_sha, REPAIRED_ACLOSS_SHA))
+    from research_agent.m0_port.ACLoss import ACLoss
+    return ACLoss, actual_sha, REPAIRED_ACLOSS_PATH
 
 
 # ---------------------------------------------------------------------------
@@ -205,42 +229,182 @@ def select_method_neutral_best(epoch_metrics):
 
 
 # ---------------------------------------------------------------------------
-# §12 — paired anonymizer data-order fingerprint
+# §12 — paired anonymizer data-order sampler & fingerprint
 # ---------------------------------------------------------------------------
-class _IndexDataset:
-    """Lightweight dataset that yields only indices; used to replicate the exact
-    DataLoader shuffle order without loading real images."""
+class FingerprintedRandomSampler(torch.utils.data.Sampler):
+    """Deterministic sampler that yields epoch permutations from an explicit generator
+    and records the exact ordered sample indices for provenance hashing."""
 
-    def __init__(self, n):
-        self.n = n
+    def __init__(self, data_source, generator=None, seed=42):
+        self.data_source = data_source
+        self.seed = seed
+        self.generator = generator if generator is not None else torch.Generator().manual_seed(seed)
+        self.epoch_indices = []
 
     def __len__(self):
-        return self.n
+        return len(self.data_source)
 
-    def __getitem__(self, i):
-        return i
+    def __iter__(self):
+        n = len(self.data_source)
+        indices = torch.randperm(n, generator=self.generator).tolist()
+        self.epoch_indices.append(indices)
+        return iter(indices)
+
+    def get_epoch_order_hash(self, epoch=0, pair_identifiers=None):
+        if epoch >= len(self.epoch_indices):
+            raise IndexError("Epoch %d order not recorded yet (total recorded: %d)" % (epoch, len(self.epoch_indices)))
+        indices = self.epoch_indices[epoch]
+        h = hashlib.sha256()
+        for idx in indices:
+            if pair_identifiers is not None:
+                item = pair_identifiers[idx]
+                if isinstance(item, (list, tuple, np.ndarray)):
+                    h.update('|'.join(str(x) for x in item).encode('utf-8'))
+                else:
+                    h.update(str(item).encode('utf-8'))
+            else:
+                h.update(str(idx).encode('utf-8'))
+            h.update(b'\n')
+        return h.hexdigest()
 
 
-def train_order_fingerprint(pair_file_path, seed, batch_size, num_workers=0):
-    """Deterministic SHA256 of the epoch-0 anonymizer TRAIN batch order.
-
-    Replicates the exact DataLoader shuffle (RandomSampler with an explicit
-    generator) that the M2 anonymizer loader will use, then hashes the ordered
-    pair identifiers. B_dev and C4 (same seed, same pair file, same batch) MUST
-    produce the same hash; a different seed MUST produce a different hash.
-    """
+def compute_epoch_order_hash(pair_file_path, seed, epoch=0):
+    """Compute the deterministic SHA256 of the exact pair sequence for a specific epoch."""
     pairs = np.loadtxt(pair_file_path, dtype=str)
     n = len(pairs)
     gen = torch.Generator()
     gen.manual_seed(seed)
-    loader = DataLoader(_IndexDataset(n), batch_size=batch_size, shuffle=True,
-                        num_workers=num_workers, generator=gen)
-    order = []
-    for batch in loader:
-        order.extend(int(i) for i in batch.tolist())
+    # Advance to the requested epoch
+    indices = None
+    for ep in range(epoch + 1):
+        indices = torch.randperm(n, generator=gen).tolist()
 
     h = hashlib.sha256()
-    for i in order:
-        h.update('|'.join(str(v) for v in pairs[i]).encode('utf-8'))
+    for idx in indices:
+        h.update('|'.join(str(v) for v in pairs[idx]).encode('utf-8'))
         h.update(b'\n')
     return h.hexdigest()
+
+
+def train_order_fingerprint(pair_file_path, seed, batch_size=16, num_workers=0):
+    """Deterministic SHA256 of the epoch-0 anonymizer TRAIN batch order."""
+    return compute_epoch_order_hash(pair_file_path, seed, epoch=0)
+
+
+class LazyPairDataset(torch.utils.data.Dataset):
+    """Lazy-loading dataset for anonymization image pairs (NIH Chest X-ray).
+    Loads images on-demand in __getitem__, matching exact upstream preprocessing
+    and abnormality labels, avoiding long startup delays.
+    """
+
+    def __init__(self, phase='training', image_path=None, image_size=IMAGE_SIZE, n_channels=1, max_pairs=None):
+        firewall_check('dev')
+        assert_dev_phase(phase)
+
+        if image_path is None:
+            # Check default locations
+            if os.path.exists('/home/minhtt/datasets/nih/images/'):
+                image_path = '/home/minhtt/datasets/nih/images/'
+            else:
+                image_path = './'
+        self.image_path = image_path
+        self.image_size = image_size
+        self.n_channels = n_channels
+
+        if phase == 'training':
+            pair_file = os.path.join(ROOT, 'image_pairs', 'image_pairs_training_10000.txt')
+        elif phase in ('val', 'validation'):
+            pair_file = os.path.join(ROOT, 'image_pairs', 'image_pairs_validation_2000.txt')
+        else:
+            raise ValueError("Invalid phase for dev dataset: %s" % phase)
+
+        self.image_pairs = np.loadtxt(pair_file, dtype=str)
+        if max_pairs is not None:
+            self.image_pairs = self.image_pairs[:max_pairs]
+
+        self.resize = transforms.Resize((image_size, image_size))
+        self.transform = transforms.ToTensor() if n_channels == 1 else transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+        csv_path = os.path.join(ROOT, 'Data_Entry_2017_v2020.csv')
+        if os.path.exists(csv_path):
+            meta_data = pd.read_csv(csv_path).values
+            file_to_finding = dict(zip(meta_data[:, 0], meta_data[:, 1]))
+        else:
+            file_to_finding = {}
+
+        self.PRED_LABEL = [
+            'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
+            'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
+            'Pleural_Thickening', 'Hernia'
+        ]
+
+        self.ac_labels_1 = []
+        self.labels_id = []
+        for i in range(len(self.image_pairs)):
+            label = np.zeros(14, dtype=np.float32)
+            fname = self.image_pairs[i, 0]
+            finding = file_to_finding.get(fname, 'No Finding')
+            if finding != 'No Finding' and isinstance(finding, str):
+                for d in finding.split('|'):
+                    if d in self.PRED_LABEL:
+                        label[self.PRED_LABEL.index(d)] = 1.0
+            self.ac_labels_1.append(label)
+            self.labels_id.append(float(self.image_pairs[i][2]))
+
+    def __len__(self):
+        return len(self.image_pairs)
+
+    def __getitem__(self, index):
+        from datasets.Dataset import pil_loader
+        p1 = os.path.join(self.image_path, self.image_pairs[index][0])
+        p2 = os.path.join(self.image_path, self.image_pairs[index][1])
+        if os.path.exists(p1) and os.path.exists(p2):
+            img1 = pil_loader(p1, self.n_channels)
+            img2 = pil_loader(p2, self.n_channels)
+            img1 = self.transform(self.resize(img1))
+            img2 = self.transform(self.resize(img2))
+        else:
+            # Fallback for synthetic tests
+            img1 = torch.zeros(self.n_channels, self.image_size, self.image_size)
+            img2 = torch.zeros(self.n_channels, self.image_size, self.image_size)
+
+        return img1, img2, self.ac_labels_1[index], self.labels_id[index]
+
+
+def build_dev_anonymizer_loaders(config, seed=42, num_workers=0):
+    """Build canonical anonymizer TRAIN and VAL loaders with FingerprintedRandomSampler.
+    Never constructs TEST loaders.
+    """
+    firewall_check('dev')
+    image_path = config.get('image_path', None)
+    image_size = config.get('image_size', IMAGE_SIZE)
+    batch_size = config.get('batch_size', 16)
+    max_pairs = config.get('max_pairs', None)
+
+    train_dataset = LazyPairDataset(phase='training', image_size=image_size, n_channels=1,
+                                    image_path=image_path, max_pairs=max_pairs)
+    val_dataset = LazyPairDataset(phase='validation', image_size=image_size, n_channels=1,
+                                  image_path=image_path, max_pairs=max_pairs)
+
+    train_gen = torch.Generator()
+    train_gen.manual_seed(seed)
+    train_sampler = FingerprintedRandomSampler(train_dataset, generator=train_gen, seed=seed)
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        sampler=train_sampler,
+        num_workers=num_workers,
+        pin_memory=False
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=False
+    )
+    return train_loader, val_loader, train_sampler

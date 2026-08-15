@@ -1,0 +1,67 @@
+{
+  "protocol": "M2_S1_EXECUTION_LOCK",
+  "version": "1.3.0",
+  "branch": "research/method-restart",
+  "git_head_at_preflight": "cac09d96e384380973d44cdf815dbb1f5808866c",
+  "execution_mode": "paired_control_vs_c4_s1",
+  "test_firewall": "CLOSED",
+  "scientific_choices_frozen": {
+    "mu": 0.01,
+    "operator": "legacy",
+    "transform_mode": "legacy",
+    "batch_size": 16,
+    "accumulation_steps": 1,
+    "optimizer": "Adam",
+    "learning_rate": 0.0001,
+    "max_epochs": 250,
+    "anonymizer_seed": 42,
+    "attacker_s1_seed": 42,
+    "c2_budget": "OFF",
+    "c3_stochastic": "OFF",
+    "s1_s2_gates": "FROZEN",
+    "checkpoint_selection_rule": "lowest_validation_total_loss_method_neutral",
+    "checkpoint_selection_tiebreak": "earliest_epoch",
+    "b_dev_feature_loss_weight": 0.0,
+    "c4_feature_loss_weight": 1.0
+  },
+  "dataset_order_hashes": {
+    "train_pairs_sha256": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
+    "val_pairs_sha256": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7",
+    "epoch0_order_sha256": "920a127341a85967f959863e3471fea60f498d59d6485fb75c57c04c73f11967",
+    "epoch1_order_sha256": "1eb349a8ad0e912da5df3babe2995def454e2b4382993a39926be1cf29c4c845",
+    "b_dev_epoch0_order_matches_c4": true,
+    "b_dev_epoch1_order_matches_c4": true
+  },
+  "artifact_provenance": {
+    "initial_generator_checkpoint": "networks/pretrained_generator_prichexy_net.pth",
+    "initial_generator_sha256": "101226890c061ba5917db7a56a300d1a53988f6eda8767856f10863e2a20aacb",
+    "frozen_classifier_checkpoint": "networks/pretrained_classifier.pth",
+    "frozen_classifier_sha256": "8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663",
+    "frozen_verifier_checkpoint": "networks/pretrained_verification_model.pth",
+    "frozen_verifier_sha256": "331efaed0c0433c69941ddc003a14a936c688d94fd4ecfbefd34e53bfa7c051a",
+    "repaired_acloss_module": "research_agent/m0_port/ACLoss.py",
+    "repaired_acloss_sha256": "3ed8483718c3ccffb59f76e9dece47e92295a553895e3fd43b1b18cd486b263c",
+    "b_dev_config_path": "config_files/config_dev_restored_baseline.json",
+    "b_dev_config_sha256": "1f7df9e5db0c1e1b8e79b540d227d8b143b83a0f0ca6363855120c870aee221b",
+    "c4_config_path": "config_files/config_dev_c4.json",
+    "c4_config_sha256": "e63f0a9ee0ecba2dd949a4037e113b2b7b5ab0d3688f196f7a7a62cc8548fb40"
+  },
+  "execution_paths": {
+    "b_dev_output_dir": "research_runs/M2_S1/B_dev/seed_42/",
+    "c4_output_dir": "research_runs/M2_S1/C4/seed_42/",
+    "selected_checkpoint_filename": "generator_best_method_neutral.pth",
+    "checkpoint_manifest_filename": "checkpoint_manifest.json",
+    "metrics_log_filename": "metrics_history.json",
+    "latest_checkpoint_filename": "checkpoint_latest.pth"
+  },
+  "preflight_smoke_verification": {
+    "device": "NVIDIA GeForce RTX 5070 Ti",
+    "batches_per_arm": 2,
+    "b_dev_peak_vram_mb": 8800.23,
+    "c4_peak_vram_mb": 8796.61,
+    "b_dev_loss_finite": true,
+    "c4_loss_finite": true,
+    "optimization_status": "PASS"
+  },
+  "lock_status": "LOCKED"
+}
