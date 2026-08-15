@@ -35,5 +35,6 @@
   "checkpoint_selection_rule": "lowest_validation_total_loss_method_neutral",
   "checkpoint_selection_tiebreak": "earliest_epoch",
   "mode": "dev",
+  "image_path": "/home/minhtt/datasets/nih/images/",
   "test_firewall": "CLOSED"
 }

@@ -14,6 +14,7 @@ evaluation (P0-A). This runner:
   - scientific VAL privacy geometry:   anon(x1), real(x2)   (in eval_reid_val)
 """
 import copy
+import os
 
 import torch
 import torch.nn as nn
@@ -34,17 +35,19 @@ from utils import utils
 
 def load_frozen_anonymizer(config=None, device=None, checkpoint_path=None):
     """Load the frozen generator + legacy operator components for the attacker.
-    Requires checkpoint_path or config['generator_checkpoint_path'].
+    Requires explicit checkpoint_path (no scientific fallback allowed).
     """
     from networks.UNet_PriCheXyNet import UNet
 
     device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    ckpt_path = checkpoint_path or (config.get('generator_checkpoint_path') if config else None)
+    ckpt_path = checkpoint_path
     if not ckpt_path:
-        raise ValueError("generator checkpoint path must be explicitly provided")
+        raise RuntimeError("selected generator checkpoint path must be explicitly provided (no scientific fallback allowed)")
+    if not os.path.exists(ckpt_path):
+        raise FileNotFoundError("Selected generator checkpoint not found: %s" % ckpt_path)
 
     generator = UNet(1, 2, 32).to(device)
-    generator.load_state_dict(torch.load(ckpt_path, map_location=device))
+    generator.load_state_dict(torch.load(ckpt_path, map_location=device, weights_only=False))
     generator.eval()
     for p in generator.parameters():
         p.requires_grad = False
@@ -59,13 +62,12 @@ class DevAttacker:
                  net_factory=None, generator_checkpoint=None):
         """Development attacker runner.
 
-        :param config: dev config dict (image_path, batch_size, learning_rate,
-            max_epochs, early_stopping, generator_checkpoint_path, ...).
+        :param config: dev config dict.
         :param attacker_seed: attacker RNG seed (42 for S1, 42/43/44 for S2).
         :param device: torch device; defaults to CUDA if available.
         :param anonymize_fn: optional injected anonymizer (tests); defaults to
-            the frozen legacy flow_field operator from config.
-        :param generator_checkpoint: explicit path to selected M2 generator checkpoint.
+            the frozen legacy flow_field operator loaded from generator_checkpoint.
+        :param generator_checkpoint: explicit path to selected M2 generator checkpoint (required).
         :param training_loader / validation_loader: optional injected loaders
             (tests); defaults to TRAIN/VAL retrainSNN loaders. TEST loader is
             NEVER constructed here.
@@ -78,11 +80,14 @@ class DevAttacker:
         self.config = config
         self.attacker_seed = attacker_seed
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.generator_checkpoint = generator_checkpoint
 
         # Seed BEFORE net init, DataLoader shuffle, and optimizer.
         utils.seed_all(attacker_seed)
 
         if anonymize_fn is None:
+            if not generator_checkpoint:
+                raise RuntimeError("generator_checkpoint must be explicitly provided to DevAttacker")
             _, self.anonymize_fn = load_frozen_anonymizer(config, self.device, checkpoint_path=generator_checkpoint)
         else:
             self.anonymize_fn = anonymize_fn

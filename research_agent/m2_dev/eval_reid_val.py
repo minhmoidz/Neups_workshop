@@ -73,3 +73,30 @@ def evaluate_reid_val_mixed(anonymize_fn, attacker_net, validation_loader, devic
         'recall': recall,
         'f1': f1,
     }
+
+
+def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoint=None, device=None):
+    """End-to-end evaluation helper for scientific VAL privacy.
+    Loads generator from generator_checkpoint and attacker from attacker_checkpoint,
+    then evaluates on the fixed 2,000 validation pairs under anon/real threat model.
+    """
+    firewall_check('dev')
+    device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    config = config or {}
+
+    from .dev_attacker import load_frozen_anonymizer, SiameseNetwork
+    from .evaluator_common import build_dev_anonymizer_loaders
+
+    if not generator_checkpoint:
+        raise ValueError("generator_checkpoint must be explicitly specified")
+    if not attacker_checkpoint:
+        raise ValueError("attacker_checkpoint must be explicitly specified")
+
+    _, anonymize_fn = load_frozen_anonymizer(device=device, checkpoint_path=generator_checkpoint)
+
+    attacker_net = SiameseNetwork().to(device)
+    attacker_net.load_state_dict(torch.load(attacker_checkpoint, map_location=device, weights_only=False))
+
+    _, val_loader, _ = build_dev_anonymizer_loaders(config, seed=42)
+
+    return evaluate_reid_val_mixed(anonymize_fn, attacker_net, val_loader, device=device)

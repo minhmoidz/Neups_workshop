@@ -294,22 +294,23 @@ def train_order_fingerprint(pair_file_path, seed, batch_size=16, num_workers=0):
 class LazyPairDataset(torch.utils.data.Dataset):
     """Lazy-loading dataset for anonymization image pairs (NIH Chest X-ray).
     Loads images on-demand in __getitem__, matching exact upstream preprocessing
-    and abnormality labels, avoiding long startup delays.
+    and abnormality labels.
+    Fail-closed: raises FileNotFoundError if any referenced image is missing.
     """
 
     def __init__(self, phase='training', image_path=None, image_size=IMAGE_SIZE, n_channels=1, max_pairs=None):
         firewall_check('dev')
         assert_dev_phase(phase)
 
-        if image_path is None:
-            # Check default locations
-            if os.path.exists('/home/minhtt/datasets/nih/images/'):
-                image_path = '/home/minhtt/datasets/nih/images/'
-            else:
-                image_path = './'
+        if not image_path:
+            raise ValueError("image_path must be explicitly specified (no implicit fallback allowed)")
+        if not os.path.isdir(image_path):
+            raise FileNotFoundError("Explicit image_path directory not found: %s" % image_path)
+
         self.image_path = image_path
         self.image_size = image_size
         self.n_channels = n_channels
+        self.phase = phase
 
         if phase == 'training':
             pair_file = os.path.join(ROOT, 'image_pairs', 'image_pairs_training_10000.txt')
@@ -361,20 +362,29 @@ class LazyPairDataset(torch.utils.data.Dataset):
         from datasets.Dataset import pil_loader
         p1 = os.path.join(self.image_path, self.image_pairs[index][0])
         p2 = os.path.join(self.image_path, self.image_pairs[index][1])
-        if os.path.exists(p1) and os.path.exists(p2):
-            img1 = pil_loader(p1, self.n_channels)
-            img2 = pil_loader(p2, self.n_channels)
-            img1 = self.transform(self.resize(img1))
-            img2 = self.transform(self.resize(img2))
-        else:
-            # Fallback for synthetic tests
-            img1 = torch.zeros(self.n_channels, self.image_size, self.image_size)
-            img2 = torch.zeros(self.n_channels, self.image_size, self.image_size)
+
+        if not os.path.exists(p1):
+            raise FileNotFoundError(
+                "Missing %s image1 at pair index %d: file=%s (resolved: %s)" % (
+                    self.phase, index, self.image_pairs[index][0], p1
+                )
+            )
+        if not os.path.exists(p2):
+            raise FileNotFoundError(
+                "Missing %s image2 at pair index %d: file=%s (resolved: %s)" % (
+                    self.phase, index, self.image_pairs[index][1], p2
+                )
+            )
+
+        img1 = pil_loader(p1, self.n_channels)
+        img2 = pil_loader(p2, self.n_channels)
+        img1 = self.transform(self.resize(img1))
+        img2 = self.transform(self.resize(img2))
 
         return img1, img2, self.ac_labels_1[index], self.labels_id[index]
 
 
-def build_dev_anonymizer_loaders(config, seed=42, num_workers=0):
+def build_dev_anonymizer_loaders(config, seed=42, num_workers=None):
     """Build canonical anonymizer TRAIN and VAL loaders with FingerprintedRandomSampler.
     Never constructs TEST loaders.
     """
@@ -383,6 +393,9 @@ def build_dev_anonymizer_loaders(config, seed=42, num_workers=0):
     image_size = config.get('image_size', IMAGE_SIZE)
     batch_size = config.get('batch_size', 16)
     max_pairs = config.get('max_pairs', None)
+    if num_workers is None:
+        num_workers = config.get('num_workers', 4 if torch.cuda.is_available() else 0)
+    pin_mem = torch.cuda.is_available()
 
     train_dataset = LazyPairDataset(phase='training', image_size=image_size, n_channels=1,
                                     image_path=image_path, max_pairs=max_pairs)
@@ -398,13 +411,105 @@ def build_dev_anonymizer_loaders(config, seed=42, num_workers=0):
         batch_size=batch_size,
         sampler=train_sampler,
         num_workers=num_workers,
-        pin_memory=False
+        pin_memory=pin_mem
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=False
+        pin_memory=pin_mem
     )
     return train_loader, val_loader, train_sampler
+
+
+def verify_scientific_dependencies(image_path=None):
+    """Preflight check: verifies existence and SHAs of all frozen checkpoints,
+    repaired modules, pair splits, and 100% of referenced image files.
+    Fail closed if any dependency is missing or drifted.
+    """
+    firewall_check('dev')
+    image_path = image_path or '/home/minhtt/datasets/nih/images/'
+    if not os.path.isdir(image_path):
+        raise FileNotFoundError("Dataset root directory does not exist: %s" % image_path)
+
+    # 1. Initial generator checkpoint
+    if not os.path.exists(INITIAL_GENERATOR_PATH):
+        raise FileNotFoundError("Initial generator checkpoint missing: %s" % INITIAL_GENERATOR_PATH)
+    actual_gen_sha = file_sha256(INITIAL_GENERATOR_PATH)
+    if actual_gen_sha != INITIAL_GENERATOR_SHA:
+        raise RuntimeError("Initial generator SHA mismatch: %s != %s" % (actual_gen_sha, INITIAL_GENERATOR_SHA))
+
+    # 2. Frozen classifier checkpoint
+    if not os.path.exists(FROZEN_CLASSIFIER_PATH):
+        raise FileNotFoundError("Classifier checkpoint missing: %s" % FROZEN_CLASSIFIER_PATH)
+    actual_clf_sha = file_sha256(FROZEN_CLASSIFIER_PATH)
+    if actual_clf_sha != FROZEN_CLASSIFIER_SHA:
+        raise RuntimeError("Classifier SHA mismatch: %s != %s" % (actual_clf_sha, FROZEN_CLASSIFIER_SHA))
+
+    # 3. Frozen verifier checkpoint
+    if not os.path.exists(FROZEN_VERIFIER_PATH):
+        raise FileNotFoundError("Verifier checkpoint missing: %s" % FROZEN_VERIFIER_PATH)
+    actual_ver_sha = file_sha256(FROZEN_VERIFIER_PATH)
+    if actual_ver_sha != FROZEN_VERIFIER_SHA:
+        raise RuntimeError("Verifier SHA mismatch: %s != %s" % (actual_ver_sha, FROZEN_VERIFIER_SHA))
+
+    # 4. Repaired ACLoss module
+    _, actual_acloss_sha, _ = verify_repaired_acloss()
+
+    # 5. Pair split files
+    train_pair_path = os.path.join(ROOT, 'image_pairs', 'image_pairs_training_10000.txt')
+    val_pair_path = os.path.join(ROOT, 'image_pairs', 'image_pairs_validation_2000.txt')
+    if not os.path.exists(train_pair_path):
+        raise FileNotFoundError("TRAIN pair file missing: %s" % train_pair_path)
+    if not os.path.exists(val_pair_path):
+        raise FileNotFoundError("VAL pair file missing: %s" % val_pair_path)
+
+    train_pairs_sha = file_sha256(train_pair_path)
+    val_pairs_sha = file_sha256(val_pair_path)
+    expected_train_sha = "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268"
+    expected_val_sha = "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7"
+    if train_pairs_sha != expected_train_sha:
+        raise RuntimeError("TRAIN pair SHA mismatch: %s != %s" % (train_pairs_sha, expected_train_sha))
+    if val_pairs_sha != expected_val_sha:
+        raise RuntimeError("VAL pair SHA mismatch: %s != %s" % (val_pairs_sha, expected_val_sha))
+
+    # 6. Verify image availability for all 10,000 TRAIN + 2,000 VAL pairs
+    with open(train_pair_path) as f:
+        train_lines = [line.strip().split() for line in f if line.strip()]
+    with open(val_pair_path) as f:
+        val_lines = [line.strip().split() for line in f if line.strip()]
+
+    train_fnames = set()
+    for row in train_lines:
+        train_fnames.add(row[0])
+        train_fnames.add(row[1])
+
+    val_fnames = set()
+    for row in val_lines:
+        val_fnames.add(row[0])
+        val_fnames.add(row[1])
+
+    existing_files = set(os.listdir(image_path))
+    missing_train = train_fnames - existing_files
+    missing_val = val_fnames - existing_files
+
+    if missing_train:
+        raise FileNotFoundError("Missing %d TRAIN image files (e.g. %s)" % (len(missing_train), list(missing_train)[:3]))
+    if missing_val:
+        raise FileNotFoundError("Missing %d VAL image files (e.g. %s)" % (len(missing_val), list(missing_val)[:3]))
+
+    return {
+        'status': 'PASS',
+        'image_path': image_path,
+        'initial_generator_sha256': actual_gen_sha,
+        'classifier_sha256': actual_clf_sha,
+        'verifier_sha256': actual_ver_sha,
+        'acloss_sha256': actual_acloss_sha,
+        'train_pairs_sha256': train_pairs_sha,
+        'val_pairs_sha256': val_pairs_sha,
+        'train_pairs_count': len(train_lines),
+        'val_pairs_count': len(val_lines),
+        'missing_train_images': 0,
+        'missing_val_images': 0,
+    }

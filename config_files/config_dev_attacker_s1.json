@@ -1,0 +1,18 @@
+{
+  "development_mode": true,
+  "architecture": "SiameseNetwork_ResNet50",
+  "initialization": "ImageNet",
+  "batch_size": 32,
+  "learning_rate": 0.0001,
+  "max_epochs": 100,
+  "early_stopping": 5,
+  "image_size": 256,
+  "perturbation_type": "flow_field",
+  "mu": 0.01,
+  "attacker_seed": 42,
+  "train_geometry": "anon_anon",
+  "checkpoint_val_geometry": "anon_anon",
+  "scientific_val_geometry": "anon_real",
+  "image_path": "/home/minhtt/datasets/nih/images/",
+  "test_firewall": "CLOSED"
+}

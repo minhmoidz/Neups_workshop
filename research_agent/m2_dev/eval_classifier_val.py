@@ -66,7 +66,7 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
                   'Pleural_Thickening', 'Hernia']
 
     with torch.no_grad():
-        for i, (inputs, labels, _) in enumerate(dataloader):
+        for i, (inputs, labels, idx_names) in enumerate(dataloader):
             inputs, labels = inputs.to(device), labels.to(device)
 
             if anonymize_fn is not None:
@@ -84,7 +84,7 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
             bs = true_labels.shape[0]
 
             for j in range(bs):
-                idx_name = dataloader.dataset.df.index[batch_size * i + j]
+                idx_name = idx_names[j] if isinstance(idx_names, (list, tuple)) else str(idx_names)
                 thisrow = {'Image Index': idx_name}
                 truerow = {'Image Index': idx_name}
                 for k, lbl in enumerate(PRED_LABEL):
@@ -94,19 +94,30 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
                 true_df = pd.concat([true_df, pd.DataFrame(truerow, index=[0])], ignore_index=True)
 
     auc_df = pd.DataFrame(columns=['label', 'auc'])
-    for column in true_df.columns:
-        if column not in PRED_LABEL:
-            continue
+    for column in PRED_LABEL:
+        y_true_col = true_df[column].values.astype(int)
+        y_score_col = pred_df['prob_' + column].values.astype(float)
+        unique_classes = np.unique(y_true_col)
+        if len(unique_classes) < 2:
+            raise RuntimeError(
+                "Classification VAL pathology %r has only %d class in ground truth (cannot compute ROC-AUC)" % (
+                    column, len(unique_classes)
+                )
+            )
         try:
-            auc = sklm.roc_auc_score(true_df[column].values.astype(int),
-                                     pred_df['prob_' + column].values)
-        except Exception:  # noqa: BLE001
-            auc = np.nan
-        auc_df = pd.concat([auc_df, pd.DataFrame({'label': [column], 'auc': [auc]}, index=[0])],
-                           ignore_index=True)
+            auc = float(sklm.roc_auc_score(y_true_col, y_score_col))
+            if not np.isfinite(auc):
+                raise RuntimeError("Classification VAL pathology %r produced non-finite AUC: %s" % (column, auc))
+        except Exception as exc:
+            raise RuntimeError("Classification VAL pathology %r failed AUC calculation: %s" % (column, exc)) from exc
 
-    valid = auc_df['auc'].dropna()
-    macro_auc = float(valid.mean()) if len(valid) > 0 else float('nan')
+        auc_df = pd.concat([auc_df, pd.DataFrame({'label': [column], 'auc': [auc]}, index=[0])], ignore_index=True)
+
+    n_valid = len(auc_df['auc'].dropna())
+    if n_valid != 14:
+        raise RuntimeError("Classification VAL requires exactly 14 valid AUCs, got %d" % n_valid)
+
+    macro_auc = float(auc_df['auc'].mean())
     return pred_df, auc_df, macro_auc
 
 
@@ -115,11 +126,11 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
                                 generator_checkpoint=None):
     """VAL-only classification evaluation. fold is validated BEFORE dataset init.
 
-    :param config: dev config dict (image_path, generator_checkpoint_path, ...).
+    :param config: dev config dict (image_path, ...).
     :param model: optional injected frozen classifier (tests); defaults to the
         released pretrained_classifier.pth.
     :param fold: development fold; MUST be 'val'.
-    :param generator_checkpoint: explicit path to selected M2 generator checkpoint.
+    :param generator_checkpoint: explicit path to selected M2 generator checkpoint (required for flow_field).
     """
     assert_dev_fold(fold)          # reject TEST before dataset construction
     firewall_check('dev')
@@ -135,20 +146,27 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
     ckpt_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                              '..', 'networks', 'pretrained_classifier.pth')
     if os.path.exists(ckpt_path):
-        actual = file_sha256(ckpt_path)
-        if actual != FROZEN_CLASSIFIER_SHA:
-            raise RuntimeError('classifier checkpoint SHA drift: %s != frozen %s' % (actual, FROZEN_CLASSIFIER_SHA))
+        actual_clf_sha = file_sha256(ckpt_path)
+        if actual_clf_sha != FROZEN_CLASSIFIER_SHA:
+            raise RuntimeError('classifier checkpoint SHA drift: %s != frozen %s' % (actual_clf_sha, FROZEN_CLASSIFIER_SHA))
+    else:
+        actual_clf_sha = 'injected_classifier'
 
     # Anonymizer (frozen generator, legacy operator, mu=0.01)
     from networks.UNet_PriCheXyNet import UNet
 
     anonymize_fn = None
+    selected_gen_sha = None
     if perturbation_type == 'flow_field':
-        gen_path = generator_checkpoint or (config.get('generator_checkpoint_path') if config else None)
+        gen_path = generator_checkpoint
         if not gen_path:
-            raise ValueError("generator checkpoint path must be explicitly provided")
+            raise RuntimeError("generator_checkpoint must be explicitly provided (no scientific fallback allowed)")
+        if not os.path.exists(gen_path):
+            raise FileNotFoundError("Selected generator checkpoint not found: %s" % gen_path)
+
+        selected_gen_sha = file_sha256(gen_path)
         generator = UNet(1, 2, 32).to(device)
-        generator.load_state_dict(torch.load(gen_path, map_location=device))
+        generator.load_state_dict(torch.load(gen_path, map_location=device, weights_only=False))
         grid_identity, gauss_filter = make_flow_field_components(device)
         anonymize_fn = build_anonymize_fn(generator, grid_identity, gauss_filter, MU)
 
@@ -163,4 +181,14 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
 
     pred_df, auc_df, macro_auc = classify_val_dataset(
         model, dataloader, anonymize_fn, perturbation_type, device=device, batch_size=batch_size)
-    return pred_df, auc_df, macro_auc
+
+    return {
+        'pred_df': pred_df,
+        'auc_df': auc_df,
+        'macro_auc': macro_auc,
+        'n_classes_expected': 14,
+        'n_classes_valid': 14,
+        'generator_checkpoint_sha256': selected_gen_sha,
+        'classifier_checkpoint_sha256': actual_clf_sha,
+        'fold': fold,
+    }

@@ -61,42 +61,58 @@ from .evaluator_common import (
 
 class M2AnonymizerRunner:
     def __init__(self, arm='B_dev', config=None, output_dir=None, device=None,
-                 seed=42, initial_generator_path=None, training_loader=None,
-                 validation_loader=None, train_sampler=None,
-                 ac_model=None, verification_model=None):
-        """M2 Anonymizer Runner for B_dev and C4.
+                 seed=42, initial_generator_path=None, ac_model=None,
+                 verification_model=None, training_loader=None, validation_loader=None,
+                 train_sampler=None, unit_test_mode=False):
+        """Paired M2 Anonymizer Runner for B_dev and C4.
 
-        :param arm: 'B_dev' (control) or 'C4' (feature loss method).
-        :param config: configuration dictionary.
-        :param output_dir: path where checkpoints, logs, and provenance will be written.
-        :param device: torch.device (defaults to CUDA if available).
-        :param seed: RNG seed for anonymizer (42 for S1).
-        :param initial_generator_path: optional override for initial generator weights.
-        :param training_loader / validation_loader: optional injected loaders (tests).
-        :param train_sampler: optional injected sampler (tests).
+        :param arm: 'B_dev' (control) or 'C4' (feature preservation).
+        :param config: dict or path to json config.
+        :param output_dir: directory to store telemetry and checkpoints.
+        :param device: torch device.
+        :param seed: RNG seed (M1 frozen: 42).
+        :param initial_generator_path: explicit path to initial generator checkpoint.
+        :param ac_model: optional pre-instantiated classifier (for testing).
+        :param verification_model: optional pre-instantiated verifier (for testing).
+        :param training_loader: optional pre-built loader (for testing).
+        :param validation_loader: optional pre-built loader (for testing).
+        :param train_sampler: optional pre-built sampler.
+        :param unit_test_mode: bool, if False (default) enforces strict scientific fail-closed checks.
         """
-        # 1. Enforce TEST firewall
         firewall_check('dev')
-
         if arm not in ('B_dev', 'C4'):
             raise ValueError("arm must be 'B_dev' or 'C4', got %r" % arm)
+
         self.arm = arm
         self.seed = seed
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.unit_test_mode = unit_test_mode
 
-        self.config = config or {}
+        # 1. Load config
+        if config is None:
+            cfg_file = 'config_dev_c4.json' if arm == 'C4' else 'config_dev_restored_baseline.json'
+            config_path = os.path.join(ROOT, 'config_files', cfg_file)
+            with open(config_path) as f:
+                self.config = json.load(f)
+            self.config_path = config_path
+        elif isinstance(config, str):
+            with open(config) as f:
+                self.config = json.load(f)
+            self.config_path = config
+        else:
+            self.config = config
+            self.config_path = None
+
         self.output_dir = output_dir or os.path.join(ROOT, 'research_runs', 'M2_S1', arm, 'seed_%d' % seed)
         os.makedirs(self.output_dir, exist_ok=True)
 
+        self.mu = self.config.get('mu', 0.01)
+        self.batch_size = self.config.get('batch_size', 16)
         self.learning_rate = self.config.get('learning_rate', 1e-4)
         self.max_epochs = self.config.get('max_epochs', 250)
-        self.batch_size = self.config.get('batch_size', 16)
         self.image_size = self.config.get('image_size', IMAGE_SIZE)
-        self.mu = self.config.get('mu', MU)
         self.ac_loss_weight = self.config.get('ac_loss_weight', 1.0)
         self.ver_loss_weight = self.config.get('ver_loss_weight', 1.0)
-
-        # C4 delta: feature_loss_weight = 1.0 for C4, 0.0 for B_dev
         self.feature_loss_weight = 1.0 if self.arm == 'C4' else 0.0
 
         # 2. Seed all RNGs before model creation
@@ -108,12 +124,16 @@ class M2AnonymizerRunner:
         # 4. Generator (UNet, 1ch -> 2ch flow field)
         self.generator = UNet(1, 2, 32).to(self.device)
         init_gen_path = initial_generator_path or INITIAL_GENERATOR_PATH
-        if os.path.exists(init_gen_path):
+        if not os.path.exists(init_gen_path):
+            if not self.unit_test_mode:
+                raise FileNotFoundError("Initial generator checkpoint missing: %s" % init_gen_path)
+            self.initial_generator_sha = 'mock_init'
+        else:
             actual_gen_sha = file_sha256(init_gen_path)
-            if actual_gen_sha != INITIAL_GENERATOR_SHA:
+            if actual_gen_sha != INITIAL_GENERATOR_SHA and not self.unit_test_mode:
                 raise RuntimeError("Initial generator SHA drift: %s != %s" % (actual_gen_sha, INITIAL_GENERATOR_SHA))
             self.generator.load_state_dict(torch.load(init_gen_path, map_location=self.device, weights_only=False))
-        self.initial_generator_sha = file_sha256(init_gen_path) if os.path.exists(init_gen_path) else 'mock_init'
+            self.initial_generator_sha = actual_gen_sha
 
         # 5. Classifier & Repaired ACLoss
         ACLossClass, self.acloss_sha, self.acloss_module_path = verify_repaired_acloss()
@@ -121,10 +141,12 @@ class M2AnonymizerRunner:
             self.ac_model = ac_model.to(self.device)
         elif os.path.exists(FROZEN_CLASSIFIER_PATH):
             actual_clf_sha = file_sha256(FROZEN_CLASSIFIER_PATH)
-            if actual_clf_sha != FROZEN_CLASSIFIER_SHA:
+            if actual_clf_sha != FROZEN_CLASSIFIER_SHA and not self.unit_test_mode:
                 raise RuntimeError("Classifier SHA drift: %s != %s" % (actual_clf_sha, FROZEN_CLASSIFIER_SHA))
             self.ac_model = torch.load(FROZEN_CLASSIFIER_PATH, map_location=self.device, weights_only=False)['model']
         else:
+            if not self.unit_test_mode:
+                raise FileNotFoundError("Frozen classifier checkpoint missing: %s" % FROZEN_CLASSIFIER_PATH)
             from torchvision.models import densenet121
             self.ac_model = densenet121(num_classes=14)
 
@@ -138,13 +160,17 @@ class M2AnonymizerRunner:
         # 6. Verifier & VerificationLoss
         if verification_model is not None:
             self.verification_model = verification_model.to(self.device)
-        else:
+        elif os.path.exists(FROZEN_VERIFIER_PATH):
+            actual_ver_sha = file_sha256(FROZEN_VERIFIER_PATH)
+            if actual_ver_sha != FROZEN_VERIFIER_SHA and not self.unit_test_mode:
+                raise RuntimeError("Verifier SHA drift: %s != %s" % (actual_ver_sha, FROZEN_VERIFIER_SHA))
             self.verification_model = SiameseNetwork().to(self.device)
-            if os.path.exists(FROZEN_VERIFIER_PATH):
-                actual_ver_sha = file_sha256(FROZEN_VERIFIER_PATH)
-                if actual_ver_sha != FROZEN_VERIFIER_SHA:
-                    raise RuntimeError("Verifier SHA drift: %s != %s" % (actual_ver_sha, FROZEN_VERIFIER_SHA))
-                self.verification_model.load_state_dict(torch.load(FROZEN_VERIFIER_PATH, map_location=self.device, weights_only=False))
+            self.verification_model.load_state_dict(torch.load(FROZEN_VERIFIER_PATH, map_location=self.device, weights_only=False))
+        else:
+            if not self.unit_test_mode:
+                raise FileNotFoundError("Frozen verifier checkpoint missing: %s" % FROZEN_VERIFIER_PATH)
+            self.verification_model = SiameseNetwork().to(self.device)
+
         self.verification_loss = VerificationLoss(
             verification_model=self.verification_model,
             reduction='none'
@@ -180,6 +206,7 @@ class M2AnonymizerRunner:
         self.epoch_metrics = []
         self.best_selection_total = float('inf')
         self.best_epoch = None
+        self.gradient_norm_diagnostics = {}
         self.best_checkpoint_path = os.path.join(self.output_dir, METHOD_NEUTRAL_CKPT_NAME)
         self.latest_checkpoint_path = os.path.join(self.output_dir, 'checkpoint_latest.pth')
 
@@ -238,16 +265,47 @@ class M2AnonymizerRunner:
                 feat_val = 0.0
 
             # 2. Verification loss (privacy term)
-            ver_loss = self.verification_loss(fakes_1, inputs2)
-            log_likelihood_ver_loss = - torch.log(torch.clamp(1.0 - ver_loss, min=1e-7))
-            ver_loss_mean = ver_loss.mean()
-            privacy_term = log_likelihood_ver_loss.mean()
+            # Upstream: ver_loss = verification_loss(fakes_1, inputs2), log_likelihood = -log(1 - ver_loss)
+            # Exact mathematical & stable identity: -log(1 - sigmoid(z)) == softplus(z)
+            inputs1_snn_g = self.imagenet_normalize(fakes_1.expand(-1, 3, -1, -1))
+            inputs2_snn_g = self.imagenet_normalize(inputs2.expand(-1, 3, -1, -1))
+            raw_verifier_logits = self.verification_loss.verification_model(inputs1_snn_g, inputs2_snn_g).squeeze()
+            privacy_term = F.softplus(raw_verifier_logits).mean()
+            with torch.no_grad():
+                ver_loss_mean = torch.sigmoid(raw_verifier_logits.to(dtype=torch.float64)).mean()
 
             # 3. Generator optimization total loss
             gen_loss = self.ac_loss_weight * ac_total_loss + self.ver_loss_weight * privacy_term
 
             # Selection total (feature term EXCLUDED for both arms)
             sel_loss_val = self.ac_loss_weight * ac_bce_val + self.ver_loss_weight * privacy_term.item()
+
+            # Optional C4 diagnostic: gradient norm ratio at epoch 0, 1, and every 25 epochs (batch 0 only)
+            if self.arm == 'C4' and (epoch in (0, 1) or epoch % 25 == 0) and n_batches == 0:
+                try:
+                    # 1. Base loss gradient
+                    base_loss = self.ac_loss_weight * (ac_total_loss - self.feature_loss_weight * feat_val) + self.ver_loss_weight * privacy_term
+                    self.optimizer_g.zero_grad()
+                    base_loss.backward(retain_graph=True)
+                    base_grads = [p.grad.detach().clone() for p in self.generator.parameters() if p.grad is not None]
+                    norm_base = torch.norm(torch.stack([torch.norm(g) for g in base_grads])).item() if base_grads else 0.0
+
+                    # 2. Feature loss gradient
+                    self.optimizer_g.zero_grad()
+                    feat_loss_t = self.feature_loss_weight * F.mse_loss(def_feat, real_feat)
+                    feat_loss_t.backward(retain_graph=True)
+                    feat_grads = [p.grad.detach().clone() for p in self.generator.parameters() if p.grad is not None]
+                    norm_feat = torch.norm(torch.stack([torch.norm(g) for g in feat_grads])).item() if feat_grads else 0.0
+
+                    ratio = norm_feat / max(norm_base, 1e-12)
+                    self.gradient_norm_diagnostics[epoch] = {
+                        'epoch': epoch,
+                        'base_grad_norm': float(norm_base),
+                        'feature_grad_norm': float(norm_feat),
+                        'feature_base_ratio': float(ratio)
+                    }
+                except Exception as _diag_e:
+                    self.gradient_norm_diagnostics[epoch] = {'epoch': epoch, 'error': str(_diag_e)}
 
             # Optimize Generator
             self.optimizer_g.zero_grad()
@@ -328,10 +386,11 @@ class M2AnonymizerRunner:
                     ac_bce_val = ac_total_loss.item()
                     feat_val = 0.0
 
-                ver_loss = self.verification_loss(fakes_1, inputs2)
-                log_likelihood_ver_loss = - torch.log(torch.clamp(1.0 - ver_loss, min=1e-7))
-                ver_loss_mean = ver_loss.mean()
-                privacy_term = log_likelihood_ver_loss.mean()
+                inputs1_snn_g = self.imagenet_normalize(fakes_1.expand(-1, 3, -1, -1))
+                inputs2_snn_g = self.imagenet_normalize(inputs2.expand(-1, 3, -1, -1))
+                raw_verifier_logits = self.verification_loss.verification_model(inputs1_snn_g, inputs2_snn_g).squeeze()
+                privacy_term = F.softplus(raw_verifier_logits).mean()
+                ver_loss_mean = torch.sigmoid(raw_verifier_logits.to(dtype=torch.float64)).mean()
 
                 opt_total = self.ac_loss_weight * ac_total_loss.item() + self.ver_loss_weight * privacy_term.item()
                 sel_total = self.ac_loss_weight * ac_bce_val + self.ver_loss_weight * privacy_term.item()
@@ -422,9 +481,32 @@ class M2AnonymizerRunner:
             train_m = self.train_epoch(epoch)
             val_m = self.validate_epoch(epoch)
             elapsed = time.time() - t0
+            peak_vram = torch.cuda.max_memory_allocated(self.device) / (1024 * 1024) if (torch.cuda.is_available() and getattr(self.device, 'type', '') == 'cuda') else 0.0
+            order_sha = self.train_sampler.get_epoch_order_hash(epoch) if self.train_sampler is not None else None
 
-            combined = {'epoch': epoch, 'elapsed_sec': elapsed, **train_m, **val_m}
+            # Check for NaN / Inf
+            all_vals = list(train_m.values()) + list(val_m.values())
+            has_nan_inf = any(not np.isfinite(v) for v in all_vals if isinstance(v, (int, float)))
+
+            combined = {
+                'epoch': epoch,
+                'learning_rate': self.optimizer_g.param_groups[0]['lr'],
+                'elapsed_sec': round(elapsed, 2),
+                'peak_vram_mb': round(peak_vram, 2),
+                'order_sha256': order_sha,
+                'is_nan_inf': has_nan_inf,
+                **train_m,
+                **val_m
+            }
+            if self.arm == 'C4' and epoch in self.gradient_norm_diagnostics:
+                combined['feature_grad_ratio'] = self.gradient_norm_diagnostics[epoch].get('feature_base_ratio')
+
             self.epoch_metrics.append(combined)
+
+            # Append to train_log.jsonl
+            log_path = os.path.join(self.output_dir, 'train_log.jsonl')
+            with open(log_path, 'a') as f_log:
+                f_log.write(json.dumps(combined) + '\n')
 
             # Method-neutral checkpoint selection: minimum val_selection_total (ac_bce + privacy_term)
             val_sel = val_m['val_selection_total']
@@ -440,18 +522,28 @@ class M2AnonymizerRunner:
             df = pd.DataFrame(self.epoch_metrics)
             df.to_csv(os.path.join(self.output_dir, 'epoch_metrics.csv'), index=False)
 
-        # Write manifest
+        # Write manifest (§5 explicit checkpoint manifest handoff)
         best_sha = file_sha256(self.best_checkpoint_path) if os.path.exists(self.best_checkpoint_path) else None
+        config_sha = file_sha256(self.config_path) if (self.config_path and os.path.exists(self.config_path)) else None
+        try:
+            import subprocess
+            git_head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT).decode('utf-8').strip()
+        except Exception:
+            git_head = None
+
         manifest = {
             'arm': self.arm,
-            'seed': self.seed,
+            'selected_generator_checkpoint': os.path.abspath(self.best_checkpoint_path),
+            'selected_generator_sha256': best_sha,
             'best_epoch': self.best_epoch,
             'best_selection_total': self.best_selection_total,
-            'best_checkpoint_path': self.best_checkpoint_path,
-            'best_checkpoint_sha256': best_sha,
-            'total_epochs': max_epochs,
             'initial_generator_sha256': self.initial_generator_sha,
+            'config_sha256': config_sha,
+            'git_head': git_head,
+            'total_epochs': max_epochs,
+            'seed': self.seed,
             'acloss_sha256': self.acloss_sha,
+            'gradient_norm_diagnostics': self.gradient_norm_diagnostics,
         }
         with open(os.path.join(self.output_dir, 'checkpoint_manifest.json'), 'w') as f:
             json.dump(manifest, f, indent=2)
@@ -472,7 +564,7 @@ def run_preflight_smoke(arm='B_dev', device=None):
         'image_size': 256,
         'learning_rate': 1e-4,
         'max_epochs': 1,
-        'image_path': './',
+        'image_path': '/home/minhtt/datasets/nih/images/',
     }
     tmp_out = os.path.join(ROOT, 'research_runs', '_preflight_tmp', arm)
     runner = M2AnonymizerRunner(arm=arm, config=cfg, output_dir=tmp_out, device=device)
