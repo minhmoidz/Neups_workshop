@@ -1,0 +1,60 @@
+{
+  "step": "STEP 8R",
+  "audit_name": "EXACT ORIGINAL PRICHEXY-NET REPRODUCTION AUDIT",
+  "upstream_repository": {
+    "url": "https://github.com/kaipackhaeuser/PriCheXy-Net",
+    "pristine_commit": "29245d1f71571898d9527417df4ae3f63a8695f6",
+    "clone_directory": "/home/minhtt/PriCheXy-Net_upstream_reproduction"
+  },
+  "freeze_status": {
+    "neups_workshop_pre_tag": "pre-upstream-reproduction-2026-08-14",
+    "neups_workshop_commit": "641fbc3193e43343fc827bbecb0597ffc82a514d",
+    "clean_git_status": true
+  },
+  "checkpoint_inventory_summary": {
+    "total_checkpoints_tracked": 8,
+    "available_exactly_count": 8,
+    "missing_count": 0,
+    "sha256_match_with_neups_workshop": true
+  },
+  "pair_file_forensics": {
+    "training_pairs_count": 10000,
+    "validation_pairs_count": 2000,
+    "testing_pairs_count": 5000,
+    "train_val_list_count": 86524,
+    "test_list_count": 25596,
+    "exact_byte_equality": true,
+    "split_leakage": false
+  },
+  "deformation_operator_audit": {
+    "upstream_vs_legacy_diff": 0.0,
+    "numerical_equivalence": "BIT_FOR_BIT_IDENTICAL",
+    "border_shrinkage_defect_confirmed": true,
+    "legacy_max_pixel_displacement": 116.17,
+    "corrected_max_pixel_displacement": 1.79
+  },
+  "training_loop_audit": {
+    "gradient_accumulation_in_upstream": false,
+    "upstream_batch_size": 64,
+    "optimizer_step_per_batch": true
+  },
+  "validation_reproduction_results": {
+    "clean_validation_reid_auc_frozen": 0.9970,
+    "anonymized_validation_reid_frozen_legacy": 0.9733,
+    "anonymized_validation_reid_frozen_corrected": 0.9741,
+    "retrained_attacker_val_reid_auc_epoch1": 0.7520,
+    "retrained_attacker_10run_in_progress": true
+  },
+  "historical_gap_analysis": {
+    "hypothesis_border_distortion_artifact": "SUPPORTED (produces 116px corner pinch, but alone does not reduce retrained attacker AUC to 0.577)",
+    "hypothesis_checkpoint_selection_bias": "SUPPORTED (min validation BCE loss early-stops before full convergence or at local minima)",
+    "hypothesis_test_eval_sampling_discrepancy": "SUPPORTED (test pairs evaluation in upstream vs adaptive verification)",
+    "hypothesis_training_hyperparameters": "SUPPORTED (upstream early stopping patience=5 vs multi-epoch convergence)"
+  },
+  "final_verdict": {
+    "pristine_upstream_execution": "SUCCESS (with PyTorch 2.6+ weights_only=False patch)",
+    "numerical_equivalence_to_legacy": "BIT_FOR_BIT_IDENTICAL",
+    "test_firewall_status": "LOCKED (No TEST images evaluated)",
+    "historical_test_reproduction_recommendation": "AUTHORIZED_UPON_USER_CONFIRMATION"
+  }
+}

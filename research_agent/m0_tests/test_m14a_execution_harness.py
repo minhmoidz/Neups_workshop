@@ -535,19 +535,19 @@ def test_t104_run_validity_dynamically_computed():
         b_class = {'macro_auc': 0.75, 'n_classes_valid': 14, 'n_images': 10816, 'generator_checkpoint_sha256': gen_sha, 'classifier_checkpoint_sha256': FROZEN_CLASSIFIER_SHA}
         c4_class = {'macro_auc': 0.76, 'n_classes_valid': 14, 'n_images': 10816, 'generator_checkpoint_sha256': gen_sha, 'classifier_checkpoint_sha256': FROZEN_CLASSIFIER_SHA}
 
-        valid, reason = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv, c4_priv, b_class, c4_class, 250, False)
+        valid, reason = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv, c4_priv, b_class, c4_class, 250, unit_test_mode=True)
         assert valid is True, "Expected valid, got: %s" % reason
 
         # Test invalid on NaN
         b_priv_bad = dict(b_priv)
         b_priv_bad['roc_auc'] = float('nan')
-        valid_bad, _ = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv_bad, c4_priv, b_class, c4_class, 250, False)
+        valid_bad, _ = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv_bad, c4_priv, b_class, c4_class, 250, unit_test_mode=True)
         assert valid_bad is False
 
         # Test invalid on class count != 14
         b_class_bad = dict(b_class)
         b_class_bad['n_classes_valid'] = 13
-        valid_bad_class, _ = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv, c4_priv, b_class_bad, c4_class, 250, False)
+        valid_bad_class, _ = check_run_validity(b_man, c4_man, b_att, c4_att, b_priv, c4_priv, b_class_bad, c4_class, 250, unit_test_mode=True)
         assert valid_bad_class is False
     return True
 

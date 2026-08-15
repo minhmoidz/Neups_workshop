@@ -53,6 +53,7 @@ from m2_dev.evaluator_common import (
     verify_repaired_acloss,
     verify_frozen_scientific_configs,
     verify_scientific_dependencies,
+    verify_classification_val_contract,
 )
 from m2_dev.anonymizer_runner import M2AnonymizerRunner
 from m2_dev.dev_attacker import DevAttacker, SiameseNetwork
@@ -337,6 +338,8 @@ def evaluate_privacy_arm(arm, seed, attacker_seed, device, out_base_dir=None, un
         'attacker_checkpoint_sha256': eval_res['attacker_checkpoint_sha256'],
         'prediction_file': pred_npz_path,
         'prediction_file_sha256': pred_sha,
+        'predictions_file': pred_npz_path,
+        'predictions_file_sha256': pred_sha,
     }
 
 
@@ -441,6 +444,27 @@ def check_run_validity(b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manif
         if not unit_test_mode and p_res.get('n_pairs') != 2000:
             return False, "%s privacy pairs count != 2000" % name
 
+        # Raw outputs & replay validation
+        npz_p = p_res.get('predictions_file') or p_res.get('prediction_file')
+        if not unit_test_mode or npz_p is not None:
+            if not npz_p or not os.path.exists(npz_p):
+                return False, "%s privacy predictions file missing: %s" % (name, npz_p)
+            actual_npz_sha = file_sha256(npz_p)
+            expected_npz_sha = p_res.get('predictions_file_sha256') or p_res.get('prediction_file_sha256')
+            if actual_npz_sha != expected_npz_sha:
+                return False, "%s privacy predictions SHA mismatch: %s != %s" % (name, actual_npz_sha, expected_npz_sha)
+
+            try:
+                npz_data = np.load(npz_p)
+                y_true_re = npz_data['y_true']
+                y_score_re = npz_data['y_score']
+                from sklearn.metrics import roc_auc_score
+                replayed_priv_auc = float(roc_auc_score(y_true_re, y_score_re))
+                if abs(replayed_priv_auc - p_res['roc_auc']) > 1e-5:
+                    return False, "%s privacy replayed AUC mismatch: %e != %e" % (name, replayed_priv_auc, p_res['roc_auc'])
+            except Exception as _priv_e:
+                return False, "%s privacy replay failed: %s" % (name, _priv_e)
+
     # 4. Classification Evaluation invariants
     for name, c_res, gen_m in [('B_dev', b_class, b_dev_manifest), ('C4', c4_class, c4_manifest)]:
         if not np.isfinite(c_res.get('macro_auc', float('nan'))):
@@ -453,6 +477,44 @@ def check_run_validity(b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manif
             return False, "%s classification classifier SHA drift" % name
         if not unit_test_mode and c_res.get('n_images') != 10816:
             return False, "%s classification images count != 10816" % name
+
+        # Raw outputs & replay validation
+        pred_csv = c_res.get('predictions_file')
+        if not unit_test_mode or pred_csv is not None:
+            if not pred_csv or not os.path.exists(pred_csv):
+                return False, "%s classification predictions file missing: %s" % (name, pred_csv)
+            actual_pred_sha = file_sha256(pred_csv)
+            if actual_pred_sha != c_res.get('predictions_file_sha256'):
+                return False, "%s classification predictions SHA mismatch: %s != %s" % (name, actual_pred_sha, c_res.get('predictions_file_sha256'))
+
+            auc_csv = c_res.get('aucs_file')
+            if not auc_csv or not os.path.exists(auc_csv):
+                return False, "%s classification AUCs file missing: %s" % (name, auc_csv)
+            actual_auc_sha = file_sha256(auc_csv)
+            if actual_auc_sha != c_res.get('aucs_file_sha256'):
+                return False, "%s classification AUCs CSV SHA mismatch: %s != %s" % (name, actual_auc_sha, c_res.get('aucs_file_sha256'))
+
+            try:
+                pred_df_re = pd.read_csv(pred_csv)
+                from sklearn.metrics import roc_auc_score
+                replayed_aucs = []
+                PRED_LABEL = [
+                    'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
+                    'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
+                    'Pleural_Thickening', 'Hernia'
+                ]
+                for p in PRED_LABEL:
+                    t_col = 'true_%s' % p
+                    p_col = 'pred_%s' % p
+                    if t_col in pred_df_re.columns and p_col in pred_df_re.columns:
+                        auc_val = float(roc_auc_score(pred_df_re[t_col], pred_df_re[p_col]))
+                        replayed_aucs.append(auc_val)
+                if len(replayed_aucs) == 14:
+                    replayed_macro_auc = float(np.mean(replayed_aucs))
+                    if abs(replayed_macro_auc - c_res['macro_auc']) > 1e-5:
+                        return False, "%s classification replayed macro AUC mismatch: %e != %e" % (name, replayed_macro_auc, c_res['macro_auc'])
+            except Exception as _clf_e:
+                return False, "%s classification replay failed: %s" % (name, _clf_e)
 
     return True, "VALID"
 
@@ -475,7 +537,7 @@ def check_scientific_output_freshness(base_dir):
             if fname in SCIENTIFIC_STALE_ARTIFACTS:
                 raise RuntimeError(
                     "Scientific output directory is not fresh: found stale artifact '%s' in %s. "
-                    "Remove old results before a new scientific run." % (fname, root)
+                    "Archive or move the previous run directory, then launch into a fresh scientific output directory. Do not overwrite." % (fname, root)
                 )
     return True
 
@@ -505,56 +567,23 @@ def check_git_source_guard(required_ancestor='851c3f1a6912255c97345a7f53ed138e7a
 
 
 def compute_classification_val_fingerprints():
-    """§5 (M1.4c): Compute deterministic SHA256 fingerprints of classification VAL cohort."""
-    csv_path = os.path.join(ROOT, 'chexnet', 'nih_labels.csv')
-    if not os.path.exists(csv_path):
-        return None
-    df = pd.read_csv(csv_path)
-    val_df = df[df['fold'] == 'val'].copy()
-    val_df = val_df.sort_values('Image Index').reset_index(drop=True)
-
-    # Image Index fingerprint
-    h_img = hashlib.sha256()
-    for idx in val_df['Image Index']:
-        h_img.update((str(idx) + '\n').encode('utf-8'))
-
-    # Patient ID fingerprint
-    h_pat = hashlib.sha256()
-    patient_ids = []
-    for idx in val_df['Image Index']:
-        pid = str(idx).split('_')[0]
-        patient_ids.append(pid)
-        h_pat.update((pid + '\n').encode('utf-8'))
-
-    # Label matrix fingerprint
-    PRED_LABEL = [
-        'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
-        'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
-        'Pleural_Thickening', 'Hernia'
-    ]
-    h_lbl = hashlib.sha256()
-    for _, row in val_df.iterrows():
-        label_vec = [str(int(row.get(p, 0))) for p in PRED_LABEL]
-        h_lbl.update((','.join(label_vec) + '\n').encode('utf-8'))
-
+    """§5 (M1.4c): Return deterministic SHA256 fingerprints of classification VAL cohort from verified contract."""
+    contract = verify_classification_val_contract()
     return {
-        'classification_val_n_images': len(val_df),
-        'classification_val_n_patients': len(set(patient_ids)),
-        'classification_val_image_index_sha256': h_img.hexdigest(),
-        'classification_val_patient_sequence_sha256': h_pat.hexdigest(),
-        'classification_val_label_matrix_sha256': h_lbl.hexdigest(),
+        'classification_val_n_images': contract['classification_val_n_images'],
+        'classification_val_n_patients': contract['classification_val_n_patients'],
+        'classification_val_image_index_sha256': contract['classification_val_image_index_sha256'],
+        'classification_val_patient_sequence_sha256': contract['classification_val_patient_sequence_sha256'],
+        'classification_val_label_matrix_sha256': contract['classification_val_label_matrix_sha256'],
     }
 
 
 def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
     """Core orchestration pipeline reusable across full runs and integration smoke tests."""
-    # F1 (M1.4c): Canonical M2-S1 requires --scientific-m2-s1
-    is_canonical_output = (out_base_dir is None or
-                           os.path.abspath(out_base_dir) == os.path.abspath(os.path.join(ROOT, 'research_runs', 'M2_S1')))
-    if not unit_test_mode and is_canonical_output and not getattr(args, 'scientific_m2_s1', False):
+    # B8 / §12: Real non-unit-test execution globally requires --scientific-m2-s1
+    if not unit_test_mode and not getattr(args, 'scientific_m2_s1', False):
         raise RuntimeError(
-            "Canonical M2-S1 execution requires --scientific-m2-s1. "
-            "Without this flag, the canonical output namespace research_runs/M2_S1/ is protected."
+            "Scientific M2-S1 execution requires --scientific-m2-s1 flag for all non-unit-test runs."
         )
 
     # Preflight dependency & hash verification is UNCONDITIONAL in scientific mode / standard runs
@@ -632,11 +661,11 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
         if run_valid:
             privacy_gate_pass = (delta_priv <= 0.03)
             class_gate_pass = (delta_class >= 0.0)
-            # F1 (M1.4c): Only scientific mode may issue PROMOTE / DO NOT PROMOTE verdicts
-            if unit_test_mode:
-                s1_verdict = "DEVELOPMENT_ONLY — not a scientific verdict"
-            else:
+            # B8 / §13: Only genuine scientific execution can issue PROMOTE / DO NOT PROMOTE verdicts
+            if not unit_test_mode and getattr(args, 'scientific_m2_s1', False):
                 s1_verdict = "C4 S1: PROMOTE TO S2" if (privacy_gate_pass and class_gate_pass) else "C4 S1: DO NOT PROMOTE"
+            else:
+                s1_verdict = "DEVELOPMENT_ONLY — not a scientific verdict"
             privacy_status = 'PASS' if privacy_gate_pass else 'FAIL'
             class_status = 'PASS' if class_gate_pass else 'FAIL'
         else:

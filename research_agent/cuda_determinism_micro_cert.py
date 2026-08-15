@@ -55,6 +55,83 @@ def characterize_cuda_environment():
     return info
 
 
+def test_strict_deterministic_algorithm_support(device=None):
+    """Test if strict torch.use_deterministic_algorithms(True) works DURING the actual forward/backward ops."""
+    device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
+    prev = torch.are_deterministic_algorithms_enabled()
+    supported = True
+    error_msg = None
+    try:
+        torch.use_deterministic_algorithms(True)
+        img_size = 64
+        bs = 2
+        torch.manual_seed(999)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(999)
+        g = UNet(1, 2, 32).to(device)
+        from torchvision.models import densenet121
+        clf = densenet121(num_classes=14).to(device)
+        clf.classifier = nn.Sequential(clf.classifier, nn.Sigmoid())
+        ver = SiameseNetwork().to(device)
+
+        opt_g = optim.Adam(g.parameters(), lr=1e-4)
+        opt_clf = optim.SGD(filter(lambda p: p.requires_grad, clf.parameters()), lr=1e-4, momentum=0.9, weight_decay=1e-4)
+        opt_ver = optim.Adam(ver.parameters(), lr=1e-4)
+
+        crit_ac = nn.BCELoss().to(device)
+        crit_ver = nn.BCEWithLogitsLoss().to(device)
+
+        x1 = torch.rand(bs, 1, img_size, img_size, device=device)
+        x2 = torch.rand(bs, 1, img_size, img_size, device=device)
+        y_clf = torch.randint(0, 2, (bs, 14), dtype=torch.float32, device=device)
+        y_id = torch.tensor([1.0, 0.0], device=device)
+
+        grid_id, gauss = make_flow_field_components(device, image_size=img_size)
+        resize_224 = transforms.Resize((224, 224))
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+        # Step G
+        g.train()
+        fakes_1 = anonymize(x1, g, grid_id, gauss, mu=MU)
+        ac_loss_mod = ACLoss(ac_model=clf, feature_loss_weight=0.0)
+        ac_bce = ac_loss_mod(fakes_1, y_clf)
+        in1_snn_g = normalize(fakes_1.expand(-1, 3, -1, -1))
+        in2_snn_g = normalize(x2.expand(-1, 3, -1, -1))
+        ver_logits_g = ver(in1_snn_g, in2_snn_g).squeeze()
+        privacy_term = F.softplus(ver_logits_g).mean()
+        tot = ac_bce + privacy_term
+        opt_g.zero_grad()
+        tot.backward()
+        opt_g.step()
+
+        # Step Verifier
+        ver.train()
+        in1_snn_v = normalize(fakes_1.detach().expand(-1, 3, -1, -1))
+        in2_snn_v = normalize(x2.expand(-1, 3, -1, -1))
+        ver_logits_v = ver(in1_snn_v, in2_snn_v).squeeze()
+        loss_ver = crit_ver(ver_logits_v, y_id.type_as(ver_logits_v))
+        opt_ver.zero_grad()
+        loss_ver.backward()
+        opt_ver.step()
+
+        # Step AC
+        clf.train()
+        in_ac_c = normalize(resize_224(fakes_1.detach().expand(-1, 3, -1, -1)))
+        ac_probs_c = clf(in_ac_c)
+        loss_ac = crit_ac(ac_probs_c, y_clf)
+        opt_clf.zero_grad()
+        loss_ac.backward()
+        opt_clf.step()
+    except Exception as e:
+        supported = False
+        error_msg = str(e)
+    finally:
+        torch.use_deterministic_algorithms(prev)
+
+    return supported, error_msg
+
+
 def run_single_cuda_step(seed=42):
     """Execute one deterministic step on CUDA and return metrics & gradients."""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -66,16 +143,6 @@ def run_single_cuda_step(seed=42):
     np.random.seed(seed)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
-
-    # Test if strict deterministic algorithms are supported
-    deterministic_algo_supported = True
-    try:
-        torch.use_deterministic_algorithms(True)
-    except Exception as e:
-        deterministic_algo_supported = False
-        unsupported_op = str(e)
-    finally:
-        torch.use_deterministic_algorithms(False)
 
     img_size = 64
     bs = 2
@@ -165,12 +232,12 @@ def run_single_cuda_step(seed=42):
         'ver_params_post': ver_params_post,
         'clf_grads': clf_grads,
         'clf_params_post': clf_params_post,
-        'deterministic_algo_supported': deterministic_algo_supported,
     }
 
 
 def measure_cuda_reproducibility_envelope(n_runs=3):
     """Run n_runs identical steps and compute max absolute differences."""
+    supported, error_detail = test_strict_deterministic_algorithm_support()
     results = [run_single_cuda_step(seed=42) for _ in range(n_runs)]
 
     # Pairwise comparisons
@@ -207,7 +274,8 @@ def measure_cuda_reproducibility_envelope(n_runs=3):
         'max_ver_param_diff': max_ver_param_diff,
         'max_clf_grad_diff': max_clf_grad_diff,
         'max_clf_param_diff': max_clf_param_diff,
-        'deterministic_algo_supported': base['deterministic_algo_supported'],
+        'deterministic_algo_supported': supported,
+        'unsupported_operation_error': error_detail,
     }
     return env
 

@@ -1,0 +1,54 @@
+{
+  "generator_lowest_total_loss_mu_0.01.pth": {
+    "status": "AVAILABLE_EXACTLY",
+    "path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/networks/generator_lowest_total_loss_mu_0.01.pth",
+    "size_bytes": 31112853,
+    "sha256": "4d82dcdd1c1b5856d6361fd08b7a6838b044ffc7db89e8bf953a6279cb3bf153",
+    "notes": "Official upstream PriCheXy-Net generator checkpoint for mu=0.01"
+  },
+  "pretrained_classifier.pth": {
+    "status": "AVAILABLE_EXACTLY",
+    "path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/networks/pretrained_classifier.pth",
+    "size_bytes": 28504657,
+    "sha256": "8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663",
+    "notes": "Official upstream CheXNet DenseNet-121 classifier (contains pickled model instance)"
+  },
+  "pretrained_verification_model.pth": {
+    "status": "AVAILABLE_EXACTLY",
+    "path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/networks/pretrained_verification_model.pth",
+    "size_bytes": 95407079,
+    "sha256": "331efaed0c0433c69941ddc003a14a936c688d94fd4ecfbefd34e53bfa7c051a",
+    "notes": "Official upstream Siamese ResNet-50 verification attacker trained on raw images"
+  },
+  "pretrained_generator_prichexy_net.pth": {
+    "status": "AVAILABLE_EXACTLY",
+    "path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/networks/pretrained_generator_prichexy_net.pth",
+    "size_bytes": 31112853,
+    "sha256": "101226890c061ba5917db7a56a300d1a53988f6eda8767856f10863e2a20aacb",
+    "notes": "Official upstream pre-trained generator checkpoint"
+  },
+  "generator_lowest_total_loss_mu_0.005.pth": {
+    "status": "AVAILABLE_EXACTLY",
+    "path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/networks/generator_lowest_total_loss_mu_0.005.pth",
+    "size_bytes": 31112853,
+    "sha256": "4d368637426e0c33606090d37d3338e472ff0f6a64a5791b9f22e25c3aceae3b"
+  },
+  "generator_lowest_total_loss_mu_0.001.pth": {
+    "status": "AVAILABLE_EXACTLY",
+    "path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/networks/generator_lowest_total_loss_mu_0.001.pth",
+    "size_bytes": 31112853,
+    "sha256": "2452f102d6ec75853c9f71a552175ab1672c6c3e72c6a6e8bb6b07b73ca63ead"
+  },
+  "pretrained_generator_privacy_net.pth": {
+    "status": "AVAILABLE_EXACTLY",
+    "path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/networks/pretrained_generator_privacy_net.pth",
+    "size_bytes": 2778053,
+    "sha256": "b982abc6cca77c5fc059719b65ae583844e665f4869220ff3a3227de33307e69"
+  },
+  "generator_lowest_total_loss_privacy_net.pth": {
+    "status": "AVAILABLE_EXACTLY",
+    "path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/networks/generator_lowest_total_loss_privacy_net.pth",
+    "size_bytes": 2778053,
+    "sha256": "50766e0607711f101fa25f0d1fe1858933683727c84a49919614ff1f4ca3ee4d"
+  }
+}

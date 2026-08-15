@@ -424,8 +424,8 @@ def test_t130_device_flag_does_not_bypass_preflight():
 
     class MockArgsDevice:
         def __init__(self):
-            self.scientific_m2_s1 = False
-            self.arm = 'eval_only'
+            self.scientific_m2_s1 = True
+            self.arm = 'all'
             self.max_epochs = 1
             self.attacker_epochs = 1
             self.attacker_patience = 1

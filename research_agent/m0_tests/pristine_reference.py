@@ -10,10 +10,11 @@ importing any production code under test:
 All functions are self-contained re-implementations from the pristine upstream
 commit semantics, suitable for independent parity verification.
 
-Pristine upstream reference commit: see research_agent/upstream_pristine_commit.txt
+Pristine upstream reference commit: 29245d1f71571898d9527417df4ae3f63a8695f6
 """
 import copy
 import math
+import numbers
 
 import torch
 import torch.nn as nn
@@ -35,21 +36,28 @@ def pristine_identity_grid(image_size, device):
 
 def pristine_gaussian_kernel(channels=2, kernel_size=9, sigma=2.0, device='cpu'):
     """Reimplement Gaussian kernel construction exactly as upstream GaussianSmoothing."""
-    x_coord = torch.arange(kernel_size).float()
-    x_grid = x_coord.repeat(kernel_size).view(kernel_size, kernel_size)
-    y_grid = x_grid.t()
-    xy_grid = torch.stack([x_grid, y_grid], dim=-1)
-    mean = (kernel_size - 1) / 2.0
-    variance = sigma ** 2.0
-    gaussian_kernel = (1.0 / (2.0 * math.pi * variance)) * torch.exp(
-        -torch.sum((xy_grid - mean) ** 2.0, dim=-1) / (2 * variance)
+    dim = 2
+    if isinstance(kernel_size, numbers.Number):
+        kernel_size = [kernel_size] * dim
+    if isinstance(sigma, numbers.Number):
+        sigma = [sigma] * dim
+
+    kernel = 1
+    meshgrids = torch.meshgrid(
+        [torch.arange(size, dtype=torch.float32) for size in kernel_size], 
+        indexing='ij'
     )
-    gaussian_kernel = gaussian_kernel / torch.sum(gaussian_kernel)
-    gaussian_kernel = gaussian_kernel.view(1, 1, kernel_size, kernel_size)
-    gaussian_kernel = gaussian_kernel.repeat(channels, 1, 1, 1)
-    conv = nn.Conv2d(channels, channels, kernel_size, groups=channels,
-                     bias=False, padding=kernel_size // 2)
-    conv.weight.data = gaussian_kernel
+    for size, std, mgrid in zip(kernel_size, sigma, meshgrids):
+        mean = (size - 1) / 2
+        kernel *= 1 / (std * math.sqrt(2 * math.pi)) * torch.exp(-((mgrid - mean) / std) ** 2 / 2)
+
+    kernel = kernel / torch.sum(kernel)
+    kernel = kernel.view(1, 1, *kernel.size())
+    kernel = kernel.repeat(channels, *[1] * (kernel.dim() - 1))
+
+    conv = nn.Conv2d(channels, channels, kernel_size[0], groups=channels,
+                     bias=False, padding=(kernel_size[0] - 1) // 2)
+    conv.weight.data = kernel
     conv.weight.requires_grad = False
     return conv.to(device)
 
@@ -147,11 +155,11 @@ def pristine_one_step(generator, ac_model, verifier, inputs1, inputs2,
     ac_logits = ac_loss_model.classifier(ac_features)
     ac_bce = nn.BCEWithLogitsLoss()(ac_logits, labels)
 
-    # Step 3: Verifier Privacy Loss (anon/real)
+    # Step 3: Verifier Privacy Loss (anon/real) using independent probability-space formulation
     in1_snn_g = normalize(fakes_1.expand(-1, 3, -1, -1))
     in2_snn_g = normalize(inputs2.expand(-1, 3, -1, -1))
     ver_logits_g = verifier(in1_snn_g, in2_snn_g).squeeze()
-    privacy_term = F.softplus(ver_logits_g).mean()
+    privacy_term = pristine_privacy_loss_float64(ver_logits_g)
 
     # Step 4: Generator total loss and step
     total_loss = 1.0 * ac_bce + 1.0 * privacy_term

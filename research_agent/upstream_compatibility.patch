@@ -1,0 +1,18 @@
+diff --git a/agents/Agent.py b/agents/Agent.py
+index 45a8ec1..1298d02 100644
+--- a/agents/Agent.py
++++ b/agents/Agent.py
+@@ -96,7 +96,7 @@ class Agent:
+-        self.ac_model = torch.load('./networks/pretrained_classifier.pth')['model']
++        self.ac_model = torch.load('./networks/pretrained_classifier.pth', weights_only=False)['model']
+         self.ac_loss = ACLoss(ac_model=self.ac_model).cuda()
+ 
+         # Define the verification model and the verification loss
+diff --git a/eval_classifier.py b/eval_classifier.py
+index 32ba19e..54de93b 100644
+--- a/eval_classifier.py
++++ b/eval_classifier.py
+@@ -35,7 +35,7 @@ def main():
+-    ac_model = torch.load('./networks/pretrained_classifier.pth')['model']
++    ac_model = torch.load('./networks/pretrained_classifier.pth', weights_only=False)['model']
+     ac_model.eval()

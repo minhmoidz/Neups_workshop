@@ -1,0 +1,93 @@
+{
+  "clean_val_reid_auc_frozen_snn": 0.996966,
+  "anon_val_reid_frozen_snn_legacy": 0.973275,
+  "anon_val_reid_frozen_snn_corrected": 0.9740735,
+  "upstream_10_runs_retrained_attacker_legacy": {
+    "runs": [
+      {
+        "seed": 42,
+        "best_epoch": 7,
+        "best_val_loss": 0.4625887706279755,
+        "final_val_auc": 0.8565419999999999
+      },
+      {
+        "seed": 101,
+        "best_epoch": 7,
+        "best_val_loss": 0.5349307579994201,
+        "final_val_auc": 0.791057
+      },
+      {
+        "seed": 202,
+        "best_epoch": 5,
+        "best_val_loss": 0.44527837800979614,
+        "final_val_auc": 0.8673630000000001
+      },
+      {
+        "seed": 303,
+        "best_epoch": 5,
+        "best_val_loss": 0.5243590850830078,
+        "final_val_auc": 0.8109609999999999
+      },
+      {
+        "seed": 404,
+        "best_epoch": 7,
+        "best_val_loss": 0.5286602187156677,
+        "final_val_auc": 0.8174699999999999
+      },
+      {
+        "seed": 505,
+        "best_epoch": 6,
+        "best_val_loss": 0.49472838377952577,
+        "final_val_auc": 0.8322
+      },
+      {
+        "seed": 606,
+        "best_epoch": 7,
+        "best_val_loss": 0.4838625640869141,
+        "final_val_auc": 0.841256
+      },
+      {
+        "seed": 707,
+        "best_epoch": 4,
+        "best_val_loss": 0.5389525680541992,
+        "final_val_auc": 0.786074
+      },
+      {
+        "seed": 808,
+        "best_epoch": 6,
+        "best_val_loss": 0.5387278394699097,
+        "final_val_auc": 0.7867869999999999
+      },
+      {
+        "seed": 909,
+        "best_epoch": 4,
+        "best_val_loss": 0.5330365810394287,
+        "final_val_auc": 0.794988
+      }
+    ],
+    "individual_aucs": [
+      0.8565419999999999,
+      0.791057,
+      0.8673630000000001,
+      0.8109609999999999,
+      0.8174699999999999,
+      0.8322,
+      0.841256,
+      0.786074,
+      0.7867869999999999,
+      0.794988
+    ],
+    "mean_auc": 0.8184698000000001,
+    "std_auc": 0.028215762629424015,
+    "mean_percent": 81.8,
+    "std_percent": 2.8
+  },
+  "comparison_with_paper_claims": {
+    "paper_reported_raw_reid_auc": 0.818,
+    "paper_reported_anonymized_retrained_auc": 0.577,
+    "reproduced_clean_validation_reid_auc": 0.996966,
+    "reproduced_anonymized_retrained_val_mean_auc": 0.8184698000000001,
+    "reproduced_anonymized_retrained_val_std_auc": 0.028215762629424015
+  },
+  "completion_timestamp": "2026-08-14 09:46:58"
+}

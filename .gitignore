@@ -2,3 +2,37 @@
 __pycache__
 .vscode
 .DS_Store
+.venv/
+*.pyc
+
+# Data and logs
+data/
+logs/
+*.log
+*.pid
+
+# Heavy artifacts, checkpoints and reproduction runs
+archive/
+research_runs/
+reproduction/
+chexnet/results/
+networks/corrected_baseline/
+research_agent/05A_artifacts/
+research_agent/05B_artifacts/
+research_agent/compdiff_artifacts/
+research_agent/compdiff_model/
+research_agent/ibr_s1_condition_cache/
+research_agent/ibr_s1_condition_capacity/
+research_agent/ibr_s1_condition_p1_cache/
+research_agent/ibr_s1_condition_p1_capacity/
+research_agent/ibr_s1_condition_p2_cache/
+research_agent/ibr_s1_condition_p2_capacity/
+research_agent/ibr_s1_oneseed_artifacts/
+
+# Binary models & arrays
+*.pth
+*.pt
+*.safetensors
+*.bin
+*.npy
+*.npz

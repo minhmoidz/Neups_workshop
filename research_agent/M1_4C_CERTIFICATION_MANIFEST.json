@@ -3,7 +3,8 @@
   "version": "1.4.3",
   "branch": "audit/m2-final-certification",
   "certified_lineage_commit": "851c3f1a6912255c97345a7f53ed138e7ae7981d",
-  "timestamp": "2026-08-15T23:48:00+07:00",
+  "pristine_base_commit": "29245d1f71571898d9527417df4ae3f63a8695f6",
+  "timestamp": "2026-08-16T01:10:00+07:00",
   "frozen_configs": {
     "b_dev_config_path": "config_files/config_dev_restored_baseline.json",
     "b_dev_config_sha256": "14d3943f798d5855b4a49d55ecc6af858647f514f30c1cc7c803c7edebab30b6",
@@ -36,25 +37,31 @@
     "repaired_acloss_path": "research_agent/m0_port/ACLoss.py",
     "repaired_acloss_sha256": "3ed8483718c3ccffb59f76e9dece47e92295a553895e3fd43b1b18cd486b263c",
     "pristine_reference_path": "research_agent/m0_tests/pristine_reference.py",
-    "pristine_reference_sha256": "4b68e983226db9ebc0e86b033604fdf1dfa52f4422e6cf455bb3d6e5a01bc89a"
+    "pristine_reference_sha256": "58c7049e95dad5891b6e5885002a5f821af7e3e8c61691241ca89a0c3559cd27"
   },
   "classification_val_structural_fingerprints": {
     "n_images": 10816,
-    "image_index_sequence_sha256": "e305e555e5b389cb43f11d1985da386e8557ee36bfad9d44f6f4d2a1c0d45388",
-    "patient_id_sequence_sha256": "5be7a2569e5d4cb05ea2cf1a0841261314ec046522c0e8654c609ecff1165a3d",
-    "label_matrix_14d_sha256": "722cb153c301bbfafe5ee0c96c4a6b280145c2be68e578c772cb25a4c5a61122"
+    "n_patients": 3854,
+    "image_index_sequence_sha256": "c2ff15d7deb0e126b096d4392f4d8844c80593d16ad939ea44189b44051b8ab6",
+    "patient_id_sequence_sha256": "c444238f8be4c6f2e6ee5523a1966ef974a182aabc895b3819ebbaeec4f621ba",
+    "label_matrix_14d_sha256": "bef28de2c55d5767c5d930bca8f86253c75a8be2cf00552ce0ceb579e75a28cc"
   },
   "patient_separation_contracts": {
-    "anonymizer_train_patients": 4999,
-    "anonymizer_val_patients": 997,
-    "classification_val_patients": 2043,
+    "anonymizer_train_patients": 9053,
+    "anonymizer_val_patients": 1742,
+    "classification_val_patients": 3854,
     "train_anonymizer_val_overlap": 0,
     "train_classification_val_overlap": 0,
     "status": "PASS"
   },
+  "runtime_telemetry_contracts": {
+    "train_order_hash_definition": "image1|image2|label\\n",
+    "deterministic_policy": "cudnn.deterministic=True, cudnn.benchmark=False",
+    "scientific_mode_gate": "requires --scientific-m2-s1 globally for all non-unit-test runs"
+  },
   "safety_firewalls": {
     "test_firewall": "STRICTLY CLOSED",
-    "scientific_mode_gate": "ENFORCED (--scientific-m2-s1 REQUIRED)",
+    "scientific_mode_gate": "ENFORCED (--scientific-m2-s1 REQUIRED GLOBALLY)",
     "output_freshness_guard": "ENFORCED (FAIL CLOSED ON STALE ARTIFACTS)",
     "git_tracked_tree_guard": "ENFORCED (CLEAN TREE & CERTIFIED ANCESTRY)"
   }

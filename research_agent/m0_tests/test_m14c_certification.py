@@ -153,7 +153,7 @@ def test_t140_classification_val_image_index_fingerprint():
     fp = run_m2_s1.compute_classification_val_fingerprints()
     assert fp is not None
     assert fp['classification_val_n_images'] == 10816, "Expected exactly 10,816 VAL images"
-    assert len(fp['classification_val_image_index_sha256']) == 64
+    assert fp['classification_val_image_index_sha256'] == 'c2ff15d7deb0e126b096d4392f4d8844c80593d16ad939ea44189b44051b8ab6'
     return True
 
 
@@ -161,8 +161,8 @@ def test_t141_classification_val_patient_id_fingerprint():
     """T141 (§5): Classification VAL patient ID sequence produces exact deterministic fingerprint."""
     fp = run_m2_s1.compute_classification_val_fingerprints()
     assert fp is not None
-    assert fp['classification_val_n_patients'] > 0
-    assert len(fp['classification_val_patient_sequence_sha256']) == 64
+    assert fp['classification_val_n_patients'] == 3854, "Expected exactly 3,854 VAL patients"
+    assert fp['classification_val_patient_sequence_sha256'] == 'c444238f8be4c6f2e6ee5523a1966ef974a182aabc895b3819ebbaeec4f621ba'
     return True
 
 
@@ -170,7 +170,7 @@ def test_t142_classification_val_label_matrix_fingerprint():
     """T142 (§5): Classification VAL 14-D label matrix produces exact deterministic fingerprint."""
     fp = run_m2_s1.compute_classification_val_fingerprints()
     assert fp is not None
-    assert len(fp['classification_val_label_matrix_sha256']) == 64
+    assert fp['classification_val_label_matrix_sha256'] == 'bef28de2c55d5767c5d930bca8f86253c75a8be2cf00552ce0ceb579e75a28cc'
     return True
 
 
@@ -600,55 +600,55 @@ def _run_pristine_parity_comparison():
 
 
 def test_t162_pristine_reference_anonymized_tensor_parity():
-    """T162 (F11): Pristine reference anonymized tensor matches runner output <= 1e-4."""
+    """T162 (F11): Pristine reference anonymized tensor matches runner output <= 1e-6."""
     ref_out, train_m, run_fakes, _, _, _ = _run_pristine_parity_comparison()
     diff = (ref_out['fakes_1'] - run_fakes).abs().max().item()
-    assert diff <= 1e-4, "Anonymized tensor diff %e > 1e-4" % diff
+    assert diff <= 1e-6, "Anonymized tensor diff %e > 1e-6" % diff
     return True
 
 
 def test_t163_pristine_reference_generator_loss_parity():
-    """T163 (F11): Pristine reference generator loss components match runner <= 1e-3."""
+    """T163 (F11): Pristine reference generator loss components match runner <= 1e-6."""
     ref_out, train_m, _, _, _, _ = _run_pristine_parity_comparison()
     ac_diff = abs(ref_out['ac_bce'] - train_m['train_ac_bce'])
-    assert ac_diff <= 1e-3, "AC BCE loss diff %e > 1e-3" % ac_diff
+    assert ac_diff <= 1e-6, "AC BCE loss diff %e > 1e-6" % ac_diff
     priv_diff = abs(ref_out['privacy_term'] - train_m['train_privacy_term'])
-    assert priv_diff <= 5e-2, "Privacy loss diff %e > 5e-2" % priv_diff
+    assert priv_diff <= 1e-6, "Privacy loss diff %e > 1e-6" % priv_diff
     tot_diff = abs(ref_out['total_loss'] - train_m['train_optimization_total'])
-    assert tot_diff <= 5e-2, "Total loss diff %e > 5e-2" % tot_diff
+    assert tot_diff <= 1e-6, "Total loss diff %e > 1e-6" % tot_diff
     return True
 
 
 def test_t164_pristine_reference_generator_gradient_parity():
-    """T164 (F11): Pristine reference generator gradients match runner <= 0.5."""
+    """T164 (F11): Pristine reference generator gradients match runner <= 1e-6."""
     ref_out, _, _, run_gen_grads, _, _ = _run_pristine_parity_comparison()
     max_diff = 0.0
     for g_ref_grad, g_run_grad in zip(ref_out['gen_grads'], run_gen_grads):
         d = (g_ref_grad - g_run_grad).abs().max().item()
         max_diff = max(max_diff, d)
-    assert max_diff <= 0.5, "Generator gradient max diff %e > 0.5" % max_diff
+    assert max_diff <= 1e-6, "Generator gradient max diff %e > 1e-6" % max_diff
     return True
 
 
 def test_t165_pristine_reference_verifier_gradient_parity():
-    """T165 (F11): Pristine reference verifier critic gradients match runner <= 1e-2."""
+    """T165 (F11): Pristine reference verifier critic gradients match runner <= 1e-6."""
     ref_out, _, _, _, run_ver_grads, _ = _run_pristine_parity_comparison()
     max_diff = 0.0
     for v_ref_grad, v_run_grad in zip(ref_out['ver_grads'], run_ver_grads):
         d = (v_ref_grad - v_run_grad).abs().max().item()
         max_diff = max(max_diff, d)
-    assert max_diff <= 1e-2, "Verifier gradient max diff %e > 1e-2" % max_diff
+    assert max_diff <= 1e-6, "Verifier gradient max diff %e > 1e-6" % max_diff
     return True
 
 
 def test_t166_pristine_reference_classifier_gradient_parity():
-    """T166 (F11): Pristine reference classifier critic gradients match runner <= 1e-2."""
+    """T166 (F11): Pristine reference classifier critic gradients match runner <= 1e-6."""
     ref_out, _, _, _, _, run_clf_grads = _run_pristine_parity_comparison()
     max_diff = 0.0
     for c_ref_grad, c_run_grad in zip(ref_out['ac_grads'], run_clf_grads):
         d = (c_ref_grad - c_run_grad).abs().max().item()
         max_diff = max(max_diff, d)
-    assert max_diff <= 1e-2, "Classifier gradient max diff %e > 1e-2" % max_diff
+    assert max_diff <= 1e-6, "Classifier gradient max diff %e > 1e-6" % max_diff
     return True
 
 

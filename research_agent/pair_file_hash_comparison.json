@@ -1,0 +1,177 @@
+{
+  "files_comparison": {
+    "image_pairs_training_10000.txt": {
+      "upstream_path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/image_pairs/image_pairs_training_10000.txt",
+      "current_path": "/home/minhtt/Neups_workshop/image_pairs/image_pairs_training_10000.txt",
+      "byte_size_upstream": 380000,
+      "byte_size_current": 380000,
+      "line_count_upstream": 10000,
+      "line_count_current": 10000,
+      "sha256_upstream": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
+      "sha256_current": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
+      "exact_byte_equality": true,
+      "stats": {
+        "upstream": {
+          "total_pairs": 10000,
+          "positive_pairs": 5000,
+          "negative_pairs": 5000,
+          "positive_ratio": 0.5,
+          "unique_images": 18089,
+          "unique_patients": 9053
+        },
+        "current": {
+          "total_pairs": 10000,
+          "positive_pairs": 5000,
+          "negative_pairs": 5000,
+          "positive_ratio": 0.5,
+          "unique_images": 18089,
+          "unique_patients": 9053
+        }
+      }
+    },
+    "image_pairs_validation_2000.txt": {
+      "upstream_path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/image_pairs/image_pairs_validation_2000.txt",
+      "current_path": "/home/minhtt/Neups_workshop/image_pairs/image_pairs_validation_2000.txt",
+      "byte_size_upstream": 76000,
+      "byte_size_current": 76000,
+      "line_count_upstream": 2000,
+      "line_count_current": 2000,
+      "sha256_upstream": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7",
+      "sha256_current": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7",
+      "exact_byte_equality": true,
+      "stats": {
+        "upstream": {
+          "total_pairs": 2000,
+          "positive_pairs": 1000,
+          "negative_pairs": 1000,
+          "positive_ratio": 0.5,
+          "unique_images": 3484,
+          "unique_patients": 1742
+        },
+        "current": {
+          "total_pairs": 2000,
+          "positive_pairs": 1000,
+          "negative_pairs": 1000,
+          "positive_ratio": 0.5,
+          "unique_images": 3484,
+          "unique_patients": 1742
+        }
+      }
+    },
+    "image_pairs_testing_5000.txt": {
+      "upstream_path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/image_pairs/image_pairs_testing_5000.txt",
+      "current_path": "/home/minhtt/Neups_workshop/image_pairs/image_pairs_testing_5000.txt",
+      "byte_size_upstream": 190000,
+      "byte_size_current": 190000,
+      "line_count_upstream": 5000,
+      "line_count_current": 5000,
+      "sha256_upstream": "87e528308507ada349d478d0c16e85f858dba8fb613abbca4857ffc437490fe2",
+      "sha256_current": "87e528308507ada349d478d0c16e85f858dba8fb613abbca4857ffc437490fe2",
+      "exact_byte_equality": true,
+      "stats": {
+        "upstream": {
+          "total_pairs": 5000,
+          "positive_pairs": 2500,
+          "negative_pairs": 2500,
+          "positive_ratio": 0.5,
+          "unique_images": 8062,
+          "unique_patients": 1307
+        },
+        "current": {
+          "total_pairs": 5000,
+          "positive_pairs": 2500,
+          "negative_pairs": 2500,
+          "positive_ratio": 0.5,
+          "unique_images": 8062,
+          "unique_patients": 1307
+        }
+      }
+    },
+    "train_val_list.txt": {
+      "upstream_path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/image_pairs/train_val_list.txt",
+      "current_path": "/home/minhtt/Neups_workshop/image_pairs/train_val_list.txt",
+      "byte_size_upstream": 1470907,
+      "byte_size_current": 1470907,
+      "line_count_upstream": 86524,
+      "line_count_current": 86524,
+      "sha256_upstream": "61fbe896321c1c1c8b75f3e4f3a08e4fef6486d95ef8a667c31d4d60dca6cb81",
+      "sha256_current": "61fbe896321c1c1c8b75f3e4f3a08e4fef6486d95ef8a667c31d4d60dca6cb81",
+      "exact_byte_equality": true
+    },
+    "test_list.txt": {
+      "upstream_path": "/home/minhtt/PriCheXy-Net_upstream_reproduction/image_pairs/test_list.txt",
+      "current_path": "/home/minhtt/Neups_workshop/image_pairs/test_list.txt",
+      "byte_size_upstream": 435131,
+      "byte_size_current": 435131,
+      "line_count_upstream": 25596,
+      "line_count_current": 25596,
+      "sha256_upstream": "38ca5ef7f756092946f57c1a59faca882ed589a1ab1f72590b45dc06c6d5e1cc",
+      "sha256_current": "38ca5ef7f756092946f57c1a59faca882ed589a1ab1f72590b45dc06c6d5e1cc",
+      "exact_byte_equality": true
+    }
+  },
+  "pair_statistics": {
+    "image_pairs_training_10000.txt": {
+      "upstream": {
+        "total_pairs": 10000,
+        "positive_pairs": 5000,
+        "negative_pairs": 5000,
+        "positive_ratio": 0.5,
+        "unique_images": 18089,
+        "unique_patients": 9053
+      },
+      "current": {
+        "total_pairs": 10000,
+        "positive_pairs": 5000,
+        "negative_pairs": 5000,
+        "positive_ratio": 0.5,
+        "unique_images": 18089,
+        "unique_patients": 9053
+      }
+    },
+    "image_pairs_validation_2000.txt": {
+      "upstream": {
+        "total_pairs": 2000,
+        "positive_pairs": 1000,
+        "negative_pairs": 1000,
+        "positive_ratio": 0.5,
+        "unique_images": 3484,
+        "unique_patients": 1742
+      },
+      "current": {
+        "total_pairs": 2000,
+        "positive_pairs": 1000,
+        "negative_pairs": 1000,
+        "positive_ratio": 0.5,
+        "unique_images": 3484,
+        "unique_patients": 1742
+      }
+    },
+    "image_pairs_testing_5000.txt": {
+      "upstream": {
+        "total_pairs": 5000,
+        "positive_pairs": 2500,
+        "negative_pairs": 2500,
+        "positive_ratio": 0.5,
+        "unique_images": 8062,
+        "unique_patients": 1307
+      },
+      "current": {
+        "total_pairs": 5000,
+        "positive_pairs": 2500,
+        "negative_pairs": 2500,
+        "positive_ratio": 0.5,
+        "unique_images": 8062,
+        "unique_patients": 1307
+      }
+    }
+  },
+  "split_overlap_analysis": {
+    "train_val_image_overlap": 0,
+    "train_val_patient_overlap": 0,
+    "train_test_image_overlap": 0,
+    "train_test_patient_overlap": 0,
+    "val_test_image_overlap": 0,
+    "val_test_patient_overlap": 0
+  }
+}

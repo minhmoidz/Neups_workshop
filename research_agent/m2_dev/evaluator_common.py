@@ -78,8 +78,21 @@ FROZEN_ATTACKER_CONFIG_SHA = '72923582e6595103026ac0fa3488ace4888f70ca09aa91f7cd
 # Method-neutral anonymizer checkpoint filename (§11)
 METHOD_NEUTRAL_CKPT_NAME = 'generator_best_method_neutral.pth'
 
-# F2 (M1.4c): Frozen classification split CSV
+# F2 (M1.4c): Frozen classification split CSV & structural fingerprints
 FROZEN_NIH_LABELS_PATH = os.path.join(ROOT, 'chexnet', 'nih_labels.csv')
+FROZEN_NIH_LABELS_SHA = '80324996867e73546bd7a09025df4a4cc3243fc00663b753023ccd90a9b5f8b9'
+
+FROZEN_CLASSIFICATION_VAL_N_IMAGES = 10816
+FROZEN_CLASSIFICATION_VAL_N_PATIENTS = 3854
+FROZEN_CLASSIFICATION_VAL_IMAGE_INDEX_SHA = 'c2ff15d7deb0e126b096d4392f4d8844c80593d16ad939ea44189b44051b8ab6'
+FROZEN_CLASSIFICATION_VAL_PATIENT_SEQUENCE_SHA = 'c444238f8be4c6f2e6ee5523a1966ef974a182aabc895b3819ebbaeec4f621ba'
+FROZEN_CLASSIFICATION_VAL_LABEL_MATRIX_SHA = 'bef28de2c55d5767c5d930bca8f86253c75a8be2cf00552ce0ceb579e75a28cc'
+
+REQUIRED_PATHOLOGY_COLUMNS = [
+    'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
+    'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
+    'Pleural_Thickening', 'Hernia'
+]
 
 
 def file_sha256(path):
@@ -88,6 +101,107 @@ def file_sha256(path):
         for block in iter(lambda: f.read(1 << 20), b''):
             h.update(block)
     return h.hexdigest()
+
+
+def verify_classification_val_contract(labels_csv_path=None):
+    """Verify existence, SHA, fold structure, row/patient count, and exact structural fingerprints
+    of the classification VAL cohort from chexnet/nih_labels.csv.
+    Fail-closed before scientific execution if any parameter drifts.
+    """
+    csv_path = labels_csv_path or FROZEN_NIH_LABELS_PATH
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError("Classification split CSV missing: %s" % csv_path)
+
+    actual_csv_sha = file_sha256(csv_path)
+    if actual_csv_sha != FROZEN_NIH_LABELS_SHA:
+        raise RuntimeError(
+            "Classification split CSV SHA mismatch: actual %s != frozen %s" % (
+                actual_csv_sha, FROZEN_NIH_LABELS_SHA
+            )
+        )
+
+    df = pd.read_csv(csv_path)
+    if 'fold' not in df.columns:
+        raise RuntimeError("Classification split CSV missing required 'fold' column")
+    if 'Image Index' not in df.columns:
+        raise RuntimeError("Classification split CSV missing required 'Image Index' column")
+
+    for col in REQUIRED_PATHOLOGY_COLUMNS:
+        if col not in df.columns:
+            raise RuntimeError("Classification split CSV missing required pathology column: %s" % col)
+
+    val_df = df[df['fold'] == 'val'].copy()
+    val_df = val_df.sort_values('Image Index').reset_index(drop=True)
+
+    n_images = len(val_df)
+    if n_images != FROZEN_CLASSIFICATION_VAL_N_IMAGES:
+        raise RuntimeError(
+            "Classification VAL image count mismatch: %d != frozen %d" % (
+                n_images, FROZEN_CLASSIFICATION_VAL_N_IMAGES
+            )
+        )
+
+    # Compute Image Index fingerprint
+    h_img = hashlib.sha256()
+    patient_ids = []
+    for idx in val_df['Image Index']:
+        h_img.update((str(idx) + '\n').encode('utf-8'))
+        patient_ids.append(str(idx).split('_')[0])
+
+    actual_img_sha = h_img.hexdigest()
+    if actual_img_sha != FROZEN_CLASSIFICATION_VAL_IMAGE_INDEX_SHA:
+        raise RuntimeError(
+            "Classification VAL image index fingerprint mismatch: %s != frozen %s" % (
+                actual_img_sha, FROZEN_CLASSIFICATION_VAL_IMAGE_INDEX_SHA
+            )
+        )
+
+    # Compute Patient ID sequence fingerprint
+    h_pat = hashlib.sha256()
+    for pid in patient_ids:
+        h_pat.update((pid + '\n').encode('utf-8'))
+
+    actual_pat_sha = h_pat.hexdigest()
+    if actual_pat_sha != FROZEN_CLASSIFICATION_VAL_PATIENT_SEQUENCE_SHA:
+        raise RuntimeError(
+            "Classification VAL patient sequence fingerprint mismatch: %s != frozen %s" % (
+                actual_pat_sha, FROZEN_CLASSIFICATION_VAL_PATIENT_SEQUENCE_SHA
+            )
+        )
+
+    n_patients = len(set(patient_ids))
+    if n_patients != FROZEN_CLASSIFICATION_VAL_N_PATIENTS:
+        raise RuntimeError(
+            "Classification VAL patient count mismatch: %d != frozen %d" % (
+                n_patients, FROZEN_CLASSIFICATION_VAL_N_PATIENTS
+            )
+        )
+
+    # Compute 14-D Label matrix fingerprint
+    h_lbl = hashlib.sha256()
+    for _, row in val_df.iterrows():
+        label_vec = [str(int(row[p])) for p in REQUIRED_PATHOLOGY_COLUMNS]
+        h_lbl.update((','.join(label_vec) + '\n').encode('utf-8'))
+
+    actual_lbl_sha = h_lbl.hexdigest()
+    if actual_lbl_sha != FROZEN_CLASSIFICATION_VAL_LABEL_MATRIX_SHA:
+        raise RuntimeError(
+            "Classification VAL label matrix fingerprint mismatch: %s != frozen %s" % (
+                actual_lbl_sha, FROZEN_CLASSIFICATION_VAL_LABEL_MATRIX_SHA
+            )
+        )
+
+    return {
+        'status': 'PASS',
+        'classification_split_csv_path': csv_path,
+        'classification_split_csv_sha256': actual_csv_sha,
+        'classification_val_n_images': n_images,
+        'classification_val_n_patients': n_patients,
+        'classification_val_image_index_sha256': actual_img_sha,
+        'classification_val_patient_sequence_sha256': actual_pat_sha,
+        'classification_val_label_matrix_sha256': actual_lbl_sha,
+        'required_pathology_columns': REQUIRED_PATHOLOGY_COLUMNS,
+    }
 
 
 def verify_repaired_acloss():
@@ -365,12 +479,13 @@ def select_method_neutral_best(epoch_metrics):
 # ---------------------------------------------------------------------------
 class FingerprintedRandomSampler(torch.utils.data.Sampler):
     """Deterministic sampler that yields epoch permutations from an explicit generator
-    and records the exact ordered sample indices for provenance hashing."""
+    and records the exact ordered sample indices / pair rows for provenance hashing."""
 
-    def __init__(self, data_source, generator=None, seed=42):
+    def __init__(self, data_source, generator=None, seed=42, pair_identifiers=None):
         self.data_source = data_source
         self.seed = seed
         self.generator = generator if generator is not None else torch.Generator().manual_seed(seed)
+        self.pair_identifiers = pair_identifiers if pair_identifiers is not None else getattr(data_source, 'image_pairs', None)
         self.epoch_indices = []
 
     def __len__(self):
@@ -383,25 +498,25 @@ class FingerprintedRandomSampler(torch.utils.data.Sampler):
         return iter(indices)
 
     def get_epoch_order_hash(self, epoch=0, pair_identifiers=None):
-        """F8 (M1.4c): Compute SHA256 of epoch order using pair rows (not indices).
-        When pair_identifiers is provided, hashes actual pair data for semantic parity
-        with compute_epoch_order_hash().
+        """F8 (M1.4c): Compute SHA256 of epoch order using semantic pair rows (not indices).
+        When pair data are available, always formats each row as 'image1|image2|label\n' for
+        exact parity with compute_epoch_order_hash().
         """
         if epoch >= len(self.epoch_indices):
             raise IndexError("Epoch %d order not recorded yet (total recorded: %d)" % (epoch, len(self.epoch_indices)))
         indices = self.epoch_indices[epoch]
+        pairs = pair_identifiers if pair_identifiers is not None else (
+            self.pair_identifiers if self.pair_identifiers is not None else getattr(self.data_source, 'image_pairs', None)
+        )
         h = hashlib.sha256()
         for idx in indices:
-            if pair_identifiers is not None:
-                item = pair_identifiers[idx]
+            if pairs is not None:
+                item = pairs[idx]
                 if isinstance(item, (list, tuple, np.ndarray)):
                     h.update('|'.join(str(x) for x in item).encode('utf-8'))
                 else:
                     h.update(str(item).encode('utf-8'))
             else:
-                # F8 (M1.4c): Without pair_identifiers, fall back to index hashing
-                # NOTE: For semantic parity with compute_epoch_order_hash, callers
-                # SHOULD provide pair_identifiers (the actual pair rows).
                 h.update(str(idx).encode('utf-8'))
             h.update(b'\n')
         return h.hexdigest()
@@ -553,7 +668,9 @@ def build_dev_anonymizer_loaders(config, seed=42, num_workers=0, pin_mem=False, 
 
     train_gen = torch.Generator()
     train_gen.manual_seed(seed)
-    train_sampler = FingerprintedRandomSampler(train_dataset, generator=train_gen, seed=seed)
+    train_sampler = FingerprintedRandomSampler(
+        train_dataset, generator=train_gen, seed=seed, pair_identifiers=train_dataset.image_pairs
+    )
 
     train_loader = DataLoader(
         train_dataset,
@@ -574,7 +691,8 @@ def build_dev_anonymizer_loaders(config, seed=42, num_workers=0, pin_mem=False, 
 
 def verify_scientific_dependencies(image_path=None):
     """Preflight check: verifies existence and SHAs of all frozen checkpoints,
-    repaired modules, pair splits, metadata, configs, and 100% of referenced image files.
+    repaired modules, pair splits, metadata, configs, classification VAL contract/fingerprints,
+    and 100% of referenced image files.
     Fail closed if any dependency is missing or drifted.
     """
     firewall_check('dev')
@@ -675,6 +793,9 @@ def verify_scientific_dependencies(image_path=None):
     if missing_val:
         raise FileNotFoundError("Missing %d VAL image files (e.g. %s)" % (len(missing_val), list(missing_val)[:3]))
 
+    # 9. Classification VAL Contract & Structural Fingerprints (B2, B3)
+    clf_val_audit = verify_classification_val_contract()
+
     return {
         'status': 'PASS',
         'image_path': image_path,
@@ -695,4 +816,10 @@ def verify_scientific_dependencies(image_path=None):
         'train_image1_metadata_missing': 0,
         'val_image1_metadata_missing': 0,
         'metadata_duplicate_image_index_count': dup_count,
+        'classification_split_csv_sha256': clf_val_audit['classification_split_csv_sha256'],
+        'classification_val_n_images': clf_val_audit['classification_val_n_images'],
+        'classification_val_n_patients': clf_val_audit['classification_val_n_patients'],
+        'classification_val_image_index_sha256': clf_val_audit['classification_val_image_index_sha256'],
+        'classification_val_patient_sequence_sha256': clf_val_audit['classification_val_patient_sequence_sha256'],
+        'classification_val_label_matrix_sha256': clf_val_audit['classification_val_label_matrix_sha256'],
     }
