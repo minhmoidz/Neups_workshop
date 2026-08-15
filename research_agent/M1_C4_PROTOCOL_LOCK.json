@@ -1,20 +1,34 @@
 {
   "protocol": "M1_C4_DEVELOPMENT_PROTOCOL_LOCK",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "lock_date": "2026-08-15",
   "m1_1_reason": [
     "scientific promotion gate repair (RUN_VALID != SCIENTIFIC_PROMOTION)",
     "seed/cost consistency repair (S2 anonymizer seed42 only; attacker 42/43/44)",
     "segmentation provenance recovery attempt (STILL_BLOCKED, manifest added)"
   ],
+  "m1_2_reason": [
+    "development evaluator isolation (VAL-only runners, no TEST loader constructed)",
+    "threat-model lock (attacker train=anon/anon, selection=anon/anon, scientific privacy=anon/real)",
+    "classification utility locked to VAL-only on frozen pretrained_classifier.pth",
+    "method-neutral anonymizer checkpoint selection (feature term excluded)",
+    "paired data-order deterministic fingerprint"
+  ],
   "branch": "research/method-restart",
-  "git_head_at_lock": "7156d8506468e7adec037d62143923a33cbce3e4",
+  "git_head_at_lock": "e53b19208c7de2800b410a3554e73ee5796d4c0a",
   "git_commit_chain": {
     "m0": "6d9b5ba76e1312e54ec1c10934d3a9bfd7f42f43",
     "m0_branch_manifest": "14f6715c922e2fc27338d265fcede1f48eb58298",
     "m0_1": "9af21e0189d7b57d5575d3ffd8fc4604fea56ffd",
-    "m1": "7156d8506468e7adec037d62143923a33cbce3e4"
+    "m1": "7156d8506468e7adec037d62143923a33cbce3e4",
+    "m1_1": "e53b19208c7de2800b410a3554e73ee5796d4c0a"
   },
+  "attacker_train_geometry": "anon_anon",
+  "attacker_checkpoint_validation_geometry": "anon_anon",
+  "scientific_privacy_validation_geometry": "anon_real",
+  "classification_development_fold": "val",
+  "development_test_loader_allowed": false,
+  "development_classifier_test_fold_allowed": false,
   "execution_lock": {
     "no_training": true,
     "no_test_access": true,
@@ -111,7 +125,13 @@
   },
   "evaluators": {
     "classification": "DenseNet-121 pretrained_classifier.pth on TRAIN/VAL anonymized images only",
+    "classification_development_fold": "val",
+    "development_classifier_test_fold_allowed": false,
     "reid_privacy": "attacker recipe on TRAIN/VAL pairs only",
+    "attacker_train_geometry": "anon_anon",
+    "attacker_checkpoint_validation_geometry": "anon_anon",
+    "scientific_privacy_validation_geometry": "anon_real",
+    "development_test_loader_allowed": false,
     "segmentation": "STILL_BLOCKED — see M1_1_SEGMENTATION_PROVENANCE.md; checkpoint sha 2dfdcf9b1ede7a163c584e843b36dacfcb790edc800a83b6de44a8ea3e6c73e0; training log matching checkpoint NOT preserved, exact training CLI unreconstructable"
   },
   "false_positive_control": {

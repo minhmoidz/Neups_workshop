@@ -198,11 +198,11 @@ def _m11_gates_check():
     if not (s1_total > 0 and s2_incr >= 0 and abs(total - (s1_total + s2_incr)) < 1e-6):
         raise RuntimeError('GPU cost estimate inconsistent: %r %r %r' % (s1_total, s2_incr, total))
 
-    # protocol version 1.1.0 + M1.1 reason recorded
-    if lock.get('version') != '1.1.0':
-        raise RuntimeError('protocol version must be 1.1.0: %r' % lock.get('version'))
-    if not lock.get('m1_1_reason'):
-        raise RuntimeError('M1.1 reason must be recorded')
+    # protocol version 1.2.0 + M1.1 / M1.2 reasons recorded
+    if lock.get('version') not in ('1.1.0', '1.2.0'):
+        raise RuntimeError('protocol version must be 1.2.0: %r' % lock.get('version'))
+    if not lock.get('m1_1_reason') or not lock.get('m1_2_reason'):
+        raise RuntimeError('M1.1 and M1.2 reasons must be recorded')
 
     # segmentation manifest must exist and must not claim certification while BLOCKED
     if not os.path.exists(SEG_MANIFEST):
