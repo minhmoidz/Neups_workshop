@@ -30,6 +30,9 @@ from .evaluator_common import (
     make_flow_field_components,
     snn_preprocess,
     MU,
+    FROZEN_ATTACKER_CONFIG_PATH,
+    FROZEN_ATTACKER_CONFIG_SHA,
+    file_sha256,
 )
 from utils import utils
 
@@ -63,7 +66,8 @@ def load_frozen_anonymizer(config=None, device=None, checkpoint_path=None, image
 class DevAttacker:
     def __init__(self, config, attacker_seed=42, device=None,
                  anonymize_fn=None, training_loader=None, validation_loader=None,
-                 net_factory=None, generator_checkpoint=None, image_size=None):
+                 net_factory=None, generator_checkpoint=None, image_size=None,
+                 unit_test_mode=False, config_path=None):
         """Development attacker runner.
 
         :param config: dev config dict.
@@ -80,10 +84,31 @@ class DevAttacker:
         """
         # TEST firewall must pass BEFORE any loader is built
         firewall_check('dev')
+        self.unit_test_mode = bool(unit_test_mode)
+        if not self.unit_test_mode:
+            if config_path != FROZEN_ATTACKER_CONFIG_PATH:
+                raise RuntimeError('Scientific attacker requires the canonical attacker config path')
+            if file_sha256(config_path) != FROZEN_ATTACKER_CONFIG_SHA:
+                raise RuntimeError('Scientific attacker config SHA mismatch')
+            if anonymize_fn is not None or training_loader is not None or validation_loader is not None or net_factory is not None:
+                raise RuntimeError('Scientific attacker does not accept injected models, loaders, anonymizers, or factories')
+            if attacker_seed != 42:
+                raise RuntimeError('Scientific attacker seed must be exactly 42')
+            if config.get('batch_size') != 32 or config.get('learning_rate') != 1e-4:
+                raise RuntimeError('Scientific attacker config does not match frozen optimizer contract')
+            if config.get('max_epochs') != 100 or config.get('early_stopping') != 5:
+                raise RuntimeError('Scientific attacker config does not match frozen training contract')
+            if config.get('train_geometry') != 'anon_anon' or config.get('checkpoint_val_geometry') != 'anon_anon':
+                raise RuntimeError('Scientific attacker geometry contract mismatch')
+            if config.get('scientific_val_geometry') != 'anon_real':
+                raise RuntimeError('Scientific attacker scientific VAL geometry mismatch')
 
         self.config = config
         self.attacker_seed = attacker_seed
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if not self.unit_test_mode:
+            if self.device.type != 'cuda' or not torch.cuda.is_available():
+                raise RuntimeError('Scientific attacker evaluation requires CUDA')
         self.generator_checkpoint = generator_checkpoint
 
         # Seed BEFORE net init, DataLoader shuffle, and optimizer.
@@ -134,7 +159,12 @@ class DevAttacker:
             outputs = self.net(inputs1, inputs2).squeeze()
             labels = labels.type_as(outputs)
             loss = self.criterion(outputs, labels)
+            if not torch.isfinite(loss).all():
+                raise FloatingPointError('Attacker training loss is non-finite before backward')
             loss.backward()
+            for name, param in self.net.named_parameters():
+                if param.grad is not None and not torch.isfinite(param.grad).all():
+                    raise FloatingPointError("Attacker gradient '%s' contains NaN/Inf" % name)
             self.optimizer.step()
             running += loss.item()
         avg_loss = running / max(len(self.training_loader), 1)

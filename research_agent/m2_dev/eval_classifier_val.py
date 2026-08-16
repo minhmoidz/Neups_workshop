@@ -32,6 +32,9 @@ from .evaluator_common import (
     build_anonymize_fn,
     MU,
     NIH_PATHOLOGIES,
+    verify_classification_val_contract,
+    verify_classification_artifact_structure,
+    FROZEN_CLASSIFICATION_VAL_N_IMAGES,
 )
 
 DEV_FOLD = 'val'
@@ -122,7 +125,7 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
 def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
                                 perturbation_type='flow_field', batch_size=16,
                                 generator_checkpoint=None, image_size=None,
-                                expected_generator_sha=None):
+                                expected_generator_sha=None, unit_test_mode=False):
     """VAL-only classification evaluation. fold is validated BEFORE dataset init.
 
     :param config: dev config dict (image_path, ...).
@@ -133,12 +136,22 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
     :param image_size: legacy flow-field grid size; defaults to config image_size or 256.
     :param expected_generator_sha: optional expected SHA256 of the generator checkpoint.
     """
+    config = config or {}
+    unit_test_mode = bool(unit_test_mode or config.get('unit_test_mode', False))
     assert_dev_fold(fold)          # reject TEST before dataset construction
+    if not unit_test_mode and fold != DEV_FOLD:
+        raise RuntimeError('Scientific classification fold must be exactly "val"')
     firewall_check('dev')
 
     import chexnet.cxr_dataset as CXR
 
     device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if not unit_test_mode and getattr(device, 'type', str(device).split(':')[0]) == 'cpu':
+        raise RuntimeError('Scientific classification evaluation requires CUDA; CPU is unit-test only')
+    if not unit_test_mode and model is not None:
+        raise RuntimeError('Scientific classification evaluation does not accept an injected model')
+    if not unit_test_mode:
+        verify_classification_val_contract()
 
     if model is None:
         model = load_frozen_classifier(device)
@@ -177,11 +190,11 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
         anonymize_fn = build_anonymize_fn(generator, grid_identity, gauss_filter, MU)
 
     if config.get('dataloader') is not None:
+        if not unit_test_mode:
+            raise RuntimeError('Scientific classification evaluation does not accept an injected dataloader')
         dataloader = config['dataloader']
         n_images = len(dataloader.dataset)
-        if not config.get('unit_test_mode', False) and fold == 'val' and n_images != 10816:
-            raise RuntimeError("Classification scientific VAL requires exactly 10,816 images, got %d" % n_images)
-    elif config.get('unit_test_mode', False):
+    elif unit_test_mode:
         from m0_tests.test_m14a_execution_harness import SyntheticClassificationDataset
         if image_size is None:
             image_size = 64
@@ -196,7 +209,7 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
             transform=None,
             perturbation_type=perturbation_type)
         n_images = len(dataset)
-        if not config.get('unit_test_mode', False) and fold == 'val' and n_images != 10816:
+        if not unit_test_mode and n_images != FROZEN_CLASSIFICATION_VAL_N_IMAGES:
             raise RuntimeError("Classification scientific VAL requires exactly 10,816 images, got %d" % n_images)
 
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
@@ -204,6 +217,7 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
 
     pred_df, auc_df, macro_auc = classify_val_dataset(
         model, dataloader, anonymize_fn, perturbation_type, device=device, batch_size=batch_size)
+    fingerprints = verify_classification_artifact_structure(pred_df, strict=not unit_test_mode)
 
     return {
         'pred_df': pred_df,
@@ -215,4 +229,5 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
         'generator_checkpoint_sha256': selected_gen_sha,
         'classifier_checkpoint_sha256': actual_clf_sha,
         'fold': fold,
+        'classification_val_fingerprints': fingerprints,
     }

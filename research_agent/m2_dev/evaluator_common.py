@@ -12,6 +12,8 @@ by attacker train / attacker checkpoint-val / mixed-val privacy / classification
 """
 import os
 import sys
+import subprocess
+from collections.abc import Mapping
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 for _p in (ROOT, os.path.join(ROOT, 'research_agent')):
@@ -44,7 +46,7 @@ IMAGENET_NORMALIZE = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229
 
 # Development fold whitelist / blacklist
 DEV_ALLOWED_FOLDS = {'val', 'validation'}
-DEV_FORBIDDEN_FOLDS = {'test', 'testing', 'final_test'}
+DEV_FORBIDDEN_FOLDS = {'test', 'testing', 'final_test', 'eval_test'}
 
 # Frozen classifier checkpoint (M1, verified by M0.1)
 FROZEN_CLASSIFIER_PATH = os.path.join(ROOT, 'networks', 'pretrained_classifier.pth')
@@ -100,6 +102,21 @@ NIH_PATHOLOGIES = [
 # Historical alias retained for backward compatibility; identical object/order.
 REQUIRED_PATHOLOGY_COLUMNS = NIH_PATHOLOGIES
 
+# M1.4c.3 immutable execution-boundary anchors.  The lock digest is deliberately
+# kept outside M2_S1_EXECUTION_LOCK.json so changing the lock cannot change the
+# value used to authenticate it.
+EXECUTION_LOCK_PATH = os.path.join(ROOT, 'research_agent', 'M2_S1_EXECUTION_LOCK.json')
+FROZEN_M2_EXECUTION_LOCK_SHA256 = 'c8ea322adf46a3524ee7c765fa73f4c851af0cf2749eb619332f27c822b11acc'
+FROZEN_SOURCE_TAG = 'm2-s1-certified-v1'
+FROZEN_SOURCE_BRANCH = 'research/method-restart'
+FROZEN_VAL_PAIR_PATH = os.path.join(ROOT, 'image_pairs', 'image_pairs_validation_2000.txt')
+FROZEN_VAL_PAIR_SHA256 = '9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7'
+FROZEN_VAL_PAIR_COUNT = 2000
+FROZEN_TRAIN_PAIR_PATH = os.path.join(ROOT, 'image_pairs', 'image_pairs_training_10000.txt')
+FROZEN_TRAIN_PAIR_SHA256 = '3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268'
+FROZEN_TRAIN_ORDER_EPOCH0_SHA256 = '920a127341a85967f959863e3471fea60f498d59d6485fb75c57c04c73f11967'
+FROZEN_TRAIN_ORDER_EPOCH1_SHA256 = '1eb349a8ad0e912da5df3babe2995def454e2b4382993a39926be1cf29c4c845'
+
 
 def file_sha256(path):
     h = hashlib.sha256()
@@ -107,6 +124,160 @@ def file_sha256(path):
         for block in iter(lambda: f.read(1 << 20), b''):
             h.update(block)
     return h.hexdigest()
+
+
+def verify_execution_lock_integrity(lock_path=None):
+    """Authenticate the execution lock before any of its fields are trusted."""
+    lock_path = lock_path or EXECUTION_LOCK_PATH
+    if not os.path.exists(lock_path):
+        raise FileNotFoundError('Execution lock missing: %s' % lock_path)
+    actual_sha = file_sha256(lock_path)
+    if actual_sha != FROZEN_M2_EXECUTION_LOCK_SHA256:
+        raise RuntimeError(
+            'Execution lock SHA mismatch: %s != frozen %s' %
+            (actual_sha, FROZEN_M2_EXECUTION_LOCK_SHA256)
+        )
+    with open(lock_path) as f:
+        lock = json.load(f)
+    if lock.get('protocol') != 'M2_S1_EXECUTION_LOCK':
+        raise RuntimeError('Execution lock protocol identifier is invalid')
+    if lock.get('test_firewall') != 'CLOSED':
+        raise RuntimeError('Execution lock TEST firewall is not CLOSED')
+    if lock.get('scientific_choices_frozen', {}).get('max_epochs') != 250:
+        raise RuntimeError('Execution lock max_epochs is not frozen at 250')
+    return lock, actual_sha
+
+
+def validate_scientific_args(args, unit_test_mode=False):
+    """Validate the frozen scientific CLI contract at every public boundary."""
+    if unit_test_mode:
+        return args
+    if not getattr(args, 'scientific_m2_s1', False):
+        raise RuntimeError('Scientific M2-S1 execution requires --scientific-m2-s1')
+    expected = {
+        'arm': 'all', 'max_epochs': 250, 'attacker_epochs': 100,
+        'attacker_patience': 5, 'seed': 42, 'attacker_seed': 42,
+    }
+    for key, value in expected.items():
+        actual = getattr(args, key, None)
+        if actual != value:
+            raise ValueError('Scientific M2-S1 requires %s == %r, got %r' % (key, value, actual))
+    device = getattr(args, 'device', None)
+    if device is not None and str(device).lower().startswith('cpu'):
+        raise RuntimeError('Scientific M2-S1 does not support --device cpu')
+    if device is not None and str(device).lower().startswith('cuda') and not torch.cuda.is_available():
+        raise RuntimeError('Scientific M2-S1 requires an available CUDA device')
+    if device is None and not torch.cuda.is_available():
+        raise RuntimeError('Scientific M2-S1 requires CUDA; no CUDA device is available')
+    if getattr(args, 'resume', False) or getattr(args, 'resume_checkpoint', None):
+        raise RuntimeError('Scientific resume is not certified; restart from epoch 0')
+    if getattr(args, 'fold', 'val') not in (None, 'val'):
+        raise ValueError('Scientific classification fold must be exactly "val"')
+    return args
+
+
+def _semantic_pair_sha(pair_file_path):
+    h = hashlib.sha256()
+    with open(pair_file_path) as f:
+        for raw in f:
+            fields = raw.strip().split()
+            if not fields:
+                continue
+            h.update(('|'.join(fields) + '\n').encode('utf-8'))
+    return h.hexdigest()
+
+
+def verify_frozen_val_pair_provenance(pair_file_path=None):
+    pair_file_path = pair_file_path or FROZEN_VAL_PAIR_PATH
+    if file_sha256(pair_file_path) != FROZEN_VAL_PAIR_SHA256:
+        raise RuntimeError('VAL pair file SHA mismatch')
+    with open(pair_file_path) as f:
+        rows = [line.strip().split() for line in f if line.strip()]
+    if len(rows) != FROZEN_VAL_PAIR_COUNT or any(len(row) != 3 for row in rows):
+        raise RuntimeError('VAL pair file must contain exactly 2000 3-field rows')
+    return {
+        'pair_file': os.path.abspath(pair_file_path),
+        'pair_file_sha256': FROZEN_VAL_PAIR_SHA256,
+        'pair_count': len(rows),
+        'pair_order_sha256': _semantic_pair_sha(pair_file_path),
+    }
+
+
+def compute_expected_train_order_hashes(pair_file_path=None, seed=42, epochs=250):
+    """Compute and validate the complete deterministic TRAIN order contract."""
+    pair_file_path = pair_file_path or FROZEN_TRAIN_PAIR_PATH
+    actual_sha = file_sha256(pair_file_path)
+    if actual_sha != FROZEN_TRAIN_PAIR_SHA256:
+        raise RuntimeError('TRAIN pair file SHA mismatch: %s != %s' % (actual_sha, FROZEN_TRAIN_PAIR_SHA256))
+    pairs = np.loadtxt(pair_file_path, dtype=str)
+    gen = torch.Generator()
+    gen.manual_seed(seed)
+    hashes = []
+    for epoch in range(epochs):
+        indices = torch.randperm(len(pairs), generator=gen).tolist()
+        h = hashlib.sha256()
+        for idx in indices:
+            h.update(('|'.join(str(v) for v in pairs[idx]) + '\n').encode('utf-8'))
+        hashes.append(h.hexdigest())
+    if hashes[0] != FROZEN_TRAIN_ORDER_EPOCH0_SHA256 or hashes[1] != FROZEN_TRAIN_ORDER_EPOCH1_SHA256:
+        raise RuntimeError('Frozen TRAIN order epoch 0/1 hashes do not match; refusing to rewrite expectations')
+    return hashes
+
+
+def _frame_sha(values):
+    h = hashlib.sha256()
+    for value in values:
+        h.update((str(value) + '\n').encode('utf-8'))
+    return h.hexdigest()
+
+
+def classification_artifact_fingerprints(pred_df):
+    """Return structural hashes for the production classification writer output."""
+    if 'Image Index' not in pred_df.columns:
+        raise ValueError('classification artifact missing Image Index')
+    image_index = pred_df['Image Index'].astype(str).tolist()
+    if len(set(image_index)) != len(image_index):
+        raise ValueError('classification artifact contains duplicate Image Index')
+    patients = [name.split('_')[0] for name in image_index]
+    label_rows = []
+    for _, row in pred_df.iterrows():
+        vals = []
+        for pathology in NIH_PATHOLOGIES:
+            value = row[pathology]
+            if not np.isfinite(float(value)) or int(value) not in (0, 1) or float(value) != int(value):
+                raise ValueError('classification ground truth must be finite binary')
+            vals.append(str(int(value)))
+            probability = float(row['prob_' + pathology])
+            if not np.isfinite(probability):
+                raise ValueError('classification probability must be finite')
+        label_rows.append(','.join(vals))
+    return {
+        'n_images': len(image_index),
+        'n_patients': len(set(patients)),
+        'image_index_sha256': _frame_sha(image_index),
+        'patient_sequence_sha256': _frame_sha(patients),
+        'label_matrix_sha256': _frame_sha(label_rows),
+    }
+
+
+def verify_classification_artifact_structure(pred_df, strict=True):
+    required = ['Image Index'] + [p for p in NIH_PATHOLOGIES] + ['prob_' + p for p in NIH_PATHOLOGIES]
+    missing = [column for column in required if column not in pred_df.columns]
+    if missing:
+        raise ValueError('classification artifact missing columns: %s' % missing)
+    fingerprints = classification_artifact_fingerprints(pred_df)
+    if strict:
+        expected = {
+            'n_images': FROZEN_CLASSIFICATION_VAL_N_IMAGES,
+            'n_patients': FROZEN_CLASSIFICATION_VAL_N_PATIENTS,
+            'image_index_sha256': FROZEN_CLASSIFICATION_VAL_IMAGE_INDEX_SHA,
+            'patient_sequence_sha256': FROZEN_CLASSIFICATION_VAL_PATIENT_SEQUENCE_SHA,
+            'label_matrix_sha256': FROZEN_CLASSIFICATION_VAL_LABEL_MATRIX_SHA,
+        }
+        for key, value in expected.items():
+            if fingerprints[key] != value:
+                raise ValueError('classification artifact %s mismatch: %s != %s' % (key, fingerprints[key], value))
+    return fingerprints
 
 
 def verify_classification_val_contract(labels_csv_path=None):
@@ -223,18 +394,12 @@ def verify_repaired_acloss():
 
 def verify_frozen_scientific_configs(lock_path=None):
     """Verify exact SHA256 and semantic configuration invariants of frozen experiment configs."""
-    lock_path = lock_path or os.path.join(ROOT, 'research_agent', 'M2_S1_EXECUTION_LOCK.json')
-    if os.path.exists(lock_path):
-        with open(lock_path) as f:
-            lock = json.load(f)
-        prov = lock.get('artifact_provenance', {})
-        exp_b_sha = prov.get('b_dev_config_sha256', FROZEN_B_DEV_CONFIG_SHA)
-        exp_c4_sha = prov.get('c4_config_sha256', FROZEN_C4_CONFIG_SHA)
-        exp_att_sha = prov.get('attacker_config_sha256', FROZEN_ATTACKER_CONFIG_SHA)
-    else:
-        exp_b_sha = FROZEN_B_DEV_CONFIG_SHA
-        exp_c4_sha = FROZEN_C4_CONFIG_SHA
-        exp_att_sha = FROZEN_ATTACKER_CONFIG_SHA
+    lock_path = lock_path or EXECUTION_LOCK_PATH
+    lock, _ = verify_execution_lock_integrity(lock_path)
+    prov = lock.get('artifact_provenance', {})
+    exp_b_sha = prov.get('b_dev_config_sha256', FROZEN_B_DEV_CONFIG_SHA)
+    exp_c4_sha = prov.get('c4_config_sha256', FROZEN_C4_CONFIG_SHA)
+    exp_att_sha = prov.get('attacker_config_sha256', FROZEN_ATTACKER_CONFIG_SHA)
 
     # 1. B_dev config
     if not os.path.exists(FROZEN_B_DEV_CONFIG_PATH):

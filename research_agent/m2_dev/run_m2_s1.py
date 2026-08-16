@@ -20,6 +20,7 @@ import time
 import hashlib
 import subprocess
 import argparse
+from collections.abc import Mapping
 import numpy as np
 import pandas as pd
 import torch
@@ -55,6 +56,18 @@ from m2_dev.evaluator_common import (
     verify_frozen_scientific_configs,
     verify_scientific_dependencies,
     verify_classification_val_contract,
+    validate_scientific_args,
+    verify_execution_lock_integrity,
+    verify_frozen_val_pair_provenance,
+    verify_classification_artifact_structure,
+    FROZEN_VAL_PAIR_COUNT,
+    FROZEN_VAL_PAIR_SHA256,
+    FROZEN_CLASSIFICATION_VAL_N_IMAGES,
+    FROZEN_CLASSIFICATION_VAL_IMAGE_INDEX_SHA,
+    FROZEN_CLASSIFICATION_VAL_PATIENT_SEQUENCE_SHA,
+    FROZEN_CLASSIFICATION_VAL_LABEL_MATRIX_SHA,
+    FROZEN_SOURCE_TAG,
+    FROZEN_SOURCE_BRANCH,
 )
 from m2_dev.anonymizer_runner import M2AnonymizerRunner
 from m2_dev.dev_attacker import DevAttacker, SiameseNetwork
@@ -80,22 +93,14 @@ def parse_args():
                         help="Attacker seed (default: 42)")
     parser.add_argument('--device', type=str, default=None,
                         help="Compute device (cuda / cpu)")
+    parser.add_argument('--fold', type=str, default='val',
+                        help="Classification fold; scientific mode requires val")
+    parser.add_argument('--resume', action='store_true', default=False,
+                        help="Resume a run (not allowed in scientific mode)")
     args = parser.parse_args()
 
     if args.scientific_m2_s1:
-        # Strictly enforce frozen scientific hyperparameters and full paired execution
-        if args.arm != 'all':
-            raise ValueError("Scientific M2-S1 mode requires --arm all, got %r" % args.arm)
-        if args.max_epochs != 250:
-            raise ValueError("Scientific M2-S1 mode requires max_epochs == 250, got %d" % args.max_epochs)
-        if args.attacker_epochs != 100:
-            raise ValueError("Scientific M2-S1 mode requires attacker_epochs == 100, got %d" % args.attacker_epochs)
-        if args.attacker_patience != 5:
-            raise ValueError("Scientific M2-S1 mode requires attacker_patience == 5, got %d" % args.attacker_patience)
-        if args.seed != 42:
-            raise ValueError("Scientific M2-S1 mode requires seed == 42, got %d" % args.seed)
-        if args.attacker_seed != 42:
-            raise ValueError("Scientific M2-S1 mode requires attacker_seed == 42, got %d" % args.attacker_seed)
+        validate_scientific_args(args, unit_test_mode=False)
 
     # F1 (M1.4c): Canonical M2-S1 output namespace may ONLY be used with --scientific-m2-s1
     if not args.scientific_m2_s1:
@@ -259,7 +264,9 @@ def train_s1_attacker_arm(arm, seed, attacker_seed, max_epochs, patience, device
         generator_checkpoint=gen_ckpt,
         training_loader=train_loader,
         validation_loader=val_loader,
-        image_size=64 if unit_test_mode else None
+        image_size=64 if unit_test_mode else None,
+        unit_test_mode=unit_test_mode,
+        config_path=att_cfg_path
     )
 
     t0 = time.time()
@@ -322,9 +329,17 @@ def evaluate_privacy_arm(arm, seed, attacker_seed, device, out_base_dir=None, un
         expected_attacker_sha=expected_att_sha
     )
 
-    # Save raw predictions NPZ
+    # Save raw predictions NPZ with explicit frozen pair provenance.
     pred_npz_path = os.path.join(att_dir, 'privacy_val_predictions.npz')
-    np.savez_compressed(pred_npz_path, y_true=eval_res['y_true'], y_score=eval_res['y_score'])
+    pair_provenance = verify_frozen_val_pair_provenance() if not unit_test_mode else {}
+    np.savez_compressed(
+        pred_npz_path,
+        y_true=eval_res['y_true'],
+        y_score=eval_res['y_score'],
+        validation_pair_file_sha256=pair_provenance.get('pair_file_sha256', ''),
+        validation_pair_count=pair_provenance.get('pair_count', int(eval_res['n_pairs'])),
+        validation_pair_order_sha256=pair_provenance.get('pair_order_sha256', ''),
+    )
     pred_sha = file_sha256(pred_npz_path)
 
     # Return scalar summary dict with path references
@@ -341,6 +356,9 @@ def evaluate_privacy_arm(arm, seed, attacker_seed, device, out_base_dir=None, un
         'prediction_file_sha256': pred_sha,
         'predictions_file': pred_npz_path,
         'predictions_file_sha256': pred_sha,
+        'validation_pair_file_sha256': pair_provenance.get('pair_file_sha256'),
+        'validation_pair_count': pair_provenance.get('pair_count', int(eval_res['n_pairs'])),
+        'validation_pair_order_sha256': pair_provenance.get('pair_order_sha256'),
     }
 
 
@@ -372,7 +390,8 @@ def evaluate_classification_arm(arm, seed, device, out_base_dir=None, unit_test_
         generator_checkpoint=gen_ckpt,
         device=device,
         image_size=64 if unit_test_mode else None,
-        expected_generator_sha=expected_gen_sha
+        expected_generator_sha=expected_gen_sha,
+        unit_test_mode=unit_test_mode
     )
     if clf_res['n_classes_valid'] != 14:
         raise RuntimeError("Classification evaluation returned %d valid classes, expected 14" % clf_res['n_classes_valid'])
@@ -390,9 +409,218 @@ def evaluate_classification_arm(arm, seed, device, out_base_dir=None, unit_test_
     return clf_res
 
 
+def _check_run_validity_m14c3(b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manifest,
+                              b_priv, c4_priv, b_class, c4_class,
+                              expected_epochs=250, unit_test_mode=False):
+    """Fail-closed structured validity check used by both production and tests."""
+    bundles = [
+        ('B_dev manifest', b_dev_manifest), ('C4 manifest', c4_manifest),
+        ('B_dev attacker manifest', b_att_manifest), ('C4 attacker manifest', c4_att_manifest),
+        ('B_dev privacy result', b_priv), ('C4 privacy result', c4_priv),
+        ('B_dev classification result', b_class), ('C4 classification result', c4_class),
+    ]
+    for label, value in bundles:
+        if not isinstance(value, Mapping):
+            return False, '%s must be a mapping; got %r' % (label, type(value).__name__)
+
+    for name, manifest, expected_cfg_sha in (
+            ('B_dev', b_dev_manifest, FROZEN_B_DEV_CONFIG_SHA),
+            ('C4', c4_manifest, FROZEN_C4_CONFIG_SHA)):
+        if manifest.get('epochs_completed') != expected_epochs:
+            return False, '%s epochs_completed (%s) != expected (%d)' % (name, manifest.get('epochs_completed'), expected_epochs)
+        if manifest.get('requested_max_epochs') != expected_epochs:
+            return False, '%s requested_max_epochs (%s) != expected (%d)' % (name, manifest.get('requested_max_epochs'), expected_epochs)
+        if manifest.get('numerical_validity') != 'PASS':
+            return False, '%s numerical_validity != PASS' % name
+        if manifest.get('nan_inf_detected') is not False:
+            return False, '%s nan_inf_detected is True' % name
+        if manifest.get('gradient_diagnostics_failed') is True:
+            return False, '%s gradient diagnostics reported failure' % name
+        diagnostics = manifest.get('gradient_norm_diagnostics', {})
+        if not isinstance(diagnostics, Mapping):
+            return False, '%s gradient diagnostics must be a mapping' % name
+        for epoch_key, entry in diagnostics.items():
+            if not isinstance(entry, Mapping):
+                return False, '%s gradient diagnostic %r is malformed' % (name, epoch_key)
+            if 'error' in entry:
+                return False, '%s contains failed gradient diagnostics' % name
+            for metric_key in ('base_grad_norm', 'feature_grad_norm', 'feature_base_ratio'):
+                if entry.get(metric_key) is None:
+                    continue
+                try:
+                    if not np.isfinite(float(entry[metric_key])):
+                        return False, '%s contains non-finite gradient diagnostics' % name
+                except (TypeError, ValueError):
+                    return False, '%s contains malformed gradient diagnostics' % name
+        gen_path = manifest.get('selected_generator_checkpoint')
+        if not gen_path or not os.path.exists(gen_path):
+            return False, '%s selected generator checkpoint missing: %s' % (name, gen_path)
+        actual_gen_sha = file_sha256(gen_path)
+        if actual_gen_sha != manifest.get('selected_generator_sha256'):
+            return False, '%s selected generator SHA mismatch' % name
+        if not unit_test_mode and manifest.get('config_sha256') != expected_cfg_sha:
+            return False, '%s config_sha256 mismatch' % name
+
+    for name, att_manifest, gen_manifest in (
+            ('B_dev', b_att_manifest, b_dev_manifest), ('C4', c4_att_manifest, c4_manifest)):
+        att_path = att_manifest.get('best_attacker_path')
+        if not att_path or not os.path.exists(att_path):
+            return False, '%s best attacker checkpoint missing: %s' % (name, att_path)
+        if file_sha256(att_path) != att_manifest.get('best_attacker_sha256'):
+            return False, '%s attacker checkpoint SHA mismatch' % name
+        if att_manifest.get('generator_checkpoint_sha256') != gen_manifest.get('selected_generator_sha256'):
+            return False, '%s attacker generator SHA link mismatch' % name
+        if att_manifest.get('numerical_validity') != 'PASS' or att_manifest.get('nan_inf_detected') is not False:
+            return False, '%s attacker numerical validity failed' % name
+
+    for name, privacy, gen_manifest, att_manifest in (
+            ('B_dev', b_priv, b_dev_manifest, b_att_manifest),
+            ('C4', c4_priv, c4_manifest, c4_att_manifest)):
+        try:
+            auc = float(privacy.get('roc_auc'))
+        except (TypeError, ValueError):
+            return False, '%s privacy ROC-AUC is malformed' % name
+        if not np.isfinite(auc):
+            return False, 'Non-finite %s privacy ROC-AUC' % name
+        if privacy.get('generator_checkpoint_sha256') != gen_manifest.get('selected_generator_sha256'):
+            return False, '%s privacy generator SHA link mismatch' % name
+        if privacy.get('attacker_checkpoint_sha256') != att_manifest.get('best_attacker_sha256'):
+            return False, '%s privacy attacker SHA link mismatch' % name
+        npz_path = privacy.get('predictions_file') or privacy.get('prediction_file')
+        if unit_test_mode and not npz_path:
+            continue
+        if not npz_path or not os.path.exists(npz_path):
+            return False, '%s privacy predictions file missing: %s' % (name, npz_path)
+        expected_npz_sha = privacy.get('predictions_file_sha256') or privacy.get('prediction_file_sha256')
+        if file_sha256(npz_path) != expected_npz_sha:
+            return False, '%s privacy predictions SHA mismatch' % name
+        try:
+            with np.load(npz_path, allow_pickle=False) as raw:
+                if 'y_true' not in raw or 'y_score' not in raw:
+                    return False, '%s privacy replay requires y_true and y_score' % name
+                y_true = np.asarray(raw['y_true'])
+                y_score = np.asarray(raw['y_score'])
+                if y_true.ndim != 1 or y_score.ndim != 1 or len(y_true) != len(y_score):
+                    return False, '%s privacy arrays must be 1-D and equal length' % name
+                if len(y_true) != int(privacy.get('n_pairs', -1)):
+                    return False, '%s privacy metadata n_pairs does not match raw arrays' % name
+                if not unit_test_mode and len(y_true) != FROZEN_VAL_PAIR_COUNT:
+                    return False, '%s privacy raw arrays must contain exactly 2000 rows' % name
+                if not np.isfinite(y_true).all() or not np.isfinite(y_score).all():
+                    return False, '%s privacy arrays contain NaN/Inf' % name
+                if not np.all(np.isin(y_true, [0, 1])):
+                    return False, '%s privacy labels are not binary' % name
+                if len(np.unique(y_true)) != 2:
+                    return False, '%s privacy labels do not contain both classes' % name
+                if not unit_test_mode:
+                    frozen_pair = verify_frozen_val_pair_provenance()
+                    if privacy.get('validation_pair_file_sha256') != FROZEN_VAL_PAIR_SHA256:
+                        return False, '%s privacy VAL pair provenance SHA mismatch' % name
+                    if privacy.get('validation_pair_count') != FROZEN_VAL_PAIR_COUNT:
+                        return False, '%s privacy VAL pair provenance count mismatch' % name
+                    if privacy.get('validation_pair_order_sha256') != frozen_pair['pair_order_sha256']:
+                        return False, '%s privacy VAL pair order provenance mismatch' % name
+                    for key, expected in (
+                            ('validation_pair_file_sha256', FROZEN_VAL_PAIR_SHA256),
+                            ('validation_pair_count', FROZEN_VAL_PAIR_COUNT),
+                            ('validation_pair_order_sha256', frozen_pair['pair_order_sha256'])):
+                        if key not in raw:
+                            return False, '%s privacy replay missing %s metadata' % (name, key)
+                        raw_value = np.asarray(raw[key]).reshape(-1)[0].item()
+                        if str(raw_value) != str(expected):
+                            return False, '%s privacy replay %s metadata mismatch' % (name, key)
+                replay_auc = float(__import__('sklearn.metrics', fromlist=['roc_auc_score']).roc_auc_score(y_true, y_score))
+        except Exception as exc:
+            return False, '%s privacy replay failed: %s' % (name, exc)
+        if abs(replay_auc - auc) > 1e-5:
+            return False, '%s privacy replayed AUC mismatch: %e != %e' % (name, replay_auc, auc)
+
+    for name, classification, gen_manifest in (
+            ('B_dev', b_class, b_dev_manifest), ('C4', c4_class, c4_manifest)):
+        try:
+            macro = float(classification.get('macro_auc'))
+        except (TypeError, ValueError):
+            return False, '%s classification Macro AUC is malformed' % name
+        if not np.isfinite(macro):
+            return False, 'Non-finite %s classification Macro AUC' % name
+        if classification.get('n_classes_valid') != 14:
+            return False, 'Invalid class count in %s classification' % name
+        if classification.get('generator_checkpoint_sha256') != gen_manifest.get('selected_generator_sha256'):
+            return False, '%s classification generator SHA link mismatch' % name
+        if not unit_test_mode and classification.get('classifier_checkpoint_sha256') != FROZEN_CLASSIFIER_SHA:
+            return False, '%s classification classifier SHA drift' % name
+        pred_csv = classification.get('predictions_file')
+        auc_csv = classification.get('aucs_file')
+        if unit_test_mode and not pred_csv and not auc_csv:
+            continue
+        if not pred_csv or not os.path.exists(pred_csv) or not auc_csv or not os.path.exists(auc_csv):
+            return False, '%s classification raw artifact missing' % name
+        if file_sha256(pred_csv) != classification.get('predictions_file_sha256'):
+            return False, '%s classification predictions SHA mismatch' % name
+        if file_sha256(auc_csv) != classification.get('aucs_file_sha256'):
+            return False, '%s classification AUCs SHA mismatch' % name
+        try:
+            pred_df = pd.read_csv(pred_csv)
+            missing_gt = [p for p in NIH_PATHOLOGIES if p not in pred_df.columns]
+            if missing_gt:
+                return False, '%s classification replay: missing ground-truth column(s): %s' % (name, missing_gt)
+            missing_prob = ['prob_' + p for p in NIH_PATHOLOGIES if 'prob_' + p not in pred_df.columns]
+            if missing_prob:
+                return False, '%s classification replay: missing probability column(s): %s' % (name, missing_prob)
+            strict = not unit_test_mode
+            fingerprints = verify_classification_artifact_structure(pred_df, strict=strict)
+            if strict and fingerprints['n_images'] != FROZEN_CLASSIFICATION_VAL_N_IMAGES:
+                return False, '%s classification rows != 10816' % name
+            auc_df = pd.read_csv(auc_csv)
+            if list(auc_df.columns)[:2] != ['label', 'auc']:
+                return False, '%s classification AUCs CSV schema invalid' % name
+            labels = auc_df['label'].astype(str).tolist()
+            if len(labels) != 14:
+                return False, '%s classification AUCs CSV has %d rows; exactly 14 rows required' % (name, len(labels))
+            if len(set(labels)) != 14:
+                return False, '%s classification AUCs CSV contains duplicate pathology rows' % name
+            if set(labels) != set(NIH_PATHOLOGIES):
+                return False, '%s classification AUCs CSV has unknown/missing pathologies: %s' % (name, sorted(set(labels) ^ set(NIH_PATHOLOGIES)))
+            values = pd.to_numeric(auc_df['auc'], errors='coerce').to_numpy(dtype=float)
+            if not np.isfinite(values).all():
+                return False, '%s classification AUCs CSV contains NaN/Inf' % name
+            replayed = {}
+            from sklearn.metrics import roc_auc_score
+            for pathology in NIH_PATHOLOGIES:
+                y_true = pred_df[pathology].to_numpy(dtype=float)
+                y_score = pred_df['prob_' + pathology].to_numpy(dtype=float)
+                if not np.isfinite(y_true).all() or not np.isfinite(y_score).all() or not np.all(np.isin(y_true, [0, 1])):
+                    return False, '%s classification contains non-finite/nonbinary values for %s' % (name, pathology)
+                if len(np.unique(y_true)) < 2:
+                    return False, '%s classification pathology %r has one class' % (name, pathology)
+                replayed[pathology] = float(roc_auc_score(y_true.astype(int), y_score))
+            csv_map = dict(zip(labels, values.tolist()))
+            mem_df = classification.get('auc_df')
+            if not isinstance(mem_df, pd.DataFrame) or set(mem_df.get('label', [] ).astype(str)) != set(NIH_PATHOLOGIES):
+                return False, '%s classification in-memory auc_df is malformed' % name
+            mem_map = dict(zip(mem_df['label'].astype(str), pd.to_numeric(mem_df['auc'], errors='coerce').astype(float)))
+            for pathology in NIH_PATHOLOGIES:
+                if not np.isfinite(mem_map[pathology]) or abs(replayed[pathology] - mem_map[pathology]) > 1e-7:
+                    return False, '%s classification per-pathology replay mismatch vs auc_df for %r' % (name, pathology)
+                if abs(replayed[pathology] - csv_map[pathology]) > 1e-7:
+                    return False, '%s classification per-pathology replay mismatch vs AUC CSV for %r' % (name, pathology)
+            replayed_macro = float(np.mean(list(replayed.values())))
+        except Exception as exc:
+            return False, '%s classification replay failed: %s' % (name, exc)
+        if abs(replayed_macro - macro) > 1e-7:
+            return False, '%s classification replayed macro AUC mismatch: %e != %e' % (name, replayed_macro, macro)
+
+    return True, 'VALID' if not unit_test_mode else 'DEVELOPMENT_VALID'
+
+
 def check_run_validity(b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manifest,
                        b_priv, c4_priv, b_class, c4_class, expected_epochs=250, unit_test_mode=False):
-    """Verify that all completion artifacts, hashes, non-NaN values, and split invariants hold."""
+    """Verify completion artifacts and replay integrity with structured INVALID results."""
+    return _check_run_validity_m14c3(
+        b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manifest,
+        b_priv, c4_priv, b_class, c4_class,
+        expected_epochs=expected_epochs, unit_test_mode=unit_test_mode
+    )
     if not (b_dev_manifest and c4_manifest and b_att_manifest and c4_att_manifest):
         return False, "Missing manifest"
 
@@ -576,10 +804,16 @@ def check_run_validity(b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manif
 
 # F4 (M1.4c): Stale scientific artifacts that must not pre-exist
 SCIENTIFIC_STALE_ARTIFACTS = [
+    # Run summaries and manifests
     'M2_S1_summary.json', 'M2_S1_C4_RESULT.md', 'checkpoint_manifest.json',
-    'generator_best_method_neutral.pth', 'checkpoint_latest.pth',
-    'best_attacker.pth', 'attacker_manifest.json',
+    'attacker_manifest.json',
+    # Checkpoints
+    'generator_best_method_neutral.pth', 'checkpoint_latest.pth', 'best_attacker.pth',
+    # Raw evaluation replays and serialized metrics
     'privacy_val_predictions.npz', 'classification_val_predictions.csv',
+    'classification_val_aucs.csv',
+    # Load-bearing training telemetry
+    'epoch_metrics.csv', 'train_log.jsonl',
 ]
 
 
@@ -597,27 +831,63 @@ def check_scientific_output_freshness(base_dir):
     return True
 
 
-def check_git_source_guard(required_ancestor='851c3f1a6912255c97345a7f53ed138e7ae7981d'):
-    """F9 (M1.4c): Verify tracked tree is clean and HEAD descends from certified execution code."""
+def check_git_source_guard(required_ancestor=None):
+    """F9: require the exact certified tag/branch/HEAD, clean tree, and no runtime drift.
+
+    ``required_ancestor`` is retained only for source compatibility with older callers;
+    ancestry alone is never sufficient for scientific execution.
+    """
+    def _run(args):
+        try:
+            result = subprocess.run(['git'] + list(args), cwd=ROOT, capture_output=True, text=True)
+        except FileNotFoundError as exc:
+            raise RuntimeError('Scientific git source guard: git not found') from exc
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or '').strip()
+            raise RuntimeError('Scientific git source guard: git command failed: git %s%s' % (
+                ' '.join(args), (': ' + detail) if detail else ''))
+        return result.stdout or ''
+
+    # Both tracked/index modifications and importable untracked runtime files are fatal.
     try:
-        # Tracked tree must be clean
-        result = subprocess.run(['git', 'diff', '--quiet'], cwd=ROOT, capture_output=True)
-        if result.returncode != 0:
-            raise RuntimeError("Scientific git source guard: tracked tree has uncommitted changes")
-        result = subprocess.run(['git', 'diff', '--cached', '--quiet'], cwd=ROOT, capture_output=True)
-        if result.returncode != 0:
-            raise RuntimeError("Scientific git source guard: index has staged changes")
-        # HEAD must descend from certified execution code commit
-        result = subprocess.run(
-            ['git', 'merge-base', '--is-ancestor', required_ancestor, 'HEAD'],
-            cwd=ROOT, capture_output=True
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                "Scientific git source guard: HEAD does not descend from certified execution code %s" % required_ancestor
-            )
-    except FileNotFoundError:
-        raise RuntimeError("Scientific git source guard: git not found")
+        subprocess_result = subprocess.run(['git', 'diff', '--quiet'], cwd=ROOT, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError('Scientific git source guard: git not found') from exc
+    if subprocess_result.returncode == 1:
+        raise RuntimeError('Scientific git source guard: tracked tree has uncommitted changes')
+    if subprocess_result.returncode != 0:
+        raise RuntimeError('Scientific git source guard: git diff command failed')
+    try:
+        subprocess_result = subprocess.run(['git', 'diff', '--cached', '--quiet'], cwd=ROOT, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError('Scientific git source guard: git not found') from exc
+    if subprocess_result.returncode == 1:
+        raise RuntimeError('Scientific git source guard: index has staged changes')
+    if subprocess_result.returncode != 0:
+        raise RuntimeError('Scientific git source guard: git cached-diff command failed')
+    untracked = _run(['ls-files', '--others', '--exclude-standard', '--', '*.py', '*.pyi']).splitlines()
+    untracked += _run(['ls-files', '--others', '--exclude-standard', '--', 'config_files', 'research_agent/m2_dev']).splitlines()
+    runtime_untracked = []
+    for path in untracked:
+        path = path.strip()
+        if not path or path in runtime_untracked:
+            continue
+        # Certification/evidence documents are allowed; runtime Python and config are not.
+        if (path.endswith(('.py', '.pyi'))
+                or path.startswith('config_files/')
+                or (path.startswith('research_agent/m2_dev/') and path.endswith(('.json', '.yaml', '.yml')))
+                or path == 'research_agent/M2_S1_EXECUTION_LOCK.json'):
+            runtime_untracked.append(path)
+    if runtime_untracked:
+        raise RuntimeError('Scientific git source guard: importable untracked runtime source/config: %s' % runtime_untracked)
+
+    branch = _run(['symbolic-ref', '--quiet', '--short', 'HEAD']).strip()
+    if branch != FROZEN_SOURCE_BRANCH:
+        raise RuntimeError('Scientific git source guard: branch %r != certified %r' % (branch, FROZEN_SOURCE_BRANCH))
+    head = _run(['rev-parse', 'HEAD']).strip()
+    tag_head = _run(['rev-parse', '%s^{commit}' % FROZEN_SOURCE_TAG]).strip()
+    if head != tag_head:
+        raise RuntimeError('Scientific git source guard: HEAD %s != %s target %s' % (head, FROZEN_SOURCE_TAG, tag_head))
     return True
 
 
@@ -635,14 +905,12 @@ def compute_classification_val_fingerprints():
 
 def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
     """Core orchestration pipeline reusable across full runs and integration smoke tests."""
-    # B8 / §12: Real non-unit-test execution globally requires --scientific-m2-s1
-    if not unit_test_mode and not getattr(args, 'scientific_m2_s1', False):
-        raise RuntimeError(
-            "Scientific M2-S1 execution requires --scientific-m2-s1 flag for all non-unit-test runs."
-        )
+    # Validate at the direct API boundary as well as parse_args().
+    validate_scientific_args(args, unit_test_mode=unit_test_mode)
 
-    # Preflight dependency & hash verification is UNCONDITIONAL in scientific mode / standard runs
+    # Authenticate the external execution lock before any scientific preflight or output.
     if not unit_test_mode:
+        verify_execution_lock_integrity()
         preflight_device = verify_environment_and_hashes()
         device = torch.device(args.device) if args.device else preflight_device
     else:
@@ -741,7 +1009,7 @@ def run_orchestration(args, out_base_dir=None, unit_test_mode=False):
 
         summary = {
             'protocol': 'M2-S1',
-            'run_status': 'VALID' if run_valid else 'INVALID',
+            'run_status': ('DEVELOPMENT_VALID' if unit_test_mode else 'VALID') if run_valid else ('DEVELOPMENT_INVALID' if unit_test_mode else 'INVALID'),
             'validity_reason': val_reason,
             'provenance': {
                 'generator_optimizer': 'Adam(lr=1e-4)',

@@ -22,6 +22,7 @@ TESTS = [
     'test_m14c_certification.py',
     'test_m14c1_forensic_closeout.py',
     'test_m14c2_closeout.py',
+    'test_m14c3_closeout.py',
 ]
 ALL_OK = True
 for t in TESTS:

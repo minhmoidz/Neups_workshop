@@ -554,8 +554,13 @@ def test_t215_promotion_fileset_no_forbidden_baggage():
     with open(fs_p) as f:
         data = json.load(f)
 
-    include = set(data.get('include_in_canonical_promotion', []))
-    retain = set(data.get('retain_on_audit_branch_only', []))
+    include_list = data.get('include_in_canonical_promotion', [])
+    retain_list = data.get('retain_on_audit_branch_only', [])
+    assert isinstance(include_list, list) and isinstance(retain_list, list), 'Promotion classifications must be lists'
+    assert len(include_list) == len(set(include_list)), 'Duplicate paths in include promotion list'
+    assert len(retain_list) == len(set(retain_list)), 'Duplicate paths in retain audit-only list'
+    include = set(include_list)
+    retain = set(retain_list)
 
     # Invariant: Disjoint sets
     overlap = include.intersection(retain)
@@ -598,22 +603,26 @@ def test_t215_promotion_fileset_no_forbidden_baggage():
         assert req in include, "Required promotion file %s missing from include set" % req
 
     # Invariant: Complete git coverage against canonical SHA c6431310061c04e54dce82d30ae6e0ce24440562
-    canonical_sha = data.get('canonical_base_commit', 'c6431310061c04e54dce82d30ae6e0ce24440562')
-    try:
-        res = subprocess.run(
-            ['git', 'diff', '--name-only', f'{canonical_sha}..HEAD'],
-            cwd=ROOT, capture_output=True, text=True
-        )
-        if res.returncode == 0 and res.stdout.strip():
-            changed_files = set(res.stdout.strip().splitlines())
-            unclassified = changed_files - all_classified
-            assert len(unclassified) == 0, (
-                "Unclassified canonical->audit changed files detected in git diff: %s. "
-                "Every changed file must be in either include_in_canonical_promotion or retain_on_audit_branch_only."
-                % unclassified
-            )
-    except Exception:
-        pass
+    canonical_sha = data.get('canonical_base_commit')
+    assert canonical_sha == 'c6431310061c04e54dce82d30ae6e0ce24440562', 'Promotion fileset canonical SHA drift'
+    res = subprocess.run(
+        ['git', 'diff', '--name-only', '%s..HEAD' % canonical_sha],
+        cwd=ROOT, capture_output=True, text=True
+    )
+    assert res.returncode == 0, 'Git diff failed: %s' % (res.stderr or res.stdout)
+    untracked_res = subprocess.run(
+        ['git', 'ls-files', '--others', '--exclude-standard'],
+        cwd=ROOT, capture_output=True, text=True
+    )
+    assert untracked_res.returncode == 0, 'Git untracked listing failed: %s' % (untracked_res.stderr or untracked_res.stdout)
+    changed_list = [line for line in res.stdout.splitlines() if line]
+    changed_list.extend([line for line in untracked_res.stdout.splitlines() if line])
+    assert len(changed_list) == len(set(changed_list)), 'Git diff/untracked listing returned duplicate paths'
+    changed_files = set(changed_list)
+    assert changed_files == all_classified, (
+        'Promotion classification must exactly equal canonical->audit diff; '
+        'missing=%s extra=%s' % (sorted(changed_files - all_classified), sorted(all_classified - changed_files))
+    )
 
     return True
 

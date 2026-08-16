@@ -133,7 +133,7 @@ def test_t116_b_dev_config_sha_mismatch_hard_fails():
             verify_frozen_scientific_configs(lock_path=lock_p)
             assert False, "Should have failed on B_dev config SHA mismatch"
         except RuntimeError as e:
-            assert "B_dev config SHA mismatch" in str(e)
+            assert "Execution lock SHA mismatch" in str(e)
     return True
 
 
@@ -147,7 +147,7 @@ def test_t117_c4_config_sha_mismatch_hard_fails():
             verify_frozen_scientific_configs(lock_path=lock_p)
             assert False, "Should have failed on C4 config SHA mismatch"
         except RuntimeError as e:
-            assert "C4 config SHA mismatch" in str(e)
+            assert "Execution lock SHA mismatch" in str(e)
     return True
 
 
@@ -161,7 +161,7 @@ def test_t118_attacker_config_sha_mismatch_hard_fails():
             verify_frozen_scientific_configs(lock_path=lock_p)
             assert False, "Should have failed on attacker config SHA mismatch"
         except RuntimeError as e:
-            assert "Attacker config SHA mismatch" in str(e)
+            assert "Execution lock SHA mismatch" in str(e)
     return True
 
 
@@ -433,7 +433,7 @@ def test_t130_device_flag_does_not_bypass_preflight():
             self.attacker_seed = 42
             self.device = 'cpu'
 
-    # Mock verify_environment_and_hashes to track if it was called
+    # Scientific CPU must be rejected at the argument boundary, before preflight.
     called = []
     def fake_verify():
         called.append(True)
@@ -442,12 +442,12 @@ def test_t130_device_flag_does_not_bypass_preflight():
     with mock.patch.object(run_m2_s1, 'verify_environment_and_hashes', side_effect=fake_verify):
         with tempfile.TemporaryDirectory() as tmp_base:
             try:
-                # non-unit_test_mode must call verify_environment_and_hashes
                 run_m2_s1.run_orchestration(MockArgsDevice(), out_base_dir=tmp_base, unit_test_mode=False)
-            except Exception:
-                pass  # may fail downstream due to missing files in tmp_base
+                assert False, 'scientific CPU must fail before preflight'
+            except (RuntimeError, ValueError):
+                pass
 
-    assert len(called) > 0, "verify_environment_and_hashes was NOT called when --device was supplied!"
+    assert len(called) == 0, "CPU rejection must precede dependency preflight"
     return True
 
 
@@ -458,12 +458,12 @@ def test_t131_scientific_mode_rejects_arm_not_all():
         parse_args()
         assert False, "Should have rejected --arm B_dev in scientific mode"
     except ValueError as e:
-        assert "requires --arm all" in str(e)
+        assert "arm" in str(e) and "all" in str(e)
     return True
 
 
 def test_t132_t109_reaches_exact_10816_count_guard():
-    """T132: Classification evaluator reaches exact 10,816-image contract guard."""
+    """T132: Scientific classification rejects injected dataloader before production construction."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         fake_gen_p = os.path.join(tmp_dir, 'gen.pth')
         torch.save(UNet(1, 2, 32).state_dict(), fake_gen_p)
@@ -477,9 +477,9 @@ def test_t132_t109_reaches_exact_10816_count_guard():
                 generator_checkpoint=fake_gen_p,
                 device='cpu'
             )
-            assert False, "Should have raised RuntimeError on images count != 10816"
+            assert False, "Should have rejected injected scientific dataloader"
         except RuntimeError as e:
-            assert "Classification scientific VAL requires exactly 10,816 images, got 50" in str(e)
+            assert "does not accept an injected dataloader" in str(e) or "requires CUDA" in str(e)
     return True
 
 
@@ -532,7 +532,7 @@ def test_t134_invalid_run_cannot_produce_promote_verdict():
         # Mock check_run_validity to return False
         with mock.patch.object(run_m2_s1, 'check_run_validity', return_value=(False, 'Injected invalid run error')):
             summary = run_m2_s1.run_orchestration(args, out_base_dir=tmp_dir, unit_test_mode=True)
-            assert summary['run_status'] == 'INVALID', "Expected run_status == INVALID"
+            assert summary['run_status'] == 'DEVELOPMENT_INVALID', "Expected development invalid status"
             assert summary['verdict'] == 'C4 S1: INVALID — NO SCIENTIFIC VERDICT', "Expected INVALID verdict, got: %s" % summary['verdict']
             assert summary['gates']['privacy_gate_status'] == 'NOT_EVALUATED_DUE_TO_INVALID_RUN'
             assert summary['gates']['classification_gate_status'] == 'NOT_EVALUATED_DUE_TO_INVALID_RUN'

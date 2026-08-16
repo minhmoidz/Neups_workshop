@@ -303,7 +303,8 @@ def test_t149_attacker_nan_train_loss_hard_fails():
         anonymize_fn=lambda x: x,
         training_loader=loader,
         validation_loader=loader,
-        image_size=64
+        image_size=64,
+        unit_test_mode=True
     )
     try:
         attacker.train_epoch()
@@ -333,7 +334,8 @@ def test_t150_attacker_inf_validation_loss_hard_fails():
         anonymize_fn=lambda x: x,
         training_loader=loader,
         validation_loader=loader,
-        image_size=64
+        image_size=64,
+        unit_test_mode=True
     )
     try:
         attacker.validate_selection()
@@ -363,7 +365,8 @@ def test_t151_attacker_nonfinite_params_hard_fail():
         anonymize_fn=lambda x: x,
         training_loader=loader,
         validation_loader=loader,
-        image_size=64
+        image_size=64,
+        unit_test_mode=True
     )
     try:
         attacker.train_epoch()
@@ -386,7 +389,8 @@ def test_t152_attacker_manifest_numerical_validity_required():
             anonymize_fn=lambda x: x,
             training_loader=loader,
             validation_loader=loader,
-            image_size=64
+            image_size=64,
+            unit_test_mode=True
         )
         hist = attacker.run(output_dir=tmp_dir)
         manifest_p = os.path.join(tmp_dir, 'attacker_manifest.json')
@@ -869,14 +873,21 @@ def test_t172_scientific_git_dirty_index_hard_fails():
 
 
 def test_t173_untracked_files_allowed_by_git_guard():
-    """T173 (F9): Untracked research artifacts / logs do not fail the git guard."""
+    # Legacy name retained; exact certified source identity is now required.
+    """T173 (F9): Exact certified source identity is mandatory."""
     with mock.patch('subprocess.run') as mock_run:
-        # Mock git diff returning 0 (clean tracked tree)
-        mock_res = mock.MagicMock()
-        mock_res.returncode = 0
-        mock_run.return_value = mock_res
-
-        assert run_m2_s1.check_git_source_guard() is True
+        clean = mock.MagicMock(returncode=0, stdout='', stderr='')
+        mock_run.side_effect = [
+            clean, clean, clean, clean,
+            mock.MagicMock(returncode=0, stdout='research/method-restart\n', stderr=''),
+            mock.MagicMock(returncode=0, stdout='abc\n', stderr=''),
+            mock.MagicMock(returncode=1, stdout='', stderr='missing tag'),
+        ]
+        try:
+            run_m2_s1.check_git_source_guard()
+            assert False, 'missing certified tag must fail'
+        except RuntimeError as exc:
+            assert 'git command failed' in str(exc) or 'tag' in str(exc)
     return True
 
 

@@ -223,7 +223,8 @@ def test_t64_selected_checkpoint_sha_propagates_attacker():
             device='cpu',
             generator_checkpoint=fake_ckpt,
             training_loader=loader,
-            validation_loader=loader
+            validation_loader=loader,
+            unit_test_mode=True
         )
         assert att.generator_checkpoint == fake_ckpt
         assert file_sha256(att.generator_checkpoint) == expected_sha
@@ -356,13 +357,16 @@ def test_t72_scientific_mode_requires_explicit_image_path():
 
 
 def test_t73_unit_test_mocks_refused_in_scientific_launcher():
-    """T73: Scientific execution enforces unit_test_mode=False."""
-    runner = M2AnonymizerRunner(
-        arm='B_dev',
-        config={'image_path': '/home/minhtt/datasets/nih/images/'},
-        unit_test_mode=False
-    )
-    assert runner.unit_test_mode is False
+    """T73: Scientific execution rejects in-memory/mock config seams."""
+    try:
+        M2AnonymizerRunner(
+            arm='B_dev',
+            config={'image_path': '/home/minhtt/datasets/nih/images/'},
+            unit_test_mode=False
+        )
+        assert False, 'scientific launcher must reject in-memory config'
+    except RuntimeError as exc:
+        assert 'in-memory dict' in str(exc) or 'canonical config' in str(exc)
     return True
 
 

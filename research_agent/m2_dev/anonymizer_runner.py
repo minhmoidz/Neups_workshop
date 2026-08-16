@@ -59,6 +59,12 @@ from .evaluator_common import (
     build_dev_anonymizer_loaders,
     compute_epoch_totals,
     select_method_neutral_best,
+    verify_execution_lock_integrity,
+    compute_expected_train_order_hashes,
+    FROZEN_B_DEV_CONFIG_PATH,
+    FROZEN_C4_CONFIG_PATH,
+    FROZEN_B_DEV_CONFIG_SHA,
+    FROZEN_C4_CONFIG_SHA,
 )
 
 
@@ -87,6 +93,21 @@ class M2AnonymizerRunner:
         firewall_check('dev')
         if arm not in ('B_dev', 'C4'):
             raise ValueError("arm must be 'B_dev' or 'C4', got %r" % arm)
+        if not unit_test_mode:
+            if device is not None and getattr(device, 'type', str(device).split(':')[0]) == 'cpu':
+                raise RuntimeError('Scientific anonymizer execution requires CUDA; CPU is unit-test only')
+            if device is None and not torch.cuda.is_available():
+                raise RuntimeError('Scientific anonymizer execution requires CUDA')
+            if any(value is not None for value in (ac_model, verification_model, training_loader, validation_loader, train_sampler)):
+                raise RuntimeError('Scientific anonymizer execution does not accept injected models/loaders/samplers')
+            if seed != 42:
+                raise RuntimeError('Scientific anonymizer seed must be exactly 42')
+            if isinstance(config, dict):
+                raise RuntimeError('Scientific anonymizer execution requires the canonical config file, not an in-memory dict')
+            expected_path = FROZEN_C4_CONFIG_PATH if arm == 'C4' else FROZEN_B_DEV_CONFIG_PATH
+            if config is not None and os.path.abspath(config) != os.path.abspath(expected_path):
+                raise RuntimeError('Scientific anonymizer config path is not canonical: %s' % config)
+            verify_execution_lock_integrity()
 
         self.arm = arm
         self.seed = seed
@@ -114,6 +135,11 @@ class M2AnonymizerRunner:
                 cfg_file = 'config_dev_c4.json' if arm == 'C4' else 'config_dev_restored_baseline.json'
                 default_p = os.path.join(ROOT, 'config_files', cfg_file)
                 self.config_path = default_p if os.path.exists(default_p) else None
+
+        if not unit_test_mode:
+            expected_cfg_sha = FROZEN_C4_CONFIG_SHA if arm == 'C4' else FROZEN_B_DEV_CONFIG_SHA
+            if not self.config_path or file_sha256(self.config_path) != expected_cfg_sha:
+                raise RuntimeError('Scientific anonymizer config SHA mismatch')
 
         self.output_dir = output_dir or os.path.join(ROOT, 'research_runs', 'M2_S1', arm, 'seed_%d' % seed)
         os.makedirs(self.output_dir, exist_ok=True)
@@ -210,6 +236,14 @@ class M2AnonymizerRunner:
                 self.config, seed=self.seed, num_workers=self.config.get('num_workers', 0)
             )
 
+        self.expected_train_order_hashes = None
+        if not self.unit_test_mode:
+            pair_file = getattr(getattr(self.training_loader, 'dataset', None), 'image_pairs', None)
+            if pair_file is None:
+                raise RuntimeError('Scientific anonymizer loader lacks canonical pair rows')
+            pair_path = os.path.join(ROOT, 'image_pairs', 'image_pairs_training_10000.txt')
+            self.expected_train_order_hashes = compute_expected_train_order_hashes(pair_path, seed=self.seed, epochs=250)
+
         # Preprocessing transforms for SNN and classifier updates
         self.resize_224 = transforms.Resize((224, 224))
         self.imagenet_normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -220,6 +254,7 @@ class M2AnonymizerRunner:
         self.best_selection_total = float('inf')
         self.best_epoch = None
         self.gradient_norm_diagnostics = {}
+        self.gradient_diagnostics_failed = False
         self.best_checkpoint_path = os.path.join(self.output_dir, METHOD_NEUTRAL_CKPT_NAME)
         self.latest_checkpoint_path = os.path.join(self.output_dir, 'checkpoint_latest.pth')
 
@@ -241,6 +276,22 @@ class M2AnonymizerRunner:
         grids = self.gauss_filter(grids)
         grids = grids.permute(0, 2, 3, 1)
         return F.grid_sample(image, grids, padding_mode='border', align_corners=True)
+
+    @staticmethod
+    def _assert_finite_tensor(value, label):
+        if not torch.isfinite(value).all():
+            raise FloatingPointError('%s contains NaN/Inf' % label)
+
+    def _assert_optimizer_gradients(self, optimizer, label):
+        for group in optimizer.param_groups:
+            for parameter in group['params']:
+                if parameter.grad is not None:
+                    self._assert_finite_tensor(parameter.grad, '%s gradient' % label)
+
+    def _assert_optimizer_parameters(self, optimizer, label):
+        for group in optimizer.param_groups:
+            for parameter in group['params']:
+                self._assert_finite_tensor(parameter.data, '%s parameter' % label)
 
     def train_epoch(self, epoch):
         """Execute one training epoch with exact model and optimizer updates."""
@@ -318,13 +369,22 @@ class M2AnonymizerRunner:
                         'feature_base_ratio': float(ratio)
                     }
                 except Exception as _diag_e:
+                    self.gradient_diagnostics_failed = True
                     self.gradient_norm_diagnostics[epoch] = {'epoch': epoch, 'error': str(_diag_e)}
+                    if not self.unit_test_mode:
+                        raise FloatingPointError('Required C4 gradient diagnostic failed at epoch %d: %s' % (epoch, _diag_e)) from _diag_e
 
-            # Optimize Generator
+            # Optimize Generator. Check the load-bearing loss before backward,
+            # gradients after backward, and parameters after the optimizer step.
+            self._assert_finite_tensor(gen_loss, 'generator loss')
+            self._assert_finite_tensor(ac_total_loss, 'auxiliary classifier loss')
+            self._assert_finite_tensor(privacy_term, 'privacy loss')
             self.optimizer_g.zero_grad()
             gen_loss.backward()
+            self._assert_optimizer_gradients(self.optimizer_g, 'generator')
             self.last_gen_grads = [p.grad.detach().clone() for p in self.generator.parameters() if p.grad is not None]
             self.optimizer_g.step()
+            self._assert_optimizer_parameters(self.optimizer_g, 'generator')
 
             # 4. Update Verification Critic
             self.verification_loss.verification_model.train()
@@ -335,9 +395,12 @@ class M2AnonymizerRunner:
             outputs_snn = self.verification_loss.verification_model(inputs1_snn, inputs2_snn).squeeze()
             labels_id_cast = labels_id.type_as(outputs_snn)
             loss_ver_critic = self.criterion_ver(outputs_snn, labels_id_cast)
+            self._assert_finite_tensor(loss_ver_critic, 'verifier critic loss')
             loss_ver_critic.backward()
+            self._assert_optimizer_gradients(self.optimizer_ver, 'verifier critic')
             self.last_ver_grads = [p.grad.detach().clone() for p in self.verification_loss.verification_model.parameters() if p.grad is not None]
             self.optimizer_ver.step()
+            self._assert_optimizer_parameters(self.optimizer_ver, 'verifier critic')
             self.verification_loss.verification_model.eval()
 
             # 5. Update Auxiliary Classifier Critic
@@ -347,9 +410,12 @@ class M2AnonymizerRunner:
             self.optimizer_ac.zero_grad()
             outputs_ac = self.ac_loss.ac_model(inputs_ac)
             loss_ac_critic = self.criterion_ac(outputs_ac, labels)
+            self._assert_finite_tensor(loss_ac_critic, 'auxiliary classifier critic loss')
             loss_ac_critic.backward()
+            self._assert_optimizer_gradients(self.optimizer_ac, 'auxiliary classifier critic')
             self.last_clf_grads = [p.grad.detach().clone() for p in self.ac_loss.ac_model.parameters() if p.requires_grad and p.grad is not None]
             self.optimizer_ac.step()
+            self._assert_optimizer_parameters(self.optimizer_ac, 'auxiliary classifier critic')
             self.ac_loss.ac_model.eval()
 
             # Accumulate logging metrics
@@ -459,7 +525,9 @@ class M2AnonymizerRunner:
         return path
 
     def load_resumable_checkpoint(self, path=None):
-        """Restore full deterministic state from a saved checkpoint."""
+        """Restore state only for explicit unit tests; scientific resume is forbidden."""
+        if not self.unit_test_mode:
+            raise RuntimeError('Scientific resume is not certified; restart from epoch 0')
         path = path or self.latest_checkpoint_path
         if not os.path.exists(path):
             raise FileNotFoundError("Resumable checkpoint not found: %s" % path)
@@ -490,6 +558,11 @@ class M2AnonymizerRunner:
 
     def run(self, max_epochs=None):
         """Execute the full training and validation loop with method-neutral selection."""
+        if not self.unit_test_mode:
+            if max_epochs is not None and max_epochs != 250:
+                raise RuntimeError('Scientific anonymizer max_epochs must be exactly 250')
+            if self.seed != 42:
+                raise RuntimeError('Scientific anonymizer seed must be exactly 42')
         self.requested_max_epochs = max_epochs or self.max_epochs
 
         for epoch in range(self.start_epoch, self.requested_max_epochs):
@@ -499,6 +572,11 @@ class M2AnonymizerRunner:
             elapsed = time.time() - t0
             peak_vram = torch.cuda.max_memory_allocated(self.device) / (1024 * 1024) if (torch.cuda.is_available() and getattr(self.device, 'type', '') == 'cuda') else 0.0
             order_sha = self.train_sampler.get_epoch_order_hash(epoch) if self.train_sampler is not None else None
+            if not self.unit_test_mode:
+                if order_sha is None or self.expected_train_order_hashes is None:
+                    raise RuntimeError('Scientific run missing runtime TRAIN order hash')
+                if epoch >= len(self.expected_train_order_hashes) or order_sha != self.expected_train_order_hashes[epoch]:
+                    raise RuntimeError('Scientific TRAIN order hash mismatch at epoch %d' % epoch)
 
             # Check for NaN / Inf in all load-bearing and diagnostic scalars
             all_vals = list(train_m.values()) + list(val_m.values())
@@ -506,7 +584,10 @@ class M2AnonymizerRunner:
                 diag = self.gradient_norm_diagnostics[epoch]
                 all_vals.extend([diag.get('base_grad_norm'), diag.get('feature_grad_norm'), diag.get('feature_base_ratio')])
 
-            has_nan_inf = any(not np.isfinite(v) for v in all_vals if (v is not None and isinstance(v, (int, float, np.floating, np.integer))))
+            has_nan_inf = self.gradient_diagnostics_failed or any(
+                not np.isfinite(v) for v in all_vals
+                if (v is not None and isinstance(v, (int, float, np.floating, np.integer)))
+            )
 
             combined = {
                 'epoch': epoch,
@@ -540,8 +621,9 @@ class M2AnonymizerRunner:
                 self.best_epoch = epoch
                 torch.save(self.generator.state_dict(), self.best_checkpoint_path)
 
-            # Save latest checkpoint for crash recovery
-            self.save_resumable_checkpoint(epoch)
+            # Scientific continuation is not certified; only unit tests may save resumable state.
+            if self.unit_test_mode:
+                self.save_resumable_checkpoint(epoch)
 
             # Write epoch metrics to CSV
             df = pd.DataFrame(self.epoch_metrics)
@@ -575,10 +657,11 @@ class M2AnonymizerRunner:
             'final_completed_epoch': final_ep,
             'total_epochs': self.requested_max_epochs,
             'nan_inf_detected': self.nan_inf_detected,
-            'numerical_validity': 'PASS' if (not self.nan_inf_detected and epochs_done > 0) else 'FAIL',
+            'numerical_validity': 'PASS' if (not self.nan_inf_detected and not self.gradient_diagnostics_failed and epochs_done > 0) else 'FAIL',
             'seed': self.seed,
             'acloss_sha256': self.acloss_sha,
             'gradient_norm_diagnostics': self.gradient_norm_diagnostics,
+            'gradient_diagnostics_failed': self.gradient_diagnostics_failed,
         }
         with open(os.path.join(self.output_dir, 'checkpoint_manifest.json'), 'w') as f:
             json.dump(manifest, f, indent=2)

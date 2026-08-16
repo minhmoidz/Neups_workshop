@@ -18,7 +18,7 @@ def is_test_request(mode):
     """True iff a mode string requests the closed TEST benchmark."""
     if mode is None:
         return False
-    return str(mode).lower() in ('test', 'testing', 'final_test')
+    return str(mode).strip().lower() in ('test', 'testing', 'final_test', 'eval_test')
 
 
 class TestFirewall:
@@ -52,7 +52,7 @@ def _git_or_none(args):
         return None
 
 
-def provenance_record(config_path=None, extra=None, allow=True, mode='dev'):
+def provenance_record(config_path=None, extra=None, allow=False, mode='dev'):
     """Deterministic runtime+config+checkpoint provenance dict."""
     import torch
     TestFirewall(allow=allow).check(mode)  # fail-closed for TEST unless explicitly allowed
