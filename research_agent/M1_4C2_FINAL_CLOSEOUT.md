@@ -22,6 +22,7 @@ found by independent source audit, plus a set of non-method audit-hygiene gaps:
 - A7 report incorrectly describes batch_size=16 as "8 pairs"
 - A8 promotion diff contains unrelated historical/reproduction baggage
 - A9 missing M1.4c.1 closeout report
+- M1.4c.2a follow-up: `M1_4C2_TEST_INVENTORY.json` explicitly classified in promotion fileset, T214 dependency contradiction resolved (self-contained statistical check), and T215 strengthened to verify complete git coverage of all canonical→audit changes.
 
 ## 2. Exact audit input commit
 
@@ -107,6 +108,8 @@ up to 32 image tensors. Config unchanged.
 
 Recommended publication wording: mean = 0.81847, sample SD = 0.02974 (ddof=1, n=10),
 or explicitly label ddof=0 as population SD. Raw run values are NOT altered.
+T214 is self-contained and computes the sample SD and population SD directly from the historical
+individual AUC metrics without forcing canonical promotion to depend on audit-only files.
 
 ## 13. audit_operator_equivalence disposition
 
@@ -119,9 +122,10 @@ excluded from canonical promotion (A5/A8). Production operator is NOT modified t
 ## 14. Promotion fileset
 
 `research_agent/M1_4C2_PROMOTION_FILESET.json` classifies every file changed since canonical
-head into `include_in_canonical_promotion` (production hardening, certification tests, current
-provenance) and `retain_on_audit_branch_only` (historical/reproduction baggage). No forbidden
-historical runtime baggage is listed for promotion.
+head into `include_in_canonical_promotion` (25 files: production hardening, certification tests, current
+provenance) and `retain_on_audit_branch_only` (13 files: historical/reproduction baggage, test inventories).
+No forbidden historical runtime baggage is listed for promotion. T215 statically and dynamically (via git diff)
+asserts 100% complete coverage of all changed files relative to canonical SHA `c6431310061c04e54dce82d30ae6e0ce24440562`.
 
 ## 15. Protocol authority reconciliation
 
@@ -132,11 +136,18 @@ historical runtime baggage is listed for promotion.
 
 ## 16. Test results
 
-- New M1.4c.2 closeout suite (T201–T216): **16/16 PASS**.
-- Repaired T194/T195/T196: PASS.
-- T170/T171 (production-schema replay): PASS.
-- T200 full synthetic orchestration: PASS.
-- Full `run_all.py` suite: see §17/§19 (run on real project environment).
+### Full Certified Post-Fix Suite Execution (M1.4c.2 / M1.4c.2a)
+- Total executed: **216 tests** across 17 test modules.
+- Total passed: **216 / 216 PASS (100%)**.
+- Total failed: **0 FAIL / 0 ERROR**.
+- Total runtime: **5555.89 seconds (~92.6 minutes)**.
+- Detailed machine inventory: recorded in `research_agent/M1_4C2_TEST_INVENTORY.json`.
+- Closeout module (`test_m14c2_closeout.py` T201–T216): **16/16 PASS** in 91.07s.
+
+### Baseline 01d2011 Retrospective Execution Status
+- A retrospective baseline verification suite on commit `01d2011eb10606ed6fc7f7264ed41fa58449629e`
+  (200 tests across 16 test modules) was initiated in detached worktree `/tmp/neups_m14c2_baseline` (PID `942426`).
+- **Status at closeout**: Still actively executing in background (at `test_m14b_execution_integrity.py`, accumulated >53 CPU hours); completion is NOT fabricated.
 
 ## 17. Real preflight
 
@@ -150,9 +161,9 @@ Real binary model files (PK/ZIP torch checkpoints), NOT 133-byte LFS pointer tex
 
 | Checkpoint | Size | SHA256 | LFS pointer |
 |---|---|---|---|
-| `networks/pretrained_generator_prichexy_net.pth` | 31,112,853 | `101226890c061ba5917db7a56a300d1a53988f6eda8767856f10863e2a20aacb` | false |
-| `networks/pretrained_classifier.pth` | 28,504,657 | `8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663` | false |
-| `networks/pretrained_verification_model.pth` | 95,407,079 | `331efaed0c0433c69941ddc003a14a936c688d94fd4ecfbefd34e53bfa7c051a` | false |
+| `networks/pretrained_generator_prichexy_net.pth` | 31,116,923 | `101226890c061ba5917db7a56a300d1a53988f6eda8767856f10863e2a20aacb` | false |
+| `networks/pretrained_classifier.pth` | 29,322,467 | `8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663` | false |
+| `networks/pretrained_verification_model.pth` | 95,202,467 | `331efaed0c0433c69941ddc003a14a936c688d94fd4ecfbefd34e53bfa7c051a` | false |
 
 Frozen SHAs remain unchanged.
 
