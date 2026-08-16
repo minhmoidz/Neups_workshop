@@ -1,7 +1,7 @@
 # M1.4c FINAL FORENSIC CERTIFICATION
 ## Complete Execution Semantics, Cryptographic Lineage, Split Provenance, Numerical Robustness, Independent Parity, and Artifact Isolation Proof
 
-> **Notice**: Corrected by M1.4c.1 after independent forensic review.
+> **Notice**: Historical M1.4c certification record. M1.4c.3 boundary closeout supersedes its disposition; this document is evidence, not execution authority.
 
 **Date**: August 16, 2026  
 **Auditor**: Antigravity Autonomous Research Agent (Forensic Certification Subagent)  
@@ -11,7 +11,7 @@
 **Certified Execution Code Lineage**: `851c3f1a6912255c97345a7f53ed138e7ae7981d`  
 **Pristine Base Commit**: `29245d1f71571898d9527417df4ae3f63a8695f6`  
 **Audit Verification Branch**: `audit/m2-final-certification`  
-**Certification Status**: **100% CERTIFIED (ALL SUITES PASS — ZERO REGRESSION — ZERO TEST SPLIT CONTAMINATION)**
+**Certification Status**: **HISTORICAL EVIDENCE ONLY — NOT A SCIENTIFIC EXECUTION CERTIFICATION**
 
 ---
 
@@ -234,14 +234,14 @@ An independent, zero-dependency reference implementation (`m0_tests/pristine_ref
 ## §20 Git Source & Lineage Guard Proof
 
 - Scientific execution enforces that `git status --porcelain` on tracked files is completely clean (`T172`).
-- Untracked artifacts or log files do not trip the git integrity guard (`T173`).
+- Earlier M1.4c wording about permissive untracked-file handling is superseded by the M1.4c.3 exact source-identity guard; see `research_agent/M1_4C3_FINAL_EXECUTION_BOUNDARY_CLOSEOUT.md` for the current authority.
 - Canonical HEAD on `origin/research/method-restart` is verified at `c6431310061c04e54dce82d30ae6e0ce24440562`.
 
 ---
 
 ## §21 Complete Test Suite Matrix (T1–T176+)
 
-All test suites across the repository were executed sequentially via `m0_tests/run_all.py`. Every single test passed with zero failures.
+Corrected by M1.4c.1 after independent forensic review. This historical document is no longer the authoritative cross-suite execution record. Current suite totals and promotion blockers must be taken from the source-bound M1.4c.3 inventory and closeout records, not from this historical report.
 
 ---
 
@@ -270,16 +270,18 @@ All test suites across the repository were executed sequentially via `m0_tests/r
 
 ---
 
-## §25 Final Certification Verdict & Sign-Off
+## §25 Historical Disposition (Superseded)
 
-```
-========================================================================================
-FINAL CERTIFICATION VERDICT: FULL PASS (M1.4c FORENSIC CERTIFICATION COMPLETE)
-========================================================================================
-All cryptographic, architectural, numerical, and split invariants verified.
-Pristine reference parity certified to <= 1e-6 precision.
-Test split firewall closed and verified.
-Lineage preserved: research/method-restart @ c6431310061c04e54dce82d30ae6e0ce24440562.
-M2-S1 experiment pipeline is 100% hardened and certified.
-========================================================================================
-```
+The earlier FULL PASS wording is withdrawn. It was not sufficient to establish exact
+source identity, direct scientific API closure, strict replay-size provenance, or
+fail-closed numerical diagnostics. This file must not be used to authorize M2/S1.
+
+## §26 M1.4c.3 Boundary-Closeout Disposition
+
+M1.4c.3 is an implementation and test closeout only. No real M2, S1, S2, or TEST
+execution occurred in this pass. The audit branch is not the certified canonical
+branch and the external certified tag is intentionally absent here.
+
+**Disposition: BLOCKED — SMALL CERTIFICATION/PROMOTION CLOSEOUT REQUIRED.**
+
+The authoritative next record is `research_agent/M1_4C3_FINAL_EXECUTION_BOUNDARY_CLOSEOUT.md`.
