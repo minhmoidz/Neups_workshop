@@ -16,6 +16,17 @@ research_agent/M2_S1_EXECUTION_LOCK.json (v1.4.2+)
 
 All experimental scripts, assertions, evaluators, and preflight routines must validate against the parameters, hashes, and invariants declared in `M2_S1_EXECUTION_LOCK.json`.
 
+### Distinct roles of the two protocol documents (M1.4c.2 reconciliation)
+
+There is **exactly one scientific method authority** and **exactly one certification evidence authority**. They do not compete; each governs a distinct concern:
+
+| Document | Role | Authority |
+|---|---|---|
+| `research_agent/M2_S1_EXECUTION_LOCK.json` | **Scientific method / frozen scientific execution choices** (operator, mu, batch size, optimizers, epochs, seeds, pair SHAs, checkpoint SHAs). | Supreme — scientific execution parameters. |
+| `research_agent/M1_4C_CERTIFICATION_MANIFEST.json` | **Certification evidence derived from those choices** (frozen checksums, split fingerprints, firewall status, patient-separation contracts). | Evidence record — must NOT alter scientific method hyperparameters. |
+
+**Invariant**: `M1_4C_CERTIFICATION_MANIFEST.json` may not override or redefine any scientific method hyperparameter or execution choice that is governed by `M2_S1_EXECUTION_LOCK.json`. In any conflict, the execution lock and certified code under `research_agent/m2_dev/` take absolute precedence. The certification manifest never contains its own self-referential lock hash.
+
 ---
 
 ## 2. Superseded Historical Documents

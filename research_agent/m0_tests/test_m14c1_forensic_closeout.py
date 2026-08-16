@@ -333,7 +333,11 @@ def test_t194_replay_validation_missing_raw_predictions():
 
 
 def test_t195_replay_validation_classification_auc_recompute():
-    """T195: check_run_validity verifies replayed classification macro AUC from raw CSV."""
+    """T195: check_run_validity verifies replayed classification macro AUC from raw CSV.
+
+    Uses the REAL production writer schema (<Pathology> / prob_<Pathology>, AUC CSV
+    with 'label'/'auc') exactly as produced by classify_val_dataset().
+    """
     with tempfile.TemporaryDirectory() as tmp:
         gen_p = os.path.join(tmp, 'gen.pth')
         att_p = os.path.join(tmp, 'att.pth')
@@ -349,22 +353,21 @@ def test_t195_replay_validation_classification_auc_recompute():
         np.savez_compressed(npz_p, y_true=y_true, y_score=y_score)
         npz_sha = file_sha256(npz_p)
 
-        # Create classification predictions CSV
+        # Create classification predictions CSV in PRODUCTION schema.
         pred_p = os.path.join(tmp, 'class_pred.csv')
-        PRED_LABEL = [
-            'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
-            'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
-            'Pleural_Thickening', 'Hernia'
-        ]
-        data = {}
-        for p in PRED_LABEL:
-            data['true_%s' % p] = [0, 1, 0, 1]
-            data['pred_%s' % p] = [0.1, 0.9, 0.2, 0.8]
-        pd.DataFrame(data).to_csv(pred_p, index=False)
+        rows = [{'Image Index': 'img_%d.png' % i} for i in range(4)]
+        for i in range(4):
+            for k, p in enumerate(REQUIRED_PATHOLOGY_COLUMNS):
+                rows[i][p] = [0, 1, 0, 1][i]
+                rows[i]['prob_' + p] = [0.1, 0.9, 0.2, 0.8][i]
+        pred_df = pd.DataFrame(rows)
+        pred_df.to_csv(pred_p, index=False)
         pred_sha = file_sha256(pred_p)
 
+        # Production AUC CSV schema: columns 'label' / 'auc'.
+        auc_df = pd.DataFrame({'label': REQUIRED_PATHOLOGY_COLUMNS, 'auc': [1.0] * 14})
         auc_p = os.path.join(tmp, 'class_aucs.csv')
-        pd.DataFrame({'disease': PRED_LABEL, 'auc': [1.0] * 14}).to_csv(auc_p, index=False)
+        auc_df.to_csv(auc_p, index=False)
         auc_sha = file_sha256(auc_p)
 
         b_dev_m = {'epochs_completed': 250, 'requested_max_epochs': 250, 'numerical_validity': 'PASS', 'nan_inf_detected': False,
@@ -379,7 +382,8 @@ def test_t195_replay_validation_classification_auc_recompute():
         c4_priv = copy.deepcopy(b_priv)
 
         b_class = {'macro_auc': 1.0, 'n_classes_valid': 14, 'generator_checkpoint_sha256': gen_sha, 'n_images': 4,
-                   'predictions_file': pred_p, 'predictions_file_sha256': pred_sha, 'aucs_file': auc_p, 'aucs_file_sha256': auc_sha}
+                   'predictions_file': pred_p, 'predictions_file_sha256': pred_sha,
+                   'aucs_file': auc_p, 'aucs_file_sha256': auc_sha, 'auc_df': auc_df}
         c4_class = copy.deepcopy(b_class)
 
         valid, msg = run_m2_s1.check_run_validity(b_dev_m, c4_m, b_att_m, c4_att_m, b_priv, c4_priv, b_class, c4_class, expected_epochs=250, unit_test_mode=True)
@@ -402,20 +406,18 @@ def test_t196_replay_validation_detects_auc_tampering():
         npz_sha = file_sha256(npz_p)
 
         pred_p = os.path.join(tmp, 'class_pred.csv')
-        PRED_LABEL = [
-            'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
-            'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
-            'Pleural_Thickening', 'Hernia'
-        ]
-        data = {}
-        for p in PRED_LABEL:
-            data['true_%s' % p] = [0, 1, 0, 1]
-            data['pred_%s' % p] = [0.1, 0.9, 0.2, 0.8]
-        pd.DataFrame(data).to_csv(pred_p, index=False)
+        rows = [{'Image Index': 'img_%d.png' % i} for i in range(4)]
+        for i in range(4):
+            for k, p in enumerate(REQUIRED_PATHOLOGY_COLUMNS):
+                rows[i][p] = [0, 1, 0, 1][i]
+                rows[i]['prob_' + p] = [0.1, 0.9, 0.2, 0.8][i]
+        pred_df = pd.DataFrame(rows)
+        pred_df.to_csv(pred_p, index=False)
         pred_sha = file_sha256(pred_p)
 
+        auc_df = pd.DataFrame({'label': REQUIRED_PATHOLOGY_COLUMNS, 'auc': [1.0] * 14})
         auc_p = os.path.join(tmp, 'class_aucs.csv')
-        pd.DataFrame({'disease': PRED_LABEL, 'auc': [1.0] * 14}).to_csv(auc_p, index=False)
+        auc_df.to_csv(auc_p, index=False)
         auc_sha = file_sha256(auc_p)
 
         b_dev_m = {'epochs_completed': 250, 'requested_max_epochs': 250, 'numerical_validity': 'PASS', 'nan_inf_detected': False,
@@ -431,7 +433,8 @@ def test_t196_replay_validation_detects_auc_tampering():
 
         # Fraudulent reported macro_auc: 0.5 instead of 1.0
         b_class = {'macro_auc': 0.50, 'n_classes_valid': 14, 'generator_checkpoint_sha256': gen_sha, 'n_images': 4,
-                   'predictions_file': pred_p, 'predictions_file_sha256': pred_sha, 'aucs_file': auc_p, 'aucs_file_sha256': auc_sha}
+                   'predictions_file': pred_p, 'predictions_file_sha256': pred_sha,
+                   'aucs_file': auc_p, 'aucs_file_sha256': auc_sha, 'auc_df': auc_df}
         c4_class = copy.deepcopy(b_class)
 
         valid, msg = run_m2_s1.check_run_validity(b_dev_m, c4_m, b_att_m, c4_att_m, b_priv, c4_priv, b_class, c4_class, expected_epochs=250, unit_test_mode=True)

@@ -88,11 +88,17 @@ FROZEN_CLASSIFICATION_VAL_IMAGE_INDEX_SHA = 'c2ff15d7deb0e126b096d4392f4d8844c80
 FROZEN_CLASSIFICATION_VAL_PATIENT_SEQUENCE_SHA = 'c444238f8be4c6f2e6ee5523a1966ef974a182aabc895b3819ebbaeec4f621ba'
 FROZEN_CLASSIFICATION_VAL_LABEL_MATRIX_SHA = 'bef28de2c55d5767c5d930bca8f86253c75a8be2cf00552ce0ceb579e75a28cc'
 
-REQUIRED_PATHOLOGY_COLUMNS = [
+# Canonical 14-pathology NIH list — SINGLE source of truth (M1.4c.2).
+# Used by the classifier evaluator, the raw-artifact replay reader, validity
+# checks and tests. Ordering is frozen; do not reorder.
+NIH_PATHOLOGIES = [
     'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
     'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
     'Pleural_Thickening', 'Hernia'
 ]
+
+# Historical alias retained for backward compatibility; identical object/order.
+REQUIRED_PATHOLOGY_COLUMNS = NIH_PATHOLOGIES
 
 
 def file_sha256(path):

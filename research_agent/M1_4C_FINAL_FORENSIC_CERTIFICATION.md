@@ -30,8 +30,8 @@ This document establishes the final, immutable forensic certification for the M2
 
 ## §2 Protocol Lock Hierarchy & Superseded Authority
 
-To eliminate ambiguity across legacy certification artifacts, the protocol authority hierarchy has been explicitly locked:
-1. **Supreme Authority**: `PROTOCOL_AUTHORITY.md` and `M1_4C_CERTIFICATION_MANIFEST.json`
+To eliminate ambiguity across legacy certification artifacts, the protocol authority hierarchy has been explicitly locked (M1.4c.2 reconciliation):
+1. **Supreme Scientific Authority**: `M2_S1_EXECUTION_LOCK.json` (scientific method / frozen scientific execution choices). `M1_4C_CERTIFICATION_MANIFEST.json` is certification evidence derived from those choices and must NOT override scientific method hyperparameters.
 2. **Authoritative Artifacts**:
    - `M1_4C_FINAL_PARITY_CERTIFICATION.json` and `M1_4C_CERTIFICATION_MANIFEST.json` provide the authoritative record of all frozen checksums, split definitions, determinism bounds, and architectural invariants.
 3. **Superseded Artifacts**:
@@ -92,7 +92,7 @@ The frozen hyperparameter configurations for Control (`B_dev`) and Feature-Prese
 | **Feature Loss Weight ($\lambda_{feat}$)**| `0.0` | `1.0` |
 | **Warp Factor ($\mu$)** | `0.01` | `0.01` |
 | **Gaussian Smoothing ($\sigma, k$)** | $\sigma=2.0, k=9$ | $\sigma=2.0, k=9$ |
-| **Epochs / Batch Size** | `250` epochs / `16` images (`8` pairs) | `250` epochs / `16` images (`8` pairs) |
+| **Epochs / Batch Size** | `250` epochs / DataLoader batch_size = 16 pair samples (each batch holds up to 16 pairs = up to 32 image tensors) | `250` epochs / DataLoader batch_size = 16 pair samples (each batch holds up to 16 pairs = up to 32 image tensors) |
 | **Attacker Architecture** | Fresh ResNet50 Siamese Network | Fresh ResNet50 Siamese Network |
 | **Attacker Config Path & SHA** | `config_files/config_dev_attacker_s1.json` (`72923582e659...`) | `config_files/config_dev_attacker_s1.json` (`72923582e659...`) |
 | **Attacker Epochs / Patience / LR** | `100` max epochs / `5` patience / `1e-4` / batch `32` / seed `42` | `100` max epochs / `5` patience / `1e-4` / batch `32` / seed `42` |

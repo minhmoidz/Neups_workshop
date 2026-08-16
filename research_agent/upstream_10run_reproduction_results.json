@@ -79,6 +79,9 @@
     ],
     "mean_auc": 0.8184698000000001,
     "std_auc": 0.028215762629424015,
+    "std_auc_ddof0": 0.028215762629424015,
+    "std_auc_sample_ddof1": 0.02974202527588046,
+    "sd_convention": "std_auc == std_auc_ddof0 is the historical population SD (ddof=0); std_auc_sample_ddof1 is the sample SD (ddof=1, n=10). Publication wording should use the sample SD ddof=1 or explicitly label ddof=0 as population SD.",
     "mean_percent": 81.8,
     "std_percent": 2.8
   },

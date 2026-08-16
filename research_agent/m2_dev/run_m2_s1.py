@@ -50,6 +50,7 @@ from m2_dev.evaluator_common import (
     FROZEN_ATTACKER_CONFIG_PATH,
     FROZEN_ATTACKER_CONFIG_SHA,
     METHOD_NEUTRAL_CKPT_NAME,
+    NIH_PATHOLOGIES,
     verify_repaired_acloss,
     verify_frozen_scientific_configs,
     verify_scientific_dependencies,
@@ -495,24 +496,78 @@ def check_run_validity(b_dev_manifest, c4_manifest, b_att_manifest, c4_att_manif
                 return False, "%s classification AUCs CSV SHA mismatch: %s != %s" % (name, actual_auc_sha, c_res.get('aucs_file_sha256'))
 
             try:
-                pred_df_re = pd.read_csv(pred_csv)
                 from sklearn.metrics import roc_auc_score
+                pred_df_re = pd.read_csv(pred_csv)
+
+                # A3/A4 (M1.4c.2): fail-closed replay on the EXACT production
+                # writer schema: ground-truth column == <Pathology>, probability
+                # column == 'prob_<Pathology>'. Exactly 14/14 pairs required.
+                missing_gt = [p for p in NIH_PATHOLOGIES if p not in pred_df_re.columns]
+                missing_prob = ['prob_' + p for p in NIH_PATHOLOGIES if ('prob_' + p) not in pred_df_re.columns]
+                if missing_gt:
+                    return False, "%s classification replay: missing ground-truth column(s): %s" % (name, missing_gt)
+                if missing_prob:
+                    return False, "%s classification replay: missing probability column(s): %s" % (name, missing_prob)
+
                 replayed_aucs = []
-                PRED_LABEL = [
-                    'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
-                    'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
-                    'Pleural_Thickening', 'Hernia'
-                ]
-                for p in PRED_LABEL:
-                    t_col = 'true_%s' % p
-                    p_col = 'pred_%s' % p
-                    if t_col in pred_df_re.columns and p_col in pred_df_re.columns:
-                        auc_val = float(roc_auc_score(pred_df_re[t_col], pred_df_re[p_col]))
-                        replayed_aucs.append(auc_val)
-                if len(replayed_aucs) == 14:
-                    replayed_macro_auc = float(np.mean(replayed_aucs))
-                    if abs(replayed_macro_auc - c_res['macro_auc']) > 1e-5:
-                        return False, "%s classification replayed macro AUC mismatch: %e != %e" % (name, replayed_macro_auc, c_res['macro_auc'])
+                for p in NIH_PATHOLOGIES:
+                    t_col = p
+                    p_col = 'prob_' + p
+                    y_true_re = pred_df_re[t_col].values.astype(int)
+                    y_score_re = pred_df_re[p_col].values.astype(float)
+                    if len(np.unique(y_true_re)) < 2:
+                        return False, "%s classification replay: pathology %r has only one class (cannot replay ROC-AUC)" % (name, p)
+                    auc_val = float(roc_auc_score(y_true_re, y_score_re))
+                    if not np.isfinite(auc_val):
+                        return False, "%s classification replay: non-finite AUC for %r" % (name, p)
+                    replayed_aucs.append(auc_val)
+
+                # A2 (M1.4c.2): replay must find exactly 14/14 pathologies.
+                if len(replayed_aucs) != 14:
+                    return False, "%s classification replay found %d pathologies; exactly 14 required" % (name, len(replayed_aucs))
+
+                # A5 (M1.4c.2): AUC CSV itself must be a complete, exact 14-row
+                # contract: one row per canonical pathology, no duplicates, no
+                # unknown pathology, no NaN/Inf.
+                auc_df_re = pd.read_csv(auc_csv)
+                if 'label' not in auc_df_re.columns or 'auc' not in auc_df_re.columns:
+                    return False, "%s classification AUCs CSV schema invalid: requires 'label' and 'auc' columns, got %s" % (name, list(auc_df_re.columns))
+                auc_labels = list(auc_df_re['label'].astype(str))
+                if len(auc_labels) != 14:
+                    return False, "%s classification AUCs CSV has %d rows; exactly 14 rows required" % (name, len(auc_labels))
+                if len(set(auc_labels)) != 14:
+                    return False, "%s classification AUCs CSV contains duplicate pathology rows" % name
+                if set(auc_labels) != set(NIH_PATHOLOGIES):
+                    return False, "%s classification AUCs CSV has unknown/missing pathologies: %s" % (name, sorted(set(auc_labels) ^ set(NIH_PATHOLOGIES)))
+                auc_vals_csv = pd.to_numeric(auc_df_re['auc'], errors='coerce').tolist()
+                if any(pd.isna(auc_vals_csv)):
+                    return False, "%s classification AUCs CSV contains NaN/Inf AUC values" % name
+                auc_csv_map = dict(zip(auc_labels, [float(v) for v in auc_vals_csv]))
+
+                # A3 (M1.4c.2): compare EVERY replayed per-pathology AUC against
+                # both the in-memory auc_df and the serialized AUC CSV.
+                rep_auc_map = dict(zip(NIH_PATHOLOGIES, replayed_aucs))
+                rep_auc_df = c_res.get('auc_df')
+                if rep_auc_df is None:
+                    return False, "%s classification result missing in-memory auc_df for per-pathology replay" % name
+                if 'label' not in rep_auc_df.columns or 'auc' not in rep_auc_df.columns:
+                    return False, "%s classification in-memory auc_df schema invalid" % name
+                rep_df_labels = list(rep_auc_df['label'].astype(str))
+                if set(rep_df_labels) != set(NIH_PATHOLOGIES) or len(set(rep_df_labels)) != 14:
+                    return False, "%s classification in-memory auc_df does not contain exactly 14 pathologies" % name
+                rep_df_map = dict(zip(rep_df_labels, [float(v) for v in rep_auc_df['auc']]))
+
+                for p in NIH_PATHOLOGIES:
+                    repl = rep_auc_map[p]
+                    if abs(repl - rep_df_map[p]) > 1e-7:
+                        return False, "%s classification per-pathology replay mismatch vs auc_df for %r: %e != %e" % (name, p, repl, rep_df_map[p])
+                    if abs(repl - auc_csv_map[p]) > 1e-7:
+                        return False, "%s classification per-pathology replay mismatch vs AUCs CSV for %r: %e != %e" % (name, p, repl, auc_csv_map[p])
+
+                # Macro replay: mean over the 14 replayed per-pathology AUCs.
+                replayed_macro_auc = float(np.mean(replayed_aucs))
+                if abs(replayed_macro_auc - c_res['macro_auc']) > 1e-7:
+                    return False, "%s classification replayed macro AUC mismatch: %e != %e" % (name, replayed_macro_auc, c_res['macro_auc'])
             except Exception as _clf_e:
                 return False, "%s classification replay failed: %s" % (name, _clf_e)
 

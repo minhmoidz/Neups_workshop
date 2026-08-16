@@ -1,0 +1,59 @@
+{
+  "fileset_protocol": "M1_4C2_PROMOTION_FILESET",
+  "version": "1.0",
+  "branch": "audit/m2-final-certification",
+  "purpose": "Explicit promotion fileset for a CLEAN canonical promotion from the audit branch. Classifies every file changed since canonical head c6431310061c04e54dce82d30ae6e0ce24440562 so that historical/reproduction baggage never accidentally enters canonical.",
+  "classification_legend": {
+    "A": "REQUIRED PRODUCTION HARDENING",
+    "B": "REQUIRED CERTIFICATION TEST",
+    "C": "REQUIRED CURRENT PROVENANCE",
+    "D": "HISTORICAL / UNRELATED BAGGAGE (audit-branch only; do NOT promote)"
+  },
+  "include_in_canonical_promotion": [
+    "research_agent/m2_dev/run_m2_s1.py",
+    "research_agent/m2_dev/eval_classifier_val.py",
+    "research_agent/m2_dev/evaluator_common.py",
+    "research_agent/m2_dev/anonymizer_runner.py",
+    "research_agent/m2_dev/dev_attacker.py",
+    "research_agent/test_firewall.py",
+    ".gitignore",
+    "research_agent/m0_tests/test_m14c_certification.py",
+    "research_agent/m0_tests/test_m14c1_forensic_closeout.py",
+    "research_agent/m0_tests/test_m14c2_closeout.py",
+    "research_agent/m0_tests/test_m14_final_hardening.py",
+    "research_agent/m0_tests/test_m14a_execution_harness.py",
+    "research_agent/m0_tests/test_m14b_execution_integrity.py",
+    "research_agent/m0_tests/test_t13_t14_firewall.py",
+    "research_agent/m0_tests/run_all.py",
+    "research_agent/m0_tests/pristine_reference.py",
+    "research_agent/cuda_determinism_micro_cert.py",
+    "research_agent/M1_4C_CERTIFICATION_MANIFEST.json",
+    "research_agent/M1_4C_FINAL_FORENSIC_CERTIFICATION.md",
+    "research_agent/M1_4C_FINAL_PARITY_CERTIFICATION.json",
+    "research_agent/M1_C4_PROTOCOL_LOCK.json",
+    "research_agent/PROTOCOL_AUTHORITY.md",
+    "research_agent/M1_4C2_PROMOTION_FILESET.json",
+    "research_agent/M1_4C2_FINAL_CLOSEOUT.md",
+    "research_agent/M1_4C1_FORENSIC_CLOSEOUT.md"
+  ],
+  "retain_on_audit_branch_only": [
+    "research_agent/20_UPSTREAM_EXACT_REPRODUCTION_AUDIT_summary.json",
+    "research_agent/audit_operator_equivalence.py",
+    "research_agent/audit_splits_and_pairs.py",
+    "research_agent/checkpoint_inventory.json",
+    "research_agent/environment_comparison.json",
+    "research_agent/reproduce_upstream_val_metrics.py",
+    "research_agent/run_complete_upstream_reproduction.py",
+    "research_agent/upstream_10run_reproduction_results.json",
+    "research_agent/upstream_compatibility.patch",
+    "research_agent/upstream_validation_classification_utility.json",
+    "research_agent/pair_file_hash_comparison.json",
+    "research_agent/upstream_pristine_commit.txt"
+  ],
+  "notes": {
+    "M1_C4_PROTOCOL_LOCK.json": "Tracked in canonical already; its audit-branch diff marks the lock as SUPERSEDED. The superseded marker should be carried forward with promotion (or dropped if the owner prefers).",
+    "upstream_10run_reproduction_results.json": "Carries the historical ddof=0 SD plus newly-added clearly-labelled std_auc_ddof0 / std_auc_sample_ddof1 fields (A6). Historical analysis artifact; promote only if the owner wants the labelled SD record in canonical.",
+    "M1_4C1_FORENSIC_CLOSEOUT.md": "Retrospective factual record created during M1.4c.2 because the originally requested M1.4c.1 closeout file was missing (A9).",
+    ".gitignore": "Kept only for the additions needed to prevent raw datasets, training outputs, checkpoints, and logs from accidental commit. Does not hide scientific reports/configs/source."
+  }
+}

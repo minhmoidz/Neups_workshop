@@ -31,6 +31,7 @@ from .evaluator_common import (
     make_flow_field_components,
     build_anonymize_fn,
     MU,
+    NIH_PATHOLOGIES,
 )
 
 DEV_FOLD = 'val'
@@ -60,9 +61,7 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
     model.eval()
 
     pred_rows = []
-    PRED_LABEL = ['Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
-                  'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
-                  'Pleural_Thickening', 'Hernia']
+    PRED_LABEL = NIH_PATHOLOGIES
 
     with torch.no_grad():
         for i, (inputs, labels, idx_names) in enumerate(dataloader):
