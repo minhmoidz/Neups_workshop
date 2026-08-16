@@ -21,7 +21,7 @@ from sklearn import metrics
 
 from .evaluator_common import (
     snn_preprocess, firewall_check, verify_frozen_val_pair_provenance,
-    FROZEN_VAL_PAIR_COUNT, FROZEN_VAL_PAIR_SHA256,
+    FROZEN_VAL_PAIR_COUNT, FROZEN_VAL_PAIR_SHA256, SCIENTIFIC_IMAGE_ROOT,
 )
 
 
@@ -102,6 +102,8 @@ def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoin
     config = config or {}
     if not unit_test_mode and getattr(device, 'type', str(device).split(':')[0]) == 'cpu':
         raise RuntimeError('Scientific privacy evaluation requires CUDA; CPU is unit-test only')
+    if not unit_test_mode and config.get('image_path') != SCIENTIFIC_IMAGE_ROOT:
+        raise RuntimeError('Scientific privacy evaluation requires the approved scientific data root for image_path')
 
     from .dev_attacker import load_frozen_anonymizer, SiameseNetwork
     from .evaluator_common import build_dev_anonymizer_loaders, file_sha256

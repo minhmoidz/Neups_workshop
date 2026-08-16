@@ -68,6 +68,7 @@ from m2_dev.evaluator_common import (
     FROZEN_CLASSIFICATION_VAL_LABEL_MATRIX_SHA,
     FROZEN_SOURCE_TAG,
     FROZEN_SOURCE_BRANCH,
+    SCIENTIFIC_IMAGE_ROOT,
 )
 from m2_dev.anonymizer_runner import M2AnonymizerRunner
 from m2_dev.dev_attacker import DevAttacker, SiameseNetwork
@@ -159,25 +160,29 @@ def run_anonymizer_arm(arm, config_path, max_epochs, seed, device, out_base_dir=
     print("\n" + "#" * 70)
     print("STARTING ANONYMIZER TRAINING: ARM %s (seed=%d, epochs=%d)" % (arm, seed, max_epochs))
     print("#" * 70)
-    with open(config_path) as f:
-        cfg = json.load(f)
-
     base = out_base_dir or os.path.join(ROOT, 'research_runs', 'M2_S1')
     out_dir = os.path.join(base, arm, 'seed_%d' % seed)
     os.makedirs(out_dir, exist_ok=True)
 
     train_loader = None
     val_loader = None
+    # M1.4c.3: scientific execution passes the canonical config FILE PATH so the
+    # non-unit M2AnonymizerRunner never sees an in-memory dict. The dict is kept
+    # only for explicit unit-test mode (synthetic loaders + image_size override).
+    runner_config = config_path
     if unit_test_mode:
         from m0_tests.test_m14a_execution_harness import SyntheticPairDataset
+        with open(config_path) as f:
+            cfg = json.load(f)
         cfg['image_size'] = 64
+        runner_config = cfg
         ds = SyntheticPairDataset(8, image_size=64)
         train_loader = torch.utils.data.DataLoader(ds, batch_size=4)
         val_loader = torch.utils.data.DataLoader(ds, batch_size=4)
 
     runner = M2AnonymizerRunner(
         arm=arm,
-        config=cfg,
+        config=runner_config,
         config_path=config_path,
         output_dir=out_dir,
         device=device,
@@ -316,7 +321,7 @@ def evaluate_privacy_arm(arm, seed, attacker_seed, device, out_base_dir=None, un
 
     cfg = {
         'batch_size': 32,
-        'image_path': '/home/minhtt/datasets/nih/images/',
+        'image_path': SCIENTIFIC_IMAGE_ROOT,
     }
     eval_res = evaluate_reid_val(
         config=cfg,
@@ -381,8 +386,7 @@ def evaluate_classification_arm(arm, seed, device, out_base_dir=None, unit_test_
 
     cfg = {
         'batch_size': 32,
-        'image_path': '/home/minhtt/datasets/nih/images/',
-        'unit_test_mode': unit_test_mode
+        'image_path': SCIENTIFIC_IMAGE_ROOT,
     }
     clf_res = evaluate_classification_val(
         config=cfg,

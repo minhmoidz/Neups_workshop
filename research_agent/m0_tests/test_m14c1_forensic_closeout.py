@@ -506,7 +506,8 @@ def test_t200_full_synthetic_orchestration_with_replay():
         )
         res = run_m2_s1.run_orchestration(args, out_base_dir=tmp_dir, unit_test_mode=True)
         assert res is not None
-        assert res['run_status'] in ('DEVELOPMENT_VALID', 'VALID')
+        assert res['run_status'] == 'DEVELOPMENT_VALID', 'unit-mode validity must be EXACTLY DEVELOPMENT_VALID; got %r' % res['run_status']
+        assert res['run_status'] != 'VALID', 'unit-mode orchestration must never accept scientific VALID'
         assert os.path.exists(os.path.join(tmp_dir, 'M2_S1_summary.json'))
         assert os.path.exists(os.path.join(tmp_dir, 'M2_S1_C4_RESULT.md'))
     return True

@@ -540,13 +540,17 @@ def test_t214_sd_sample_convention_verified():
 def test_t215_promotion_fileset_no_forbidden_baggage():
     """T215: M1_4C2_PROMOTION_FILESET.json must completely cover all canonical->audit changes.
 
+    Audit-branch mode: on the audit branch the canonical->audit changed set must
+    be EXACTLY include ∪ retain.
+
     Ensures:
       1. Promotion fileset exists and is valid JSON.
       2. include_in_canonical_promotion and retain_on_audit_branch_only are mutually exclusive.
       3. All historical/reproduction baggage files are strictly retained on audit-only and NOT promoted.
       4. All required production and certification files are included in canonical promotion.
       5. COMPLETE coverage: Every file modified or added on the audit branch relative to canonical
-         (c6431310061c04e54dce82d30ae6e0ce24440562) is explicitly classified.
+         (c6431310061c04e54dce82d30ae6e0ce24440562) is explicitly classified
+         (changed_files == include ∪ retain).
     """
     import subprocess
     fs_p = os.path.join(RESEARCH_AGENT_DIR, 'M1_4C2_PROMOTION_FILESET.json')
@@ -620,9 +624,61 @@ def test_t215_promotion_fileset_no_forbidden_baggage():
     assert len(changed_list) == len(set(changed_list)), 'Git diff/untracked listing returned duplicate paths'
     changed_files = set(changed_list)
     assert changed_files == all_classified, (
-        'Promotion classification must exactly equal canonical->audit diff; '
-        'missing=%s extra=%s' % (sorted(changed_files - all_classified), sorted(all_classified - changed_files))
+        'Audit-branch promotion classification must exactly equal canonical->audit diff '
+        '(changed == include | retain); missing=%s extra=%s' % (
+            sorted(changed_files - all_classified), sorted(all_classified - changed_files)
+        )
     )
+
+    return True
+
+
+def test_t215_clean_canonical_candidate_state():
+    """T215-clean: a clean promoted canonical candidate must have changed_files == include.
+
+    Audit-only retain files are NOT required to exist in canonical.  This test
+    builds a temporary git index whose tree is canonical + the include files at
+    their HEAD content (retain files absent) and verifies that the resulting
+    tree differs from canonical by EXACTLY the include set.
+    """
+    import subprocess
+    import tempfile
+    fs_p = os.path.join(RESEARCH_AGENT_DIR, 'M1_4C2_PROMOTION_FILESET.json')
+    with open(fs_p) as f:
+        data = json.load(f)
+    include = data.get('include_in_canonical_promotion', [])
+    retain = data.get('retain_on_audit_branch_only', [])
+    assert len(include) == len(set(include)) and len(retain) == len(set(retain))
+    assert len(set(include) & set(retain)) == 0
+    canonical_sha = data.get('canonical_base_commit')
+    assert canonical_sha == 'c6431310061c04e54dce82d30ae6e0ce24440562', 'Promotion fileset canonical SHA drift'
+
+    with tempfile.TemporaryDirectory() as tmp:
+        env = dict(os.environ)
+        env['GIT_INDEX_FILE'] = os.path.join(tmp, 'index')
+
+        def git(*args):
+            r = subprocess.run(['git', '-C', ROOT, *args], capture_output=True, text=True, env=env)
+            if r.returncode != 0:
+                raise RuntimeError('git %s failed: %s' % (' '.join(args), r.stderr))
+            return r.stdout
+
+        git('read-tree', canonical_sha)
+        for path in include:
+            entry = git('ls-tree', 'HEAD', '--', path).split('\t')[0].split(' ')
+            assert len(entry) == 3 and entry[1] == 'blob', 'unexpected git ls-tree output for %s' % path
+            mode, blob = entry[0], entry[2]
+            git('update-index', '--add', '--cacheinfo', '%s,%s,%s' % (mode, blob, path))
+        candidate_tree = git('write-tree').strip()
+        diff = [line for line in git('diff-tree', '-r', '--name-only', canonical_sha, candidate_tree).splitlines() if line]
+        changed = set(diff)
+        assert changed == set(include), (
+            'Clean promoted candidate changed set must be EXACTLY include; '
+            'missing=%s extra=%s' % (sorted(set(include) - changed), sorted(changed - set(include)))
+        )
+        # Audit-only retain files must NOT be required to exist in canonical.
+        for fpath in retain:
+            assert fpath not in changed, 'retain file %s must not be part of a clean canonical candidate diff' % fpath
 
     return True
 
@@ -661,6 +717,7 @@ def run_all():
         test_t213_batch_size_report_wording_16_pairs,
         test_t214_sd_sample_convention_verified,
         test_t215_promotion_fileset_no_forbidden_baggage,
+        test_t215_clean_canonical_candidate_state,
         test_t216_protocol_authority_hierarchy_unambiguous,
     ]
     passed = 0

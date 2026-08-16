@@ -199,7 +199,7 @@ $$I_{\text{anon}} = \text{GridSample}(I_1, \mathcal{T}, \text{align\_corners}=\t
 
 - Evaluated strictly on the 10,816 images of the CheXNet classification VAL split (`chexnet/nih_labels.csv` fold `'val'`).
 - Primary utility metric: **Mean 14-Pathology AUROC (Macro AUC)**.
-- Strict Hard-Fail Enforcement: All 14 pathology AUCs must be finite floating-point numbers in $(0.0, 1.0)$. Any NaN, Inf, or one-class pathology triggers an immediate hard exit (`T83`, `T84`, `T157`).
+- Strict Hard-Fail Enforcement: All 14 pathology AUCs must be finite floating-point numbers in $(0.0, 1.0)$ (finite numbers strictly bounded by the open unit interval by construction of ROC-AUC). The implementation hard-fails on NaN/Inf AUCs and on one-class pathologies where no AUC can be computed (`T83`, `T84`, `T157`). The implemented check is finiteness/one-class enforcement; it does not compute an additional open-interval boolean over the finite values.
 - Replay validation: Raw predictions saved in `classification_val_predictions.csv` and `classification_val_aucs.csv`, SHAs verified, and 14 AUCs recomputed during validity checks.
 
 ---
@@ -233,7 +233,7 @@ An independent, zero-dependency reference implementation (`m0_tests/pristine_ref
 
 ## §20 Git Source & Lineage Guard Proof
 
-- Scientific execution enforces that `git status --porcelain` on tracked files is completely clean (`T172`).
+- Scientific execution enforces complete git cleanliness via `git diff --quiet` (no unstaged tracked changes), `git diff --cached --quiet` (no staged changes), and `git ls-files --others` (no untracked files) (`T172`).
 - Earlier M1.4c wording about permissive untracked-file handling is superseded by the M1.4c.3 exact source-identity guard; see `research_agent/M1_4C3_FINAL_EXECUTION_BOUNDARY_CLOSEOUT.md` for the current authority.
 - Canonical HEAD on `origin/research/method-restart` is verified at `c6431310061c04e54dce82d30ae6e0ce24440562`.
 

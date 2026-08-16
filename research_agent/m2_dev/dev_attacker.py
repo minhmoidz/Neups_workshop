@@ -33,6 +33,7 @@ from .evaluator_common import (
     FROZEN_ATTACKER_CONFIG_PATH,
     FROZEN_ATTACKER_CONFIG_SHA,
     file_sha256,
+    verify_attacker_config_matches_frozen,
 )
 from utils import utils
 
@@ -102,6 +103,10 @@ class DevAttacker:
                 raise RuntimeError('Scientific attacker geometry contract mismatch')
             if config.get('scientific_val_geometry') != 'anon_real':
                 raise RuntimeError('Scientific attacker scientific VAL geometry mismatch')
+            # M1.4c.3: the in-memory config must itself match the canonical frozen
+            # attacker config (scientific fields incl. data root), not merely
+            # present the canonical config_path SHA.
+            verify_attacker_config_matches_frozen(config)
 
         self.config = config
         self.attacker_seed = attacker_seed

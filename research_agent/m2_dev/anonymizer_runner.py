@@ -675,17 +675,16 @@ class M2AnonymizerRunner:
 
 
 def run_preflight_smoke(arm='B_dev', device=None):
-    """Execute a 2-batch train + 2-batch val preflight smoke test on real data."""
+    """Execute a 2-batch train + 2-batch val preflight smoke test on real data.
+
+    Non-unit scientific mode: passes the canonical config FILE PATH (never an
+    in-memory dict) so the runner's scientific fail-closed contract holds.
+    """
     device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    cfg = {
-        'batch_size': 16,
-        'image_size': 256,
-        'learning_rate': 1e-4,
-        'max_epochs': 1,
-        'image_path': '/home/minhtt/datasets/nih/images/',
-    }
+    cfg_file = 'config_dev_c4.json' if arm == 'C4' else 'config_dev_restored_baseline.json'
+    cfg_path = os.path.join(ROOT, 'config_files', cfg_file)
     tmp_out = os.path.join(ROOT, 'research_runs', '_preflight_tmp', arm)
-    runner = M2AnonymizerRunner(arm=arm, config=cfg, output_dir=tmp_out, device=device)
+    runner = M2AnonymizerRunner(arm=arm, config=cfg_path, config_path=cfg_path, output_dir=tmp_out, device=device)
 
     # Re-slice loader to 2 batches for quick preflight verification
     class _SlicedLoader:

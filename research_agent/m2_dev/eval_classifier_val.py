@@ -35,6 +35,7 @@ from .evaluator_common import (
     verify_classification_val_contract,
     verify_classification_artifact_structure,
     FROZEN_CLASSIFICATION_VAL_N_IMAGES,
+    SCIENTIFIC_IMAGE_ROOT,
 )
 
 DEV_FOLD = 'val'
@@ -137,7 +138,7 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
     :param expected_generator_sha: optional expected SHA256 of the generator checkpoint.
     """
     config = config or {}
-    unit_test_mode = bool(unit_test_mode or config.get('unit_test_mode', False))
+    unit_test_mode = bool(unit_test_mode)
     assert_dev_fold(fold)          # reject TEST before dataset construction
     if not unit_test_mode and fold != DEV_FOLD:
         raise RuntimeError('Scientific classification fold must be exactly "val"')
@@ -150,6 +151,8 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
         raise RuntimeError('Scientific classification evaluation requires CUDA; CPU is unit-test only')
     if not unit_test_mode and model is not None:
         raise RuntimeError('Scientific classification evaluation does not accept an injected model')
+    if not unit_test_mode and config.get('image_path') != SCIENTIFIC_IMAGE_ROOT:
+        raise RuntimeError('Scientific classification evaluation requires the approved scientific data root for image_path')
     if not unit_test_mode:
         verify_classification_val_contract()
 

@@ -77,6 +77,13 @@ FROZEN_C4_CONFIG_SHA = '7cbdfce84e41317dac73651d0d7d6080cf68871e0340a68ec0d91913
 FROZEN_ATTACKER_CONFIG_PATH = os.path.join(ROOT, 'config_files', 'config_dev_attacker_s1.json')
 FROZEN_ATTACKER_CONFIG_SHA = '72923582e6595103026ac0fa3488ace4888f70ca09aa91f7cdf49d8e53eb70e1'
 
+# Approved scientific data root (M1.4c.3). All non-unit classification /
+# privacy / attacker APIs bind image_path to this exact root so an arbitrary
+# direct API config cannot select a different image directory while claiming
+# scientific provenance. Unit-test temporary roots remain available ONLY under
+# explicit unit_test_mode=True.
+SCIENTIFIC_IMAGE_ROOT = '/home/minhtt/datasets/nih/images/'
+
 # Method-neutral anonymizer checkpoint filename (§11)
 METHOD_NEUTRAL_CKPT_NAME = 'generator_best_method_neutral.pth'
 
@@ -499,6 +506,31 @@ def verify_frozen_scientific_configs(lock_path=None):
         'c4_config_sha256': actual_c4_sha,
         'attacker_config_sha256': actual_att_sha,
     }
+
+
+def verify_attacker_config_matches_frozen(config):
+    """M1.4c.3: The in-memory attacker config must itself match the canonical
+    frozen attacker config for every scientific field (including the approved
+    data root), not merely present the canonical config_path SHA.
+
+    Extra non-scientific keys (e.g. attacker_output_dir) are allowed; every
+    frozen scientific key must be present with the identical value.
+    """
+    if not os.path.exists(FROZEN_ATTACKER_CONFIG_PATH):
+        raise RuntimeError('Frozen attacker config missing: %s' % FROZEN_ATTACKER_CONFIG_PATH)
+    actual_sha = file_sha256(FROZEN_ATTACKER_CONFIG_PATH)
+    if actual_sha != FROZEN_ATTACKER_CONFIG_SHA:
+        raise RuntimeError('Frozen attacker config SHA mismatch: %s != %s' % (actual_sha, FROZEN_ATTACKER_CONFIG_SHA))
+    with open(FROZEN_ATTACKER_CONFIG_PATH) as f:
+        frozen = json.load(f)
+    if config.get('image_path') != frozen.get('image_path'):
+        raise RuntimeError('Scientific attacker in-memory config image_path does not match the frozen data root')
+    for key, value in frozen.items():
+        if key not in config:
+            raise RuntimeError('Scientific attacker in-memory config is missing frozen field: %s' % key)
+        if config[key] != value:
+            raise RuntimeError('Scientific attacker in-memory config %s does not match frozen value %r' % (key, value))
+    return True
 
 
 # ---------------------------------------------------------------------------

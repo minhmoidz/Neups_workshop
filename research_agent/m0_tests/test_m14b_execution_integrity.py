@@ -405,10 +405,11 @@ def test_t129_generator_manifest_sha_mutation_rejected_classification():
 
         try:
             evaluate_classification_val(
-                config={'unit_test_mode': True},
+                config={},
                 fold='val',
                 generator_checkpoint=gen_p,
                 device='cpu',
+                unit_test_mode=True,
                 expected_generator_sha='0000000000000000000000000000000000000000000000000000000000000000'
             )
             assert False, "Should have rejected generator SHA mismatch"
