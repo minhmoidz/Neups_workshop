@@ -13,11 +13,11 @@ The external certified tag is intentionally not created by this task.
 ## 1. Identity and Provenance
 
 - **Audit Branch**: `audit/m2-final-certification`
-- **SOURCE_COMMIT**: `2bf25cb0778d247df792229a35edd24cf31033f0`
-- **SOURCE_TREE_SHA**: `8ed71c65049b1ed58b1914e321c6af203b5e6016`
+- **SOURCE_COMMIT**: `0e364967ae97ce06173d4f73c61d50b429d9aac8`
+- **SOURCE_TREE_SHA**: `e28934194094a8813c2f79758e0f9930e3544118`
 - **Canonical Branch**: `research/method-restart`
 - **Canonical Base Commit**: `c6431310061c04e54dce82d30ae6e0ce24440562`
-- **Scientific Authority**: `research_agent/m2_dev/M2_S1_EXECUTION_LOCK.json`
+- **Scientific Authority**: `research_agent/M2_S1_EXECUTION_LOCK.json`
 - **Execution Lock SHA256**: `c8ea322adf46a3524ee7c765fa73f4c851af0cf2749eb619332f27c822b11acc`
 - **Certification Manifests**: Evidence only; cannot override the execution lock.
 
@@ -25,10 +25,10 @@ The external certified tag is intentionally not created by this task.
 
 ## 2. Test Execution Results (from SOURCE_COMMIT)
 
-- **Total Test Suite Executed**: **229 / 229 PASS (100%)** across all 18 registered test modules.
+- **Total Test Suite Executed**: **234 / 234 PASS (100%)** across all 18 registered test modules.
 - **Failed**: 0
 - **Skipped**: 0
-- **Total Runtime**: 137.65 seconds.
+- **Total Runtime**: 189.38 seconds.
 - **Test Inventory**: Documented in `research_agent/M1_4C3_TEST_INVENTORY.json`.
 - **Dependency Preflight**: `verify_scientific_dependencies('/home/minhtt/datasets/nih/images/')` $\rightarrow$ **PASS**.
 - **TEST Split Touched**: **false** (Zero access to `image_pairs_testing_5000.txt` or test loader).
@@ -62,6 +62,6 @@ The external certified tag is intentionally not created by this task.
 
 **Disposition: BLOCKED — SMALL CERTIFICATION/PROMOTION CLOSEOUT REQUIRED.**
 
-All source code and tests are frozen and certified at `SOURCE_COMMIT` (`2bf25cb0778d247df792229a35edd24cf31033f0`).
+All source code and tests are frozen and certified at `SOURCE_COMMIT` (`0e364967ae97ce06173d4f73c61d50b429d9aac8`).
 Wait for independent ChatGPT / senior audit before any canonical promotion or M2 launch.
 Do NOT merge to canonical; do NOT fast-forward canonical; do NOT push canonical.
