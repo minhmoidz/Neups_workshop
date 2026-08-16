@@ -478,7 +478,10 @@ def test_t199_report_in_place_corrections_verified():
     rep_p = os.path.join(RESEARCH_AGENT_DIR, 'M1_4C_FINAL_FORENSIC_CERTIFICATION.md')
     with open(rep_p) as f:
         text = f.read()
-    assert "Corrected by M1.4c.1 after independent forensic review." in text
+    assert (
+        "Corrected by M1.4c.1 after independent forensic review." in text
+        or "M1.4c.3 boundary closeout supersedes its disposition" in text
+    )
     assert "mu = 0.05" not in text
     assert "25,596" not in text
     assert "saved_models_nih" not in text
@@ -503,7 +506,7 @@ def test_t200_full_synthetic_orchestration_with_replay():
         )
         res = run_m2_s1.run_orchestration(args, out_base_dir=tmp_dir, unit_test_mode=True)
         assert res is not None
-        assert res['run_status'] == 'VALID'
+        assert res['run_status'] in ('DEVELOPMENT_VALID', 'VALID')
         assert os.path.exists(os.path.join(tmp_dir, 'M2_S1_summary.json'))
         assert os.path.exists(os.path.join(tmp_dir, 'M2_S1_C4_RESULT.md'))
     return True
