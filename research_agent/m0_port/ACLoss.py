@@ -45,8 +45,9 @@ class ACLoss(nn.Module):
 
         self.reduction = reduction
         self.feature_loss_weight = feature_loss_weight
-        pw = None if pos_weight is None else torch.tensor(float(pos_weight)).cuda()
-        self.bce_loss = nn.BCEWithLogitsLoss(reduction=self.reduction, pos_weight=pw).cuda()
+        ac_device = next(self.ac_model.parameters()).device
+        pw = None if pos_weight is None else torch.tensor(float(pos_weight), device=ac_device)
+        self.bce_loss = nn.BCEWithLogitsLoss(reduction=self.reduction, pos_weight=pw).to(ac_device)
 
         self.refresh()
 

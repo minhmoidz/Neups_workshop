@@ -241,7 +241,7 @@ class DevAttacker:
             else:
                 self.patience += 1
 
-            if self.early_stopping and self.patience >= self.early_stopping:
+            if self.early_stopping is not None and self.patience >= self.early_stopping:
                 termination_reason = 'early_stopping'
                 print('Early stopping at epoch %d (patience %d)' % (epoch, self.early_stopping))
                 break

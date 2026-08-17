@@ -563,7 +563,7 @@ class M2AnonymizerRunner:
                 raise RuntimeError('Scientific anonymizer max_epochs must be exactly 250')
             if self.seed != 42:
                 raise RuntimeError('Scientific anonymizer seed must be exactly 42')
-        self.requested_max_epochs = max_epochs or self.max_epochs
+        self.requested_max_epochs = max_epochs if max_epochs is not None else self.max_epochs
 
         for epoch in range(self.start_epoch, self.requested_max_epochs):
             t0 = time.time()

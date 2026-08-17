@@ -61,8 +61,10 @@ FROZEN_VERIFIER_PATH = os.path.join(ROOT, 'networks', 'pretrained_verification_m
 FROZEN_VERIFIER_SHA = '331efaed0c0433c69941ddc003a14a936c688d94fd4ecfbefd34e53bfa7c051a'
 
 # Repaired ACLoss SHA (m0_port/ACLoss.py)
+# M1.4c.4: updated after fixing unconditional .cuda() (was forcing CUDA regardless of
+# ac_model's actual device, breaking CPU-only unit tests); math/semantics unchanged.
 REPAIRED_ACLOSS_PATH = os.path.join(ROOT, 'research_agent', 'm0_port', 'ACLoss.py')
-REPAIRED_ACLOSS_SHA = '3ed8483718c3ccffb59f76e9dece47e92295a553895e3fd43b1b18cd486b263c'
+REPAIRED_ACLOSS_SHA = '8e87f861ed8dd4472e3fadf2e0ac6c3cba58cc3407d09e6ea33add7f94c8e357'
 
 # Frozen metadata and configs (M1.4b frozen)
 FROZEN_METADATA_PATH = os.path.join(ROOT, 'Data_Entry_2017_v2020.csv')

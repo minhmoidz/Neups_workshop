@@ -94,6 +94,10 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
                 pred_rows.append(thisrow)
 
     pred_df = pd.DataFrame(pred_rows)
+    # Row order must match the frozen VAL fingerprint's Image-Index-sorted order
+    # (verify_classification_val_contract sorts by 'Image Index'); the dataloader
+    # itself yields rows in arbitrary CXRDataset order.
+    pred_df = pred_df.sort_values('Image Index').reset_index(drop=True)
     auc_rows = []
     for column in PRED_LABEL:
         y_true_col = pred_df[column].values.astype(int)

@@ -44,7 +44,11 @@ def evaluate_reid_val_mixed(anonymize_fn, attacker_net, validation_loader, devic
     y_score = []
 
     with torch.no_grad():
-        for inputs1, inputs2, labels in validation_loader:
+        for batch in validation_loader:
+            # Accepts both the unit-test synthetic 3-tuple (img1, img2, label) and the
+            # real LazyPairDataset 4-tuple (img1, img2, ac_labels_1, labels_id): the
+            # identity/Re-ID ground-truth label is always the LAST element.
+            inputs1, inputs2, labels = batch[0], batch[1], batch[-1]
             inputs1, inputs2, labels = inputs1.to(device), inputs2.to(device), labels.to(device)
 
             # Scientific VAL privacy geometry: anon(x1), real(x2) untouched.

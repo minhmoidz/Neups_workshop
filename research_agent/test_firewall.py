@@ -72,8 +72,7 @@ def provenance_record(config_path=None, extra=None, allow=False, mode='dev'):
     }
     if extra:
         for k, v in extra.items():
+            rec[k] = v
             if isinstance(v, str) and os.path.exists(v):
                 rec['sha256:' + k] = file_sha256(v)
-            else:
-                rec[k] = v
     return rec
