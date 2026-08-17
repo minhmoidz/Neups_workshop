@@ -31,6 +31,11 @@ from .evaluator_common import (
     make_flow_field_components,
     build_anonymize_fn,
     MU,
+    NIH_PATHOLOGIES,
+    verify_classification_val_contract,
+    verify_classification_artifact_structure,
+    FROZEN_CLASSIFICATION_VAL_N_IMAGES,
+    SCIENTIFIC_IMAGE_ROOT,
 )
 
 DEV_FOLD = 'val'
@@ -59,11 +64,8 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
     model = model.to(device)
     model.eval()
 
-    pred_df = pd.DataFrame(columns=['Image Index'])
-    true_df = pd.DataFrame(columns=['Image Index'])
-    PRED_LABEL = ['Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule',
-                  'Pneumonia', 'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis',
-                  'Pleural_Thickening', 'Hernia']
+    pred_rows = []
+    PRED_LABEL = NIH_PATHOLOGIES
 
     with torch.no_grad():
         for i, (inputs, labels, idx_names) in enumerate(dataloader):
@@ -86,16 +88,15 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
             for j in range(bs):
                 idx_name = idx_names[j] if isinstance(idx_names, (list, tuple)) else str(idx_names)
                 thisrow = {'Image Index': idx_name}
-                truerow = {'Image Index': idx_name}
                 for k, lbl in enumerate(PRED_LABEL):
-                    thisrow['prob_' + lbl] = probs[j, k]
-                    truerow[lbl] = true_labels[j, k]
-                pred_df = pd.concat([pred_df, pd.DataFrame(thisrow, index=[0])], ignore_index=True)
-                true_df = pd.concat([true_df, pd.DataFrame(truerow, index=[0])], ignore_index=True)
+                    thisrow[lbl] = int(true_labels[j, k])
+                    thisrow['prob_' + lbl] = float(probs[j, k])
+                pred_rows.append(thisrow)
 
-    auc_df = pd.DataFrame(columns=['label', 'auc'])
+    pred_df = pd.DataFrame(pred_rows)
+    auc_rows = []
     for column in PRED_LABEL:
-        y_true_col = true_df[column].values.astype(int)
+        y_true_col = pred_df[column].values.astype(int)
         y_score_col = pred_df['prob_' + column].values.astype(float)
         unique_classes = np.unique(y_true_col)
         if len(unique_classes) < 2:
@@ -111,8 +112,9 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
         except Exception as exc:
             raise RuntimeError("Classification VAL pathology %r failed AUC calculation: %s" % (column, exc)) from exc
 
-        auc_df = pd.concat([auc_df, pd.DataFrame({'label': [column], 'auc': [auc]}, index=[0])], ignore_index=True)
+        auc_rows.append({'label': column, 'auc': auc})
 
+    auc_df = pd.DataFrame(auc_rows)
     n_valid = len(auc_df['auc'].dropna())
     if n_valid != 14:
         raise RuntimeError("Classification VAL requires exactly 14 valid AUCs, got %d" % n_valid)
@@ -124,7 +126,7 @@ def classify_val_dataset(model, dataloader, anonymize_fn, perturbation_type,
 def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
                                 perturbation_type='flow_field', batch_size=16,
                                 generator_checkpoint=None, image_size=None,
-                                expected_generator_sha=None):
+                                expected_generator_sha=None, unit_test_mode=False):
     """VAL-only classification evaluation. fold is validated BEFORE dataset init.
 
     :param config: dev config dict (image_path, ...).
@@ -135,12 +137,24 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
     :param image_size: legacy flow-field grid size; defaults to config image_size or 256.
     :param expected_generator_sha: optional expected SHA256 of the generator checkpoint.
     """
+    config = config or {}
+    unit_test_mode = bool(unit_test_mode)
     assert_dev_fold(fold)          # reject TEST before dataset construction
+    if not unit_test_mode and fold != DEV_FOLD:
+        raise RuntimeError('Scientific classification fold must be exactly "val"')
     firewall_check('dev')
 
     import chexnet.cxr_dataset as CXR
 
     device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if not unit_test_mode and getattr(device, 'type', str(device).split(':')[0]) == 'cpu':
+        raise RuntimeError('Scientific classification evaluation requires CUDA; CPU is unit-test only')
+    if not unit_test_mode and model is not None:
+        raise RuntimeError('Scientific classification evaluation does not accept an injected model')
+    if not unit_test_mode and config.get('image_path') != SCIENTIFIC_IMAGE_ROOT:
+        raise RuntimeError('Scientific classification evaluation requires the approved scientific data root for image_path')
+    if not unit_test_mode:
+        verify_classification_val_contract()
 
     if model is None:
         model = load_frozen_classifier(device)
@@ -179,11 +193,11 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
         anonymize_fn = build_anonymize_fn(generator, grid_identity, gauss_filter, MU)
 
     if config.get('dataloader') is not None:
+        if not unit_test_mode:
+            raise RuntimeError('Scientific classification evaluation does not accept an injected dataloader')
         dataloader = config['dataloader']
         n_images = len(dataloader.dataset)
-        if not config.get('unit_test_mode', False) and fold == 'val' and n_images != 10816:
-            raise RuntimeError("Classification scientific VAL requires exactly 10,816 images, got %d" % n_images)
-    elif config.get('unit_test_mode', False):
+    elif unit_test_mode:
         from m0_tests.test_m14a_execution_harness import SyntheticClassificationDataset
         if image_size is None:
             image_size = 64
@@ -198,7 +212,7 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
             transform=None,
             perturbation_type=perturbation_type)
         n_images = len(dataset)
-        if not config.get('unit_test_mode', False) and fold == 'val' and n_images != 10816:
+        if not unit_test_mode and n_images != FROZEN_CLASSIFICATION_VAL_N_IMAGES:
             raise RuntimeError("Classification scientific VAL requires exactly 10,816 images, got %d" % n_images)
 
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
@@ -206,6 +220,7 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
 
     pred_df, auc_df, macro_auc = classify_val_dataset(
         model, dataloader, anonymize_fn, perturbation_type, device=device, batch_size=batch_size)
+    fingerprints = verify_classification_artifact_structure(pred_df, strict=not unit_test_mode)
 
     return {
         'pred_df': pred_df,
@@ -217,4 +232,5 @@ def evaluate_classification_val(config, model=None, fold=DEV_FOLD, device=None,
         'generator_checkpoint_sha256': selected_gen_sha,
         'classifier_checkpoint_sha256': actual_clf_sha,
         'fold': fold,
+        'classification_val_fingerprints': fingerprints,
     }

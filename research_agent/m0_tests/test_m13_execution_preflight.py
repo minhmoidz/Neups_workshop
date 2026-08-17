@@ -103,7 +103,7 @@ def _make_toy_runner(arm='B_dev', seed=42, n_samples=32, batch_size=8, out_dir=N
     runner = ar.M2AnonymizerRunner(
         arm=arm, config=cfg, output_dir=out_dir, device=DEVICE, seed=seed,
         training_loader=train_loader, validation_loader=val_loader, train_sampler=sampler,
-        ac_model=ToyClassifier(), verification_model=ToyVerifier()
+        ac_model=ToyClassifier(), verification_model=ToyVerifier(), unit_test_mode=True
     )
     return runner, out_dir
 
@@ -295,7 +295,8 @@ def t49_negative_control_no_released_generator_fallback():
             generator_checkpoint=tmp_ckpt.name,
             training_loader=[(torch.rand(2, 1, 8, 8), torch.rand(2, 1, 8, 8), torch.zeros(2))],
             validation_loader=[(torch.rand(2, 1, 8, 8), torch.rand(2, 1, 8, 8), torch.zeros(2))],
-            net_factory=lambda: da.SiameseNetwork()
+            net_factory=lambda: da.SiameseNetwork(),
+            unit_test_mode=True
         )
         return attacker is not None
     finally:

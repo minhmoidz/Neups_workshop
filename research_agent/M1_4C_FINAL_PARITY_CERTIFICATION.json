@@ -1,0 +1,59 @@
+{
+  "protocol": "M1_4C_FINAL_PARITY_CERTIFICATION",
+  "version": "1.4.3",
+  "timestamp": "2026-08-16T01:10:00+07:00",
+  "pristine_upstream_commit": "29245d1f71571898d9527417df4ae3f63a8695f6",
+  "reference_module": "research_agent/m0_tests/pristine_reference.py",
+  "reference_module_sha256": "58c7049e95dad5891b6e5885002a5f821af7e3e8c61691241ca89a0c3559cd27",
+  "differential_parity_cpu": {
+    "anonymized_tensor_max_diff": 0.0,
+    "ac_bce_loss_diff": 0.0,
+    "privacy_loss_diff": 0.0,
+    "total_generator_loss_diff": 0.0,
+    "generator_grad_max_diff": 7.450580596923828e-09,
+    "verifier_grad_max_diff": 0.0,
+    "classifier_grad_max_diff": 0.0,
+    "generator_post_step_param_max_diff": 0.0,
+    "verifier_post_step_param_max_diff": 0.0,
+    "classifier_post_step_param_max_diff": 0.0,
+    "parity_tolerance_threshold": 1e-06,
+    "parity_status": "PASS"
+  },
+  "c4_delta_isolation": {
+    "base_anonymized_tensor_identical_to_b_dev": true,
+    "base_ac_bce_loss_identical_to_b_dev": true,
+    "base_privacy_loss_identical_to_b_dev": true,
+    "c4_feature_loss_weight": 1.0,
+    "b_dev_feature_loss_weight": 0.0,
+    "c4_feature_loss_greater_than_zero": true,
+    "c4_feature_gradient_reaches_generator": true,
+    "c4_source_feature_target_detached": true,
+    "status": "PASS"
+  },
+  "optimizer_topology_provenance": {
+    "generator": "Adam(lr=1e-4)",
+    "verification_critic": "Adam(lr=1e-4)",
+    "auxiliary_classifier_critic": "SGD(lr=1e-4, momentum=0.9, weight_decay=1e-4)",
+    "status": "PASS"
+  },
+  "cuda_reproducibility_envelope": {
+    "gpu_model": "NVIDIA GeForce RTX 5070 Ti",
+    "driver_version": "595.84",
+    "cuda_version": "12.8",
+    "torch_version": "2.7.0+cu128",
+    "cudnn_version": 90701,
+    "cudnn_deterministic": true,
+    "cudnn_benchmark": false,
+    "max_loss_diff": 0.0,
+    "max_gen_grad_diff": 4.445202648639679e-05,
+    "max_gen_param_diff": 0.000199783593416214,
+    "max_ver_grad_diff": 0.0,
+    "max_ver_param_diff": 0.0,
+    "max_clf_grad_diff": 0.0,
+    "max_clf_param_diff": 0.0,
+    "deterministic_algo_supported": false,
+    "unsupported_operation_error": "upsample_bilinear2d_aa_backward_out_cuda does not have a deterministic implementation, but you set 'torch.use_deterministic_algorithms(True)'. You can turn off determinism just for this operation, or you can use the 'warn_only=True' option, if that's acceptable for your application. You can also file an issue at https://github.com/pytorch/pytorch/issues to help us prioritize adding deterministic support for this operation.",
+    "interpretation_floor_policy": "Near-zero metric deltas must be evaluated with numerical sensitivity awareness; sign alone does not guarantee significance."
+  },
+  "certification_verdict": "PASS"
+}

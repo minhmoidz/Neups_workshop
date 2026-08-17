@@ -1,0 +1,68 @@
+{
+  "manifest_protocol": "M1_4C_CERTIFICATION_MANIFEST",
+  "version": "1.4.3",
+  "branch": "audit/m2-final-certification",
+  "certified_lineage_commit": "851c3f1a6912255c97345a7f53ed138e7ae7981d",
+  "pristine_base_commit": "29245d1f71571898d9527417df4ae3f63a8695f6",
+  "timestamp": "2026-08-16T01:10:00+07:00",
+  "frozen_configs": {
+    "b_dev_config_path": "config_files/config_dev_restored_baseline.json",
+    "b_dev_config_sha256": "14d3943f798d5855b4a49d55ecc6af858647f514f30c1cc7c803c7edebab30b6",
+    "c4_config_path": "config_files/config_dev_c4.json",
+    "c4_config_sha256": "7cbdfce84e41317dac73651d0d7d6080cf68871e0340a68ec0d9191383716a8a",
+    "attacker_config_path": "config_files/config_dev_attacker_s1.json",
+    "attacker_config_sha256": "72923582e6595103026ac0fa3488ace4888f70ca09aa91f7cdf49d8e53eb70e1"
+  },
+  "dataset_files": {
+    "metadata_path": "Data_Entry_2017_v2020.csv",
+    "metadata_sha256": "dc1d2df67fdc1c5a7601d48699cda2b13dc2c4841488b4183dcf04884dbaca11",
+    "classification_split_csv_path": "chexnet/nih_labels.csv",
+    "classification_split_csv_sha256": "80324996867e73546bd7a09025df4a4cc3243fc00663b753023ccd90a9b5f8b9",
+    "train_pairs_path": "image_pairs/image_pairs_training_10000.txt",
+    "train_pairs_sha256": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
+    "train_pairs_count": 10000,
+    "val_pairs_path": "image_pairs/image_pairs_validation_2000.txt",
+    "val_pairs_sha256": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7",
+    "val_pairs_count": 2000
+  },
+  "frozen_model_checkpoints": {
+    "initial_generator_path": "networks/pretrained_generator_prichexy_net.pth",
+    "initial_generator_sha256": "101226890c061ba5917db7a56a300d1a53988f6eda8767856f10863e2a20aacb",
+    "pretrained_classifier_path": "networks/pretrained_classifier.pth",
+    "pretrained_classifier_sha256": "8ad15b38286f734ea135394ac5e7c79f4a6c1d2db4d563fbe1f81cf3dbe5e663",
+    "pretrained_verifier_path": "networks/pretrained_verification_model.pth",
+    "pretrained_verifier_sha256": "331efaed0c0433c69941ddc003a14a936c688d94fd4ecfbefd34e53bfa7c051a"
+  },
+  "repaired_modules_and_reference": {
+    "repaired_acloss_path": "research_agent/m0_port/ACLoss.py",
+    "repaired_acloss_sha256": "3ed8483718c3ccffb59f76e9dece47e92295a553895e3fd43b1b18cd486b263c",
+    "pristine_reference_path": "research_agent/m0_tests/pristine_reference.py",
+    "pristine_reference_sha256": "58c7049e95dad5891b6e5885002a5f821af7e3e8c61691241ca89a0c3559cd27"
+  },
+  "classification_val_structural_fingerprints": {
+    "n_images": 10816,
+    "n_patients": 3854,
+    "image_index_sequence_sha256": "c2ff15d7deb0e126b096d4392f4d8844c80593d16ad939ea44189b44051b8ab6",
+    "patient_id_sequence_sha256": "c444238f8be4c6f2e6ee5523a1966ef974a182aabc895b3819ebbaeec4f621ba",
+    "label_matrix_14d_sha256": "bef28de2c55d5767c5d930bca8f86253c75a8be2cf00552ce0ceb579e75a28cc"
+  },
+  "patient_separation_contracts": {
+    "anonymizer_train_patients": 9053,
+    "anonymizer_val_patients": 1742,
+    "classification_val_patients": 3854,
+    "train_anonymizer_val_overlap": 0,
+    "train_classification_val_overlap": 0,
+    "status": "PASS"
+  },
+  "runtime_telemetry_contracts": {
+    "train_order_hash_definition": "image1|image2|label\\n",
+    "deterministic_policy": "cudnn.deterministic=True, cudnn.benchmark=False",
+    "scientific_mode_gate": "requires --scientific-m2-s1 globally for all non-unit-test runs"
+  },
+  "safety_firewalls": {
+    "test_firewall": "STRICTLY CLOSED",
+    "scientific_mode_gate": "ENFORCED (--scientific-m2-s1 REQUIRED GLOBALLY)",
+    "output_freshness_guard": "ENFORCED (FAIL CLOSED ON STALE ARTIFACTS)",
+    "git_tracked_tree_guard": "ENFORCED (CLEAN TREE & CERTIFIED ANCESTRY)"
+  }
+}

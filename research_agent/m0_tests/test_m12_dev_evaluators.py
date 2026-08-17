@@ -115,6 +115,7 @@ def _make_attacker(spy, seed=42, n_batches=2, net_factory=None):
         training_loader=_PairBatchLoader(n_batches, batch_size=4),
         validation_loader=_PairBatchLoader(n_batches, batch_size=4),
         net_factory=net_factory or (lambda: TinySiamese()),
+        unit_test_mode=True,
     )
 
 
@@ -142,6 +143,7 @@ def t30_no_test_loader():
             training_loader=_PairBatchLoader(1, batch_size=4),
             validation_loader=_PairBatchLoader(1, batch_size=4),
             net_factory=lambda: TinySiamese(),
+            unit_test_mode=True,
         )
         has_test_loader = hasattr(attacker, 'test_loader')
         # the real build path (no injected loaders) must also survive the guard

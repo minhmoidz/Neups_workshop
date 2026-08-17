@@ -19,7 +19,10 @@ import torch
 import numpy as np
 from sklearn import metrics
 
-from .evaluator_common import snn_preprocess, firewall_check
+from .evaluator_common import (
+    snn_preprocess, firewall_check, verify_frozen_val_pair_provenance,
+    FROZEN_VAL_PAIR_COUNT, FROZEN_VAL_PAIR_SHA256, SCIENTIFIC_IMAGE_ROOT,
+)
 
 
 def evaluate_reid_val_mixed(anonymize_fn, attacker_net, validation_loader, device=None):
@@ -54,8 +57,16 @@ def evaluate_reid_val_mixed(anonymize_fn, attacker_net, validation_loader, devic
             y_true.append(labels.cpu().numpy())
             y_score.append(outputs.cpu().numpy())
 
-    y_true = np.concatenate(y_true)
-    y_score = np.concatenate(y_score)
+    if not y_true or not y_score:
+        raise RuntimeError('Privacy VAL evaluator produced no rows')
+    y_true = np.asarray(np.concatenate(y_true))
+    y_score = np.asarray(np.concatenate(y_score))
+    if y_true.ndim != 1 or y_score.ndim != 1 or len(y_true) != len(y_score):
+        raise RuntimeError('Privacy evaluator outputs must be equal-length 1-D arrays')
+    if not np.isfinite(y_true).all() or not np.isfinite(y_score).all():
+        raise FloatingPointError('Privacy evaluator outputs contain NaN/Inf')
+    if not np.all(np.isin(y_true, [0, 1])) or len(np.unique(y_true)) != 2:
+        raise RuntimeError('Privacy evaluator labels must be binary and contain both classes')
     n_pairs = int(len(y_true))
 
     roc_auc = float(metrics.roc_auc_score(y_true, y_score))
@@ -89,6 +100,10 @@ def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoin
     firewall_check('dev')
     device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     config = config or {}
+    if not unit_test_mode and getattr(device, 'type', str(device).split(':')[0]) == 'cpu':
+        raise RuntimeError('Scientific privacy evaluation requires CUDA; CPU is unit-test only')
+    if not unit_test_mode and config.get('image_path') != SCIENTIFIC_IMAGE_ROOT:
+        raise RuntimeError('Scientific privacy evaluation requires the approved scientific data root for image_path')
 
     from .dev_attacker import load_frozen_anonymizer, SiameseNetwork
     from .evaluator_common import build_dev_anonymizer_loaders, file_sha256
@@ -116,8 +131,12 @@ def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoin
     attacker_net = SiameseNetwork().to(device)
     attacker_net.load_state_dict(torch.load(attacker_checkpoint, map_location=device, weights_only=False))
 
+    if not unit_test_mode and validation_loader is not None:
+        raise RuntimeError('Scientific privacy evaluation does not accept an injected validation_loader')
     if validation_loader is None:
         validation_loader = config.get('validation_loader')
+    if not unit_test_mode and validation_loader is not None:
+        raise RuntimeError('Scientific privacy evaluation does not accept config validation_loader injection')
 
     if validation_loader is None:
         if unit_test_mode:
@@ -130,18 +149,26 @@ def evaluate_reid_val(config=None, attacker_checkpoint=None, generator_checkpoin
     else:
         val_loader = validation_loader
 
-    # Scientific fail-fast: verify the VAL pair count BEFORE running the eval loop,
-    # so a wrong-sized loader can never silently evaluate a non-2000-pair run.
+    # Scientific fail-fast: verify the frozen VAL pair provenance BEFORE running.
+    pair_provenance = None
     if not unit_test_mode:
+        pair_provenance = verify_frozen_val_pair_provenance()
         ds = getattr(val_loader, 'dataset', None)
         n_pairs_known = len(ds) if (ds is not None and hasattr(ds, '__len__')) else None
-        if n_pairs_known is not None and n_pairs_known != 2000:
-            raise RuntimeError("Scientific privacy evaluation requires exactly 2000 validation pairs, got %d" % n_pairs_known)
+        if n_pairs_known is not None and n_pairs_known != FROZEN_VAL_PAIR_COUNT:
+            raise RuntimeError('Scientific privacy evaluation requires exactly 2000 validation pairs, got %d' % n_pairs_known)
 
     res = evaluate_reid_val_mixed(anonymize_fn, attacker_net, val_loader, device=device)
-    if not unit_test_mode and res['n_pairs'] != 2000:
-        raise RuntimeError("Scientific privacy evaluation requires exactly 2000 validation pairs, got %d" % res['n_pairs'])
+    if not unit_test_mode and res['n_pairs'] != FROZEN_VAL_PAIR_COUNT:
+        raise RuntimeError('Scientific privacy evaluation requires exactly 2000 validation pairs, got %d' % res['n_pairs'])
 
+    if pair_provenance:
+        res.update({
+            'validation_pair_file': pair_provenance['pair_file'],
+            'validation_pair_file_sha256': pair_provenance['pair_file_sha256'],
+            'validation_pair_count': pair_provenance['pair_count'],
+            'validation_pair_order_sha256': pair_provenance['pair_order_sha256'],
+        })
     res['generator_checkpoint_sha256'] = gen_sha
     res['attacker_checkpoint_sha256'] = att_sha
     return res

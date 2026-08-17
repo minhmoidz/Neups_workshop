@@ -1,5 +1,7 @@
 {
   "protocol": "M1_C4_DEVELOPMENT_PROTOCOL_LOCK",
+  "status": "SUPERSEDED",
+  "superseded_by": "research_agent/M2_S1_EXECUTION_LOCK.json",
   "version": "1.2.0",
   "lock_date": "2026-08-15",
   "m1_1_reason": [

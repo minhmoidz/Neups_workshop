@@ -16,6 +16,7 @@ evaluation (P0-A). This runner:
 import copy
 import os
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -29,6 +30,10 @@ from .evaluator_common import (
     make_flow_field_components,
     snn_preprocess,
     MU,
+    FROZEN_ATTACKER_CONFIG_PATH,
+    FROZEN_ATTACKER_CONFIG_SHA,
+    file_sha256,
+    verify_attacker_config_matches_frozen,
 )
 from utils import utils
 
@@ -62,7 +67,8 @@ def load_frozen_anonymizer(config=None, device=None, checkpoint_path=None, image
 class DevAttacker:
     def __init__(self, config, attacker_seed=42, device=None,
                  anonymize_fn=None, training_loader=None, validation_loader=None,
-                 net_factory=None, generator_checkpoint=None, image_size=None):
+                 net_factory=None, generator_checkpoint=None, image_size=None,
+                 unit_test_mode=False, config_path=None):
         """Development attacker runner.
 
         :param config: dev config dict.
@@ -79,10 +85,35 @@ class DevAttacker:
         """
         # TEST firewall must pass BEFORE any loader is built
         firewall_check('dev')
+        self.unit_test_mode = bool(unit_test_mode)
+        if not self.unit_test_mode:
+            if config_path != FROZEN_ATTACKER_CONFIG_PATH:
+                raise RuntimeError('Scientific attacker requires the canonical attacker config path')
+            if file_sha256(config_path) != FROZEN_ATTACKER_CONFIG_SHA:
+                raise RuntimeError('Scientific attacker config SHA mismatch')
+            if anonymize_fn is not None or training_loader is not None or validation_loader is not None or net_factory is not None:
+                raise RuntimeError('Scientific attacker does not accept injected models, loaders, anonymizers, or factories')
+            if attacker_seed != 42:
+                raise RuntimeError('Scientific attacker seed must be exactly 42')
+            if config.get('batch_size') != 32 or config.get('learning_rate') != 1e-4:
+                raise RuntimeError('Scientific attacker config does not match frozen optimizer contract')
+            if config.get('max_epochs') != 100 or config.get('early_stopping') != 5:
+                raise RuntimeError('Scientific attacker config does not match frozen training contract')
+            if config.get('train_geometry') != 'anon_anon' or config.get('checkpoint_val_geometry') != 'anon_anon':
+                raise RuntimeError('Scientific attacker geometry contract mismatch')
+            if config.get('scientific_val_geometry') != 'anon_real':
+                raise RuntimeError('Scientific attacker scientific VAL geometry mismatch')
+            # M1.4c.3: the in-memory config must itself match the canonical frozen
+            # attacker config (scientific fields incl. data root), not merely
+            # present the canonical config_path SHA.
+            verify_attacker_config_matches_frozen(config)
 
         self.config = config
         self.attacker_seed = attacker_seed
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if not self.unit_test_mode:
+            if self.device.type != 'cuda' or not torch.cuda.is_available():
+                raise RuntimeError('Scientific attacker evaluation requires CUDA')
         self.generator_checkpoint = generator_checkpoint
 
         # Seed BEFORE net init, DataLoader shuffle, and optimizer.
@@ -133,10 +164,27 @@ class DevAttacker:
             outputs = self.net(inputs1, inputs2).squeeze()
             labels = labels.type_as(outputs)
             loss = self.criterion(outputs, labels)
+            if not torch.isfinite(loss).all():
+                raise FloatingPointError('Attacker training loss is non-finite before backward')
             loss.backward()
+            for name, param in self.net.named_parameters():
+                if param.grad is not None and not torch.isfinite(param.grad).all():
+                    raise FloatingPointError("Attacker gradient '%s' contains NaN/Inf" % name)
             self.optimizer.step()
             running += loss.item()
-        return running / max(len(self.training_loader), 1)
+        avg_loss = running / max(len(self.training_loader), 1)
+        # F5 (M1.4c): Fail-closed on non-finite training loss
+        if not np.isfinite(avg_loss):
+            raise FloatingPointError(
+                "Attacker training loss is non-finite: %s" % avg_loss
+            )
+        # F5 (M1.4c): Verify all parameters are finite after optimizer step
+        for name, param in self.net.named_parameters():
+            if not torch.isfinite(param).all():
+                raise FloatingPointError(
+                    "Attacker parameter '%s' contains NaN/Inf after training step" % name
+                )
+        return avg_loss
 
     def validate_selection(self):
         """Attacker checkpoint-VAL geometry: anon(x1), anon(x2).
@@ -156,7 +204,13 @@ class DevAttacker:
                 labels = labels.type_as(outputs)
                 loss = self.criterion(outputs, labels)
                 running += loss.item()
-        return running / max(len(self.validation_loader), 1)
+        avg_loss = running / max(len(self.validation_loader), 1)
+        # F5 (M1.4c): Fail-closed on non-finite validation loss
+        if not np.isfinite(avg_loss):
+            raise FloatingPointError(
+                "Attacker validation loss is non-finite: %s" % avg_loss
+            )
+        return avg_loss
 
     def run(self, output_dir=None):
         """Training + validation loop with explicit best-checkpoint tracking and saving.
@@ -207,7 +261,10 @@ class DevAttacker:
                 'generator_checkpoint_sha256': file_sha256(self.generator_checkpoint) if self.generator_checkpoint else None,
                 'attacker_seed': self.attacker_seed,
                 'epochs_completed': len(self.loss_dict['training']),
-                'termination_reason': termination_reason
+                'termination_reason': termination_reason,
+                # F5 (M1.4c): Attacker numerical validity tracking
+                'numerical_validity': 'PASS',
+                'nan_inf_detected': False,
             }
             with open(os.path.join(out_dir, 'attacker_manifest.json'), 'w') as f:
                 import json
