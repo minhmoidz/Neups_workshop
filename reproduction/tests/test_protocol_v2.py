@@ -264,6 +264,66 @@ def test_role_manifest():
     m_c = build_manifest(roles_c)
     check('one patient change alters manifest hash', m_a['manifest_sha256'] != m_c['manifest_sha256'])
 
+    # --- Fix 4 (G0.2A.2) negative tests ---
+
+    # unexpected role name (typo) must be rejected, not silently ignored
+    roles_unexpected = {k: set(v) for k, v in disjoint.items()}
+    roles_unexpected['generator_trian'] = {'typo_patient'}  # misspelled extra role
+    raised = False
+    try:
+        validate_role_manifest(roles_unexpected)
+    except RoleManifestError:
+        raised = True
+    check('unexpected/misspelled role name rejected', raised)
+
+    # missing role (already covered pre-fix, re-confirm post-fix)
+    roles_missing = {k: set(v) for k, v in disjoint.items() if k != 'attacker_select'}
+    raised = False
+    try:
+        validate_role_manifest(roles_missing)
+    except RoleManifestError:
+        raised = True
+    check('missing role still rejected after Fix 4', raised)
+
+    # whitelist key naming a pair that is not a permitted cross-role pair at all
+    # (e.g. accidentally whitelisting a locked_confirm overlap) must fail even
+    # if the justification text is present and non-empty.
+    raised = False
+    try:
+        validate_role_manifest(disjoint, {frozenset({'locked_confirm', 'generator_train'}): 'oops, not allowed'})
+    except RoleManifestError:
+        raised = True
+    check('whitelist key naming a non-permitted pair is rejected', raised)
+
+    # empty justification for an otherwise-valid whitelist key
+    raised = False
+    try:
+        validate_role_manifest(disjoint, {frozenset({'generator_train', 'attacker_train'}): '   '})
+    except RoleManifestError:
+        raised = True
+    check('whitelist-eligible pair with whitespace-only justification rejected', raised)
+
+    # canonical-ID collision: int 1 and str '1' are distinct set members but
+    # collide once serialized into the manifest as strings.
+    roles_collision = {k: set(v) for k, v in disjoint.items()}
+    roles_collision['generator_train'] = {1, '1', 'p2', 'p3'}
+    raised = False
+    try:
+        validate_role_manifest(roles_collision)
+    except RoleManifestError:
+        raised = True
+    check('canonical patient-ID collision (int 1 vs str "1") rejected', raised)
+
+    # whitespace-variant collision: ' p9' and 'p9' also collide once stripped.
+    roles_collision2 = {k: set(v) for k, v in disjoint.items()}
+    roles_collision2['locked_confirm'] = {'p9', ' p9', 'p10'}
+    raised = False
+    try:
+        validate_role_manifest(roles_collision2)
+    except RoleManifestError:
+        raised = True
+    check('canonical patient-ID collision (whitespace variant) rejected', raised)
+
 
 def test_output_freshness():
     with tempfile.TemporaryDirectory() as tmp:
@@ -287,6 +347,37 @@ def test_output_freshness():
         check('directory with stale result file rejected', raised)
         check('stale directory contents untouched (no auto-clean)',
               os.path.exists(os.path.join(stale_dir, 'train_log.jsonl')))
+
+        # Fix 3 (G0.2A.2): genuinely fail-closed — ANY non-empty existing
+        # directory is rejected in scientific mode, not just recognized names.
+        def _make_and_expect_rejected(dirname, populate):
+            d = os.path.join(tmp, dirname)
+            os.makedirs(d)
+            populate(d)
+            raised_local = False
+            try:
+                assert_fresh_output_dir(d)
+            except OutputNotFreshError:
+                raised_local = True
+            check('scientific mode rejects %s' % dirname, raised_local)
+
+        _make_and_expect_rejected('unknown_text_file_dest',
+                                   lambda d: open(os.path.join(d, 'notes.txt'), 'w').write('hello'))
+        _make_and_expect_rejected('old_checkpointlike_dest',
+                                   lambda d: open(os.path.join(d, 'model_v9_final_FINAL.pth'), 'wb').write(b'x'))
+        _make_and_expect_rejected('nested_dir_dest',
+                                   lambda d: os.makedirs(os.path.join(d, 'subdir')))
+        _make_and_expect_rejected('recognized_result_dest',
+                                   lambda d: open(os.path.join(d, 'checkpoint_manifest.json'), 'w').write('{}'))
+
+        empty2 = os.path.join(tmp, 'empty_dest_2')
+        os.makedirs(empty2)
+        assert_fresh_output_dir(empty2)
+        check('empty existing directory still accepted (Fix 3 unchanged for this case)', True)
+
+        nonexist2 = os.path.join(tmp, 'never_created')
+        assert_fresh_output_dir(nonexist2)
+        check('nonexistent directory still accepted (Fix 3 unchanged for this case)', True)
 
 
 def test_weight_provenance():
@@ -317,12 +408,157 @@ def test_weight_provenance():
         check('scientific mode rejects missing weight file', raised)
 
 
+class ToyCritic(nn.Module):
+    """Trainable stand-in for the verifier critic — takes the generator's
+    fake output as input and must remain trainable through it."""
+
+    def __init__(self):
+        super().__init__()
+        self.fc = nn.Linear(4 * 16 * 16, 1)
+
+    def forward(self, x):
+        return self.fc(x.flatten(1))
+
+
+def test_downstream_autograd_safe_forward():
+    """Fix 1 (G0.2A.2): a fake generated under preserved_eval_forward must be
+    usable as input to a critic that IS trained (backward + optimizer step)
+    immediately afterward. This fails against the pre-fix inference_mode()
+    implementation (PyTorch refuses to let an inference tensor participate
+    in a graph that gets backpropagated) and passes against the no_grad()
+    fix."""
+    torch.manual_seed(1)
+    generator = ToyBNNet()
+    critic = ToyCritic()
+    critic_opt = torch.optim.SGD(critic.parameters(), lr=0.1)
+    x = torch.randn(8, 1, 16, 16)
+
+    gen_state_before = canonical_tensor_state_hash(generator)
+
+    with preserved_eval_forward(generator):
+        fake = generator(x)
+
+    raised = False
+    try:
+        critic_opt.zero_grad()
+        out = critic(fake)
+        loss = out.pow(2).mean()
+        loss.backward()
+    except RuntimeError:
+        raised = True
+    check('critic can backward through a preserved_eval_forward output (no RuntimeError)', not raised)
+
+    grads = [p.grad for p in critic.parameters()]
+    check('critic gradients are all present and finite',
+          all(g is not None and torch.isfinite(g).all().item() for g in grads))
+    check('critic gradients are nonzero (real training signal reached them)',
+          any(g.abs().sum().item() > 0 for g in grads))
+    check('generator parameters received NO gradient (fake was detached from autograd)',
+          all(p.grad is None for p in generator.parameters()))
+
+    critic_opt.step()
+    check('generator state unchanged after downstream critic step',
+          canonical_tensor_state_hash(generator) == gen_state_before)
+
+
+class ToyParent(nn.Module):
+    """Nested model with deliberately heterogeneous per-submodule .training
+    flags, for Fix 2's submodule-mode-topology test."""
+
+    def __init__(self):
+        super().__init__()
+        self.child_a = nn.BatchNorm1d(4)
+        self.child_b = nn.BatchNorm1d(4)
+
+    def forward(self, x):
+        return self.child_b(self.child_a(x))
+
+
+def _mode_vector_of(module):
+    return [m.training for m in module.modules()]
+
+
+def test_submodule_mode_topology_preserved():
+    """Fix 2 (G0.2A.2): preserved_eval_forward must restore the EXACT
+    per-submodule .training vector, not just the top-level flag."""
+    parent = ToyParent()
+    parent.train(True)
+    parent.child_a.train(False)   # heterogeneous: parent=True, child_a=False, child_b=True
+    parent.child_b.train(True)
+    before = _mode_vector_of(parent)
+    check('fixture actually has heterogeneous modes before the guard',
+          len(set(before)) > 1)
+
+    x = torch.randn(4, 4)
+    with preserved_eval_forward(parent):
+        parent(x)
+    after_normal = _mode_vector_of(parent)
+    check('exact per-submodule mode vector restored after normal exit', before == after_normal)
+
+    # re-establish heterogeneous state, then force an exception inside the guard
+    parent.train(True)
+    parent.child_a.train(False)
+    parent.child_b.train(True)
+    before2 = _mode_vector_of(parent)
+    raised = False
+    try:
+        with preserved_eval_forward(parent):
+            parent(x)
+            raise ValueError('deliberate')
+    except ValueError:
+        raised = True
+    check('exception still propagates with heterogeneous modes', raised)
+    after_exc = _mode_vector_of(parent)
+    check('exact per-submodule mode vector restored after exception exit', before2 == after_exc)
+
+
+def test_full_hash_schedule_source():
+    """Fix 5 (G0.2A.2): AST/source-level check only — does not import or
+    execute the real runner. Confirms the predeclared schedule constant is
+    actually referenced by the class (not a dead constant), and that the
+    trigger condition binds epoch + batch index + extra-step index together
+    (so it cannot fire on every batch of a selected epoch)."""
+    import ast
+    path = os.path.join(ROOT, 'reproduction', 'method_dev', 'run_hardened_verifier_v2.py')
+    src = open(path).read()
+    tree = ast.parse(src, filename=path)
+
+    check('PREDECLARED_FULL_HASH_EPOCHS is defined at module level',
+          any(isinstance(n, ast.Assign) and any(
+              isinstance(t, ast.Name) and t.id == 'PREDECLARED_FULL_HASH_EPOCHS' for t in n.targets)
+              for n in tree.body))
+
+    check('self.full_hash_epochs is bound to the predeclared constant (not a caller param)',
+          'self.full_hash_epochs = PREDECLARED_FULL_HASH_EPOCHS' in src)
+    check('constructor no longer accepts a caller-supplied snapshot_epochs parameter',
+          'snapshot_epochs' not in src)
+
+    check('trigger condition combines epoch schedule, batch index, and extra-step index',
+          'epoch_is_scheduled and n_batches == 0 and extra_i == 0' in src)
+
+
+def test_rng_seeding_source():
+    """Fix 6 (G0.2A.2): AST/source-level check only — confirms every RNG
+    domain the parity-sensitive original path seeds is also seeded here.
+    Does NOT claim bitwise parity (that requires an actual GPU run)."""
+    path = os.path.join(ROOT, 'reproduction', 'method_dev', 'run_hardened_verifier_v2.py')
+    src = open(path).read()
+    check('imports the `random` module', 'import random' in src)
+    for token in ('torch.manual_seed(seed)', 'torch.cuda.manual_seed_all(seed)',
+                  'torch.cuda.manual_seed(seed)', 'np.random.seed(seed)', 'random.seed(seed)'):
+        check('source seeds: %s' % token, token in src)
+
+
 def main():
     test_state_invariants()
+    test_downstream_autograd_safe_forward()
+    test_submodule_mode_topology_preserved()
     test_deterministic_loader()
     test_role_manifest()
     test_output_freshness()
     test_weight_provenance()
+    test_full_hash_schedule_source()
+    test_rng_seeding_source()
     n_pass = sum(1 for _, ok in RESULTS if ok)
     print('\n%d/%d checks passed' % (n_pass, len(RESULTS)))
     assert n_pass == len(RESULTS)

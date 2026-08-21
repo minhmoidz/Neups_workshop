@@ -51,34 +51,67 @@ def parameter_version_signature(module: torch.nn.Module):
     return tuple(sig)
 
 
+def _snapshot_mode_vector(module: torch.nn.Module):
+    """Per-submodule (module, was_training) list, in module.modules() order
+    (includes `module` itself). Captures the FULL mode topology, not just the
+    top-level flag — a parent and its children can legitimately disagree
+    (e.g. someone previously called child.eval() without affecting the
+    parent)."""
+    return [(m, m.training) for m in module.modules()]
+
+
+def _restore_mode_vector(mode_vector):
+    """Restore each module's individual .training flag directly (bypassing
+    .train()/.eval(), which recurse into children and would overwrite a
+    child's restored flag with the parent's when applied top-down)."""
+    for m, was_training in mode_vector:
+        m.training = was_training
+
+
 class preserved_eval_forward:
-    """Exception-safe context manager for a forward-only, mode-preserving call.
+    """Exception-safe context manager for a forward-only, mode-preserving call
+    whose OUTPUT remains usable in a later autograd graph (e.g. feeding a
+    trainable critic that will be backpropagated).
 
     Usage:
         with preserved_eval_forward(generator):
-            out = generator(x)   # generator is .eval() here, no grad tracked
+            out = generator(x)   # generator (and every submodule) is .eval()
+                                  # here; `out` is an ordinary no_grad tensor,
+                                  # not an inference-mode tensor.
 
-    On exit (normal or exception), the generator's original .training mode is
-    restored exactly, and no parameter/buffer is mutated (BatchNorm running
-    stats are frozen because the module is in eval() during the forward,
-    regardless of whether the caller nests this inside no_grad()).
+    Fix 1 (G0.2A.2): uses torch.no_grad(), not torch.inference_mode(). A
+    tensor created under inference_mode() is an "inference tensor" that
+    PyTorch autograd refuses to use in any graph that will later be
+    backpropagated (e.g. training a critic on the generator's fake output)
+    — using it there raises a RuntimeError. no_grad() tensors carry no such
+    restriction: they are ordinary tensors that simply weren't tracked
+    during their own creation, and are fully usable as fresh inputs to a
+    downstream graph that DOES require grad.
+
+    Fix 2 (G0.2A.2): restores the exact per-submodule .training topology
+    that existed before entry (not just the top-level flag) — see
+    `_snapshot_mode_vector`/`_restore_mode_vector`. On exit (normal or
+    exception), every submodule's original mode is restored exactly, and no
+    parameter/buffer is mutated (BatchNorm running stats are frozen because
+    every submodule is in eval() during the forward).
     """
 
     def __init__(self, module: torch.nn.Module):
         self.module = module
-        self._original_mode = None
-        self._inference_ctx = None
+        self._mode_vector = None
+        self._no_grad_ctx = None
 
     def __enter__(self):
-        self._original_mode = self.module.training
+        self._mode_vector = _snapshot_mode_vector(self.module)
         self.module.eval()
-        self._inference_ctx = torch.inference_mode()
-        self._inference_ctx.__enter__()
+        self._no_grad_ctx = torch.no_grad()
+        self._no_grad_ctx.__enter__()
         return self.module
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # Restore inference_mode context first (independent of module mode).
-        self._inference_ctx.__exit__(exc_type, exc_val, exc_tb)
-        # Always restore original training/eval mode, even on exception.
-        self.module.train(self._original_mode)
+        # Restore no_grad context first (independent of module mode).
+        self._no_grad_ctx.__exit__(exc_type, exc_val, exc_tb)
+        # Always restore the exact original per-submodule mode topology,
+        # even on exception.
+        _restore_mode_vector(self._mode_vector)
         return False  # never swallow exceptions

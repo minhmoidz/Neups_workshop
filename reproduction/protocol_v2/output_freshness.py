@@ -3,32 +3,37 @@
 Never deletes anything and never cleans directories automatically — it only
 decides whether a destination is safe to write NEW scientific output into,
 and raises if not.
+
+Fix 3 (G0.2A.2): the original filename-allowlist check
+(`_STALE_RESULT_NAMES`) was not genuinely fail-closed — an existing
+directory containing an UNRECOGNIZED file (a stray text file, a nested
+directory, an old-but-differently-named checkpoint) was silently treated as
+"fresh" as long as it didn't happen to match one of a handful of known
+result filenames. In scientific mode the guard must reject every non-empty
+existing directory regardless of what it contains, not just directories
+containing a recognized name.
 """
 import os
-
-# Filenames this guard treats as "scientific result" artifacts — presence of
-# any of these in a target directory means the directory is not a fresh
-# destination, even if other files are absent.
-_STALE_RESULT_NAMES = {
-    'checkpoint_manifest.json',
-    'attacker_manifest.json',
-    'attacker_manifest_pilot.json',
-    'train_log.jsonl',
-    'epoch_metrics.csv',
-    'pilot_result.json',
-}
 
 
 class OutputNotFreshError(RuntimeError):
     pass
 
 
-def assert_fresh_output_dir(path: str, allow_empty_existing: bool = True):
+def assert_fresh_output_dir(path: str, allow_empty_existing: bool = True, scientific_mode: bool = True):
     """Raise OutputNotFreshError unless `path` is safe to write fresh results into.
 
-    Safe means: does not exist yet, OR exists and is empty, OR exists and
-    contains no recognized stale result filename. Never deletes or modifies
-    anything — this is a check, not a cleanup tool.
+    scientific_mode=True (default): safe means ONLY — does not exist yet, OR
+    exists and is genuinely empty (if allow_empty_existing). ANY existing,
+    non-empty directory is rejected outright, regardless of its contents'
+    filenames (unknown text file, old checkpoint-like file, nested
+    directory, or a recognized result file — all rejected alike). Never
+    deletes or modifies anything — this is a check, not a cleanup tool.
+
+    scientific_mode=False is not used by any scientific caller; it exists
+    only so non-scientific tooling could in principle request the older,
+    permissive allowlist behavior — no such caller currently exists in this
+    codebase, and none should be added without a separate, explicit review.
     """
     if not os.path.exists(path):
         return  # nonexistent destination is always fresh
@@ -41,12 +46,23 @@ def assert_fresh_output_dir(path: str, allow_empty_existing: bool = True):
             return
         raise OutputNotFreshError('Destination exists but must be nonexistent (not merely empty): %s' % path)
 
-    stale = sorted(set(entries) & _STALE_RESULT_NAMES)
+    if scientific_mode:
+        raise OutputNotFreshError(
+            'Destination %s already exists and is non-empty (contains %s) — '
+            'refusing to write into any pre-existing non-empty directory in scientific mode. '
+            'Choose a new destination.' % (path, sorted(entries)))
+
+    # Non-scientific fallback path (unused by any current caller): only reject
+    # directories containing one of a small set of known result filenames.
+    _stale_result_names = {
+        'checkpoint_manifest.json', 'attacker_manifest.json', 'attacker_manifest_pilot.json',
+        'train_log.jsonl', 'epoch_metrics.csv', 'pilot_result.json',
+    }
+    stale = sorted(set(entries) & _stale_result_names)
     if stale:
         raise OutputNotFreshError(
             'Destination %s already contains scientific result file(s) %s — '
             'refusing to append/overwrite. Choose a new destination.' % (path, stale))
-    # Directory has other, non-result content (e.g. a .gitkeep) — treat as fresh.
 
 
 def assert_no_append(existing_log_path: str):

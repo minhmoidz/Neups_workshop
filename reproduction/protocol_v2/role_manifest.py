@@ -35,19 +35,64 @@ class RoleManifestError(ValueError):
     pass
 
 
+def canonical_patient_id(raw) -> str:
+    """Canonical string form of a patient identifier: str(), then strip
+    surrounding whitespace. Raises on an empty canonical ID."""
+    s = str(raw).strip()
+    if not s:
+        raise RoleManifestError('Empty/whitespace-only patient identifier is not allowed: %r' % (raw,))
+    return s
+
+
+def _check_canonical_collisions(role: str, patients) -> dict:
+    """Returns {canonical_id: raw_id} for one role's patient set, raising if
+    two DISTINCT raw identifiers canonicalize to the same manifest ID (e.g.
+    int 1 and str '1', or ' 1' and '1' — silently distinct as set members,
+    but ambiguous once serialized into the manifest)."""
+    canon_to_raw = {}
+    for raw in patients:
+        c = canonical_patient_id(raw)
+        if c in canon_to_raw and canon_to_raw[c] != raw:
+            raise RoleManifestError(
+                "Role %r: distinct patient identifiers %r and %r both canonicalize to %r "
+                "— ambiguous manifest ID collision" % (role, canon_to_raw[c], raw, c))
+        canon_to_raw[c] = raw
+    return canon_to_raw
+
+
 def validate_role_manifest(roles: dict, whitelist: dict = None):
     """roles: {role_name: set(patient_id)}. whitelist: {frozenset({a,b}): 'justification string'}.
 
     Raises RoleManifestError (fail-closed) on any unresolved violation.
     Returns True if valid.
+
+    Fix 4 (G0.2A.2): requires set(roles.keys()) == set(ROLES) exactly
+    (rejects unexpected/misspelled role names, not just missing ones);
+    requires every patient identifier to have a unique, non-empty canonical
+    form within its role; requires every whitelist key to be a genuinely
+    permitted cross-role pair (not merely checked lazily when an overlap
+    happens to occur) with a non-empty justification.
     """
     whitelist = whitelist or {}
-    missing = set(ROLES) - set(roles.keys())
-    if missing:
-        raise RoleManifestError('Manifest missing role names: %s' % sorted(missing))
+
+    given = set(roles.keys())
+    missing = set(ROLES) - given
+    unexpected = given - set(ROLES)
+    if missing or unexpected:
+        raise RoleManifestError(
+            'Manifest role set does not exactly match required roles. missing=%s unexpected=%s'
+            % (sorted(missing), sorted(unexpected)))
+
     for role, patients in roles.items():
         if not isinstance(patients, (set, frozenset)):
             raise RoleManifestError('Role %r patient set must be a set (got %s)' % (role, type(patients)))
+        _check_canonical_collisions(role, patients)
+
+    for pair, justification in whitelist.items():
+        if not isinstance(pair, frozenset) or pair not in _WHITELISTABLE:
+            raise RoleManifestError('Whitelist key %r is not a permitted cross-role pair' % (pair,))
+        if not justification or not str(justification).strip():
+            raise RoleManifestError('Whitelist entry for %r has an empty justification' % (pair,))
 
     names = sorted(roles.keys())
     for i, a in enumerate(names):

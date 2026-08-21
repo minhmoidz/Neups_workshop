@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(ROOT, 'reproduction', 'statistics'))
 from patient_graph_bootstrap import (  # noqa: E402
     pair_weights_for_draw, weighted_auc, draw_patient_multiplicities,
     patient_graph_bootstrap_paired, effective_auc, OneClassResampleError, STATUS,
+    BootstrapInputError,
 )
 
 RESULTS = []
@@ -137,6 +138,65 @@ def test_paired_bootstrap_uses_same_draw_for_both_arms():
           result['deltas'] != result3['deltas'])
 
 
+def test_input_validation_raises_explicit_exceptions():
+    """Fix 7 (G0.2A.2): every input contract violation raises
+    BootstrapInputError explicitly — none of these are bare `assert`
+    statements (which are removable under `python -O`)."""
+    rng = np.random.default_rng(2)
+    p1, p2, y_true, y_score_b, y_score_c = _synthetic_dataset(rng)
+
+    def expect_raises(label, **kwargs):
+        args = dict(patient1_ids=p1, patient2_ids=p2, y_true=y_true,
+                    y_score_baseline=y_score_b, y_score_candidate=y_score_c,
+                    n_bootstrap=5, bootstrap_seed=1)
+        args.update(kwargs)
+        raised = False
+        try:
+            patient_graph_bootstrap_paired(**args)
+        except BootstrapInputError:
+            raised = True
+        check(label, raised)
+
+    expect_raises('mismatched patient1_ids length rejected', patient1_ids=p1[:-1])
+    expect_raises('mismatched y_score_candidate length rejected', y_score_candidate=y_score_c[:-1])
+    expect_raises('non-positive n_bootstrap rejected', n_bootstrap=0)
+    expect_raises('non-integer n_bootstrap rejected', n_bootstrap=5.5)
+    expect_raises('non-binary y_true rejected', y_true=np.array([2] + list(y_true[1:])))
+
+    y_score_nan = y_score_b.copy()
+    y_score_nan[0] = np.nan
+    expect_raises('non-finite score rejected', y_score_baseline=y_score_nan)
+
+    # Empty inputs.
+    empty = np.array([])
+    raised = False
+    try:
+        patient_graph_bootstrap_paired(empty, empty, empty, empty, empty, n_bootstrap=5, bootstrap_seed=1)
+    except BootstrapInputError:
+        raised = True
+    check('empty inputs rejected', raised)
+
+    # Patient-equality/label contract violation: mark a same-patient pair
+    # (index 0: p1==p2==0) with label 0 instead of the required 1.
+    bad_y_true = y_true.copy()
+    bad_y_true[0] = 0
+    expect_raises('patient-equality/label contract violation rejected', y_true=bad_y_true)
+
+
+def test_paired_resample_zero_delta_when_scores_identical():
+    """Fix 7 (G0.2A.2) real invariant test: if the two arms' scores are
+    IDENTICAL, every valid bootstrap replicate's delta must be EXACTLY 0 —
+    this fails if a buggy future implementation ever resampled the two arms
+    with independent draws instead of the same draw_counts/weights."""
+    rng = np.random.default_rng(3)
+    p1, p2, y_true, y_score_b, _ = _synthetic_dataset(rng)
+    result = patient_graph_bootstrap_paired(p1, p2, y_true, y_score_b, y_score_b,
+                                             n_bootstrap=50, bootstrap_seed=999)
+    check('at least one valid replicate produced', result['n_valid'] > 0)
+    check('identical-score arms produce exactly delta=0 on every valid replicate',
+          all(d == 0.0 for d in result['deltas']))
+
+
 def main():
     test_weighted_matches_explicit_row_expansion()
     test_positive_pair_weight_is_cP()
@@ -145,6 +205,8 @@ def main():
     test_one_class_resample_detected_not_silent()
     test_effective_auc()
     test_paired_bootstrap_uses_same_draw_for_both_arms()
+    test_input_validation_raises_explicit_exceptions()
+    test_paired_resample_zero_delta_when_scores_identical()
     n_pass = sum(1 for _, ok in RESULTS if ok)
     print('\n%d/%d checks passed' % (n_pass, len(RESULTS)))
     assert n_pass == len(RESULTS)

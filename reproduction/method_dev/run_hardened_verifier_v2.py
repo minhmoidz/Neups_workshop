@@ -41,10 +41,14 @@ reproduction/reports/G0_1_PROTOCOL_REPAIR_SPEC_2026-08-21.md §6:
   free-running, starts immediately on CLI     fail-closed: refuses to start without an
                                                  explicit --execution-manifest naming a
                                                  human-approved manifest file
-  no snapshot hooks                           predeclared snapshot hooks (disabled by
-                                                 default) that CAN save generator + live
-                                                 verifier state at predeclared epochs in a
-                                                 FUTURE authorized run — not enabled here
+  no snapshot hooks                           full-state-hash schedule bound to the
+                                                 module constant PREDECLARED_FULL_HASH_EPOCHS
+                                                 (fixed at (epoch, batch_index=0,
+                                                 extra_step=0) per selected epoch — G0.2A.2
+                                                 Fix 5), not a caller-overridable parameter;
+                                                 still does NOT save generator/verifier
+                                                 checkpoints at those epochs — that remains a
+                                                 FUTURE, separately-authorized addition
 
 Explicitly NOT claimed by this file:
   - That the live verifier's privacy_term is method-neutral (it is not — see
@@ -57,6 +61,7 @@ Explicitly NOT claimed by this file:
 import argparse
 import json
 import os
+import random
 import sys
 import time
 
@@ -173,7 +178,7 @@ class HardenedVerifierRunnerV2:
     """
 
     def __init__(self, arm, k_extra_verifier_steps, batch_policy, seed, output_dir, device,
-                 weight_provenance_record, snapshot_epochs=frozenset()):
+                 weight_provenance_record):
         firewall_check('dev')
         if arm not in ('B_dev', 'C4'):
             raise ValueError("arm must be 'B_dev' or 'C4'")
@@ -192,7 +197,13 @@ class HardenedVerifierRunnerV2:
         self.seed = seed
         self.device = device
         self.weight_provenance_record = weight_provenance_record  # required, see main()
-        self.snapshot_epochs = frozenset(snapshot_epochs)  # DISABLED by default (empty)
+        # Fix 5 (G0.2A.2): the full-hash schedule is no longer a caller-injectable
+        # parameter (that made the module-level PREDECLARED_FULL_HASH_EPOCHS a dead
+        # constant nobody actually used). It is bound directly to the predeclared
+        # constant here and cannot be overridden without editing this source file
+        # under a fresh, separately-reviewed change — there is no approved manifest
+        # mechanism yet to bind an alternative schedule to.
+        self.full_hash_epochs = PREDECLARED_FULL_HASH_EPOCHS
         self.generator_optimizer_step_count = 0
         self.nan_inf_detected = False
 
@@ -215,9 +226,16 @@ class HardenedVerifierRunnerV2:
         self.ver_loss_weight = self.config.get('ver_loss_weight', 1.0)
         self.feature_loss_weight = 1.0 if self.arm == 'C4' else 0.0
 
+        # Fix 6 (G0.2A.2): match the parity-sensitive original seeding path
+        # exactly (M2AnonymizerRunner._seed_all, anonymizer_runner.py:261-270) —
+        # that seeds torch, torch.cuda (both manual_seed_all AND manual_seed),
+        # numpy, AND Python's own `random` module. The previous v2 draft omitted
+        # `random.seed()` entirely and `torch.cuda.manual_seed(seed)`.
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
+        torch.cuda.manual_seed(seed)
         np.random.seed(seed)
+        random.seed(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
@@ -288,9 +306,9 @@ class HardenedVerifierRunnerV2:
 
     def train_epoch(self, epoch):
         self.generator.train()
-        check_full_hash = epoch in self.snapshot_epochs
+        epoch_is_scheduled = epoch in self.full_hash_epochs
         running = {}
-        n_batches = 0
+        n_batches = 0  # doubles as the batch index (0-based) for this epoch
 
         for batch in self.training_loader:
             inputs1, inputs2, labels, labels_id = batch
@@ -352,8 +370,13 @@ class HardenedVerifierRunnerV2:
             # --- end combined step ---
 
             # --- critic-only extra steps: generator state MUST NOT change ---
+            # Fix 5 (G0.2A.2): full canonical hash fires at exactly ONE point
+            # per selected epoch — (epoch, batch_index=0, extra_step=0) — not
+            # on every batch of that epoch. `n_batches` is this batch's
+            # 0-based index (it has not been incremented yet this iteration).
             for extra_i in range(self.k_extra_verifier_steps):
-                with GeneratorStateGuard(self.generator, check_full_hash and extra_i == 0) as guard:
+                do_full_hash = epoch_is_scheduled and n_batches == 0 and extra_i == 0
+                with GeneratorStateGuard(self.generator, do_full_hash) as guard:
                     if self.batch_policy == 'same_batch':
                         extra_inputs1, extra_inputs2, extra_labels_id = inputs1, inputs2, labels_id
                     else:

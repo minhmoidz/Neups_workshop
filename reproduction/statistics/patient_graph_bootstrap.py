@@ -14,6 +14,12 @@ the patient population (with replacement). Weighted AUC is used instead of
 materializing repeated pair rows (equivalence is checked in
 reproduction/tests/test_patient_graph_bootstrap.py against explicit
 integer-row expansion).
+
+UNRESOLVED (explicitly, not silently decided): whether inference should be
+performed on raw AUC or on effective_auc() = max(AUC, 1-AUC) is a design
+choice left open for G0.2B. `effective_auc()` is provided here as a utility
+only; `patient_graph_bootstrap_paired()` returns raw AUCs/deltas and does not
+itself pick an estimand — callers must not assume one was chosen for them.
 """
 from collections import Counter
 
@@ -26,6 +32,46 @@ STATUS = 'UNVALIDATED'
 class OneClassResampleError(RuntimeError):
     """Raised (never silently swallowed) when a resample's weighted labels
     contain only one class, so AUC is undefined."""
+
+
+class BootstrapInputError(ValueError):
+    """Raised for any malformed input to patient_graph_bootstrap_paired.
+
+    Fix 7 (G0.2A.2): replaces the previous bare `assert` statements, which
+    are removable under `python -O` and therefore not a real contract for
+    scientific code — every check here is an explicit, non-removable
+    exception."""
+
+
+def _validate_bootstrap_inputs(patient1_ids, patient2_ids, y_true,
+                                y_score_baseline, y_score_candidate, n_bootstrap):
+    n = len(y_true)
+    if n == 0:
+        raise BootstrapInputError('Inputs must be non-empty')
+    for name, arr in (('patient1_ids', patient1_ids), ('patient2_ids', patient2_ids),
+                       ('y_score_baseline', y_score_baseline), ('y_score_candidate', y_score_candidate)):
+        if len(arr) != n:
+            raise BootstrapInputError('%s has length %d, expected %d (len(y_true))' % (name, len(arr), n))
+
+    if not isinstance(n_bootstrap, int) or isinstance(n_bootstrap, bool) or n_bootstrap <= 0:
+        raise BootstrapInputError('n_bootstrap must be a positive int, got %r' % (n_bootstrap,))
+
+    yt = np.asarray(y_true)
+    if not np.isin(yt, (0, 1)).all():
+        raise BootstrapInputError('y_true must be binary (0/1 only)')
+
+    for name, scores in (('y_score_baseline', y_score_baseline), ('y_score_candidate', y_score_candidate)):
+        if not np.isfinite(np.asarray(scores, dtype=np.float64)).all():
+            raise BootstrapInputError('%s contains non-finite values' % name)
+
+    for i, (p1, p2, y) in enumerate(zip(patient1_ids, patient2_ids, yt)):
+        is_same_patient = (p1 == p2)
+        expected_label = 1 if is_same_patient else 0
+        if int(y) != expected_label:
+            raise BootstrapInputError(
+                'Pair label contract violated at row %d: patient1=%r patient2=%r y_true=%r '
+                '(expected %d for %s-patient pair)'
+                % (i, p1, p2, y, expected_label, 'same' if is_same_patient else 'different'))
 
 
 def effective_auc(auc: float) -> float:
@@ -83,10 +129,8 @@ def patient_graph_bootstrap_paired(patient1_ids, patient2_ids, y_true,
     replicates. Invalid replicates are never silently dropped from the
     report — the count is always returned to the caller.
     """
+    _validate_bootstrap_inputs(patient1_ids, patient2_ids, y_true, y_score_baseline, y_score_candidate, n_bootstrap)
     rng = np.random.default_rng(bootstrap_seed)  # independent of any model/attacker seed
-    n = len(y_true)
-    assert len(patient1_ids) == n and len(patient2_ids) == n
-    assert len(y_score_baseline) == n and len(y_score_candidate) == n
 
     deltas = []
     baseline_aucs = []
