@@ -14,6 +14,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, 'reproduction', 'statistics'))
 
+import patient_graph_bootstrap as pgb_module  # noqa: E402 — module object, for monkeypatching
 from patient_graph_bootstrap import (  # noqa: E402
     pair_weights_for_draw, weighted_auc, draw_patient_multiplicities,
     patient_graph_bootstrap_paired, effective_auc, OneClassResampleError, STATUS,
@@ -184,10 +185,15 @@ def test_input_validation_raises_explicit_exceptions():
 
 
 def test_paired_resample_zero_delta_when_scores_identical():
-    """Fix 7 (G0.2A.2) real invariant test: if the two arms' scores are
-    IDENTICAL, every valid bootstrap replicate's delta must be EXACTLY 0 —
-    this fails if a buggy future implementation ever resampled the two arms
-    with independent draws instead of the same draw_counts/weights."""
+    """Behavioral invariant only (G0.2A.3 Correction 3 wording): if the two
+    arms' scores are IDENTICAL, every valid bootstrap replicate's delta is
+    EXACTLY 0. This is consistent with — but is NOT standalone proof of —
+    shared per-replicate resampling; a pathological implementation could in
+    principle satisfy this specific check by other means. The direct proof
+    that exactly one draw is used per replicate is
+    `test_exactly_one_draw_per_replicate_instrumented` below, which
+    instruments the actual call sequence rather than inferring it from
+    output behavior."""
     rng = np.random.default_rng(3)
     p1, p2, y_true, y_score_b, _ = _synthetic_dataset(rng)
     result = patient_graph_bootstrap_paired(p1, p2, y_true, y_score_b, y_score_b,
@@ -195,6 +201,69 @@ def test_paired_resample_zero_delta_when_scores_identical():
     check('at least one valid replicate produced', result['n_valid'] > 0)
     check('identical-score arms produce exactly delta=0 on every valid replicate',
           all(d == 0.0 for d in result['deltas']))
+
+
+def test_exactly_one_draw_per_replicate_instrumented():
+    """G0.2A.3 Correction 3: directly instruments
+    patient_graph_bootstrap.draw_patient_multiplicities and .weighted_auc
+    (monkeypatched at the MODULE level, since patient_graph_bootstrap_paired
+    calls them as bare module-global names resolved at call time) to prove,
+    from the actual call sequence:
+      1. draw_patient_multiplicities is called exactly once per requested replicate.
+      2. weighted_auc is called exactly twice per replicate (baseline, candidate).
+      3. within each replicate, the two weighted_auc calls receive IDENTICAL
+         weight arrays (the same resample applied to both arms).
+    Monkeypatches are restored in a `finally` block regardless of outcome.
+    """
+    rng = np.random.default_rng(4)
+    p1, p2, y_true, y_score_b, y_score_c = _synthetic_dataset(rng)
+    n_bootstrap = 15
+
+    draw_calls = []
+    weighted_auc_calls = []  # list of (y_true, y_score, weights) tuples, in call order
+
+    original_draw = pgb_module.draw_patient_multiplicities
+    original_weighted_auc = pgb_module.weighted_auc
+
+    def instrumented_draw(*args, **kwargs):
+        result = original_draw(*args, **kwargs)
+        draw_calls.append(result)
+        return result
+
+    def instrumented_weighted_auc(y_true_arg, y_score_arg, weights_arg, **kwargs):
+        weighted_auc_calls.append((np.asarray(y_true_arg).copy(), np.asarray(y_score_arg).copy(),
+                                    np.asarray(weights_arg).copy()))
+        return original_weighted_auc(y_true_arg, y_score_arg, weights_arg, **kwargs)
+
+    try:
+        pgb_module.draw_patient_multiplicities = instrumented_draw
+        pgb_module.weighted_auc = instrumented_weighted_auc
+
+        result = patient_graph_bootstrap_paired(p1, p2, y_true, y_score_b, y_score_c,
+                                                 n_bootstrap=n_bootstrap, bootstrap_seed=777)
+    finally:
+        pgb_module.draw_patient_multiplicities = original_draw
+        pgb_module.weighted_auc = original_weighted_auc
+
+    check('draw_patient_multiplicities called exactly once per requested replicate',
+          len(draw_calls) == n_bootstrap)
+    check('weighted_auc called exactly twice per replicate (2 * n_bootstrap total)',
+          len(weighted_auc_calls) == 2 * n_bootstrap)
+
+    all_identical = True
+    for i in range(n_bootstrap):
+        w_baseline = weighted_auc_calls[2 * i][2]
+        w_candidate = weighted_auc_calls[2 * i + 1][2]
+        if not np.array_equal(w_baseline, w_candidate):
+            all_identical = False
+            break
+    check('baseline/candidate weighted_auc calls within each replicate receive identical weights',
+          all_identical)
+
+    check('monkeypatch restored: module function is the original again',
+          pgb_module.draw_patient_multiplicities is original_draw
+          and pgb_module.weighted_auc is original_weighted_auc)
+    check('instrumented run still returns a well-formed result dict', result['n_bootstrap_requested'] == n_bootstrap)
 
 
 def main():
@@ -207,6 +276,7 @@ def main():
     test_paired_bootstrap_uses_same_draw_for_both_arms()
     test_input_validation_raises_explicit_exceptions()
     test_paired_resample_zero_delta_when_scores_identical()
+    test_exactly_one_draw_per_replicate_instrumented()
     n_pass = sum(1 for _, ok in RESULTS if ok)
     print('\n%d/%d checks passed' % (n_pass, len(RESULTS)))
     assert n_pass == len(RESULTS)

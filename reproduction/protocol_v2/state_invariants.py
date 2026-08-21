@@ -115,3 +115,70 @@ class preserved_eval_forward:
         # even on exception.
         _restore_mode_vector(self._mode_vector)
         return False  # never swallow exceptions
+
+
+class StateInvariantViolation(RuntimeError):
+    pass
+
+
+class GeneratorStateGuard:
+    """Wraps a critic-only block and verifies, ON EXIT, that the generator's
+    complete state was untouched: every submodule's exact .training mode
+    (not just the top-level flag), its buffers, its parameter `_version`
+    signature, and — at predeclared epoch boundaries — its full canonical
+    tensor-state hash.
+
+    G0.2A.3 Correction 2: this is now the single, real implementation (moved
+    here from run_hardened_verifier_v2.py, which imports it — no duplicated
+    test-only guard exists anywhere). Verification is owned entirely by
+    `__exit__`, so it runs on BOTH normal and exceptional exit — the
+    previous design required a manual `guard.verify_unchanged()` call after
+    the `with` block, which was silently skipped whenever an exception
+    propagated out of the block.
+
+    Exception/drift interaction, exactly as required:
+      - no drift, no exception            -> silent pass.
+      - no drift, an unrelated exception   -> that exception propagates
+                                               UNCHANGED (drift check must
+                                               never mask or replace it).
+      - drift, no exception                -> raises StateInvariantViolation.
+      - drift AND an unrelated exception    -> raises StateInvariantViolation
+                                               with the original exception
+                                               chained as its __cause__ (drift
+                                               is surfaced; the original
+                                               exception is not lost).
+    """
+
+    def __init__(self, generator: torch.nn.Module, check_full_hash: bool):
+        self.generator = generator
+        self.check_full_hash = check_full_hash
+        self._mode_vector_before = None
+        self._buf_before = None
+        self._pver_before = None
+        self._full_before = None
+
+    def __enter__(self):
+        self._mode_vector_before = _snapshot_mode_vector(self.generator)
+        self._buf_before = buffer_only_hash(self.generator)
+        self._pver_before = parameter_version_signature(self.generator)
+        if self.check_full_hash:
+            self._full_before = canonical_tensor_state_hash(self.generator)
+        return self
+
+    def _drift_reason(self):
+        """Returns a description string if any invariant changed, else None."""
+        if _snapshot_mode_vector(self.generator) != self._mode_vector_before:
+            return 'Generator per-submodule .training mode topology changed across critic-only block'
+        if buffer_only_hash(self.generator) != self._buf_before:
+            return 'Generator buffer state changed across critic-only block (BN drift)'
+        if parameter_version_signature(self.generator) != self._pver_before:
+            return 'Generator parameter _version changed across critic-only block'
+        if self.check_full_hash and canonical_tensor_state_hash(self.generator) != self._full_before:
+            return 'Generator full canonical state hash changed across critic-only block'
+        return None
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        reason = self._drift_reason()
+        if reason is None:
+            return False  # no drift: let any in-flight exception (or normal exit) proceed untouched
+        raise StateInvariantViolation(reason) from exc_val

@@ -20,8 +20,12 @@ reproduction/reports/G0_1_PROTOCOL_REPAIR_SPEC_2026-08-21.md §6:
 
   v1                                          v2
   ----------------------------------------    ----------------------------------------
-  generator stays .train() during extra       generator forced .eval() + inference_mode
-    critic-only forward passes (BUG)             during critic-only forward (fixed)
+  generator stays .train() during extra       generator forced .eval() + no_grad (via
+    critic-only forward passes (BUG)             preserved_eval_forward) during critic-only
+                                                 forward (fixed; NOT inference_mode — see
+                                                 G0.2A.2 Fix 1: inference-mode tensors cannot
+                                                 be used in a graph that is later
+                                                 backpropagated, which the critic requires)
   no state-change assertion                   buffer hash + param-version signature
                                                  checked around every critic-only block;
                                                  full canonical hash at predeclared epoch
@@ -95,8 +99,7 @@ from m2_dev.evaluator_common import (  # noqa: E402
 )
 
 from protocol_v2.state_invariants import (  # noqa: E402
-    canonical_tensor_state_hash, buffer_only_hash, parameter_version_signature,
-    preserved_eval_forward,
+    preserved_eval_forward, GeneratorStateGuard, StateInvariantViolation,
 )
 from protocol_v2.output_freshness import assert_fresh_output_dir  # noqa: E402
 from protocol_v2.weight_provenance import record_weight_provenance  # noqa: E402
@@ -112,45 +115,13 @@ BATCH_POLICIES = ('same_batch', 'fresh_batch')
 PREDECLARED_FULL_HASH_EPOCHS = frozenset({0, 1, 2, 5, 10, 25, 50, 100, 150, 200, 249})
 
 
-class StateInvariantViolation(RuntimeError):
-    pass
-
-
-class GeneratorStateGuard:
-    """Wraps a critic-only block: asserts the generator's full parameter+buffer
-    state is byte-identical before and after, and that .training mode is
-    restored, using `preserved_eval_forward` for the forward pass itself."""
-
-    def __init__(self, generator, check_full_hash: bool):
-        self.generator = generator
-        self.check_full_hash = check_full_hash
-        self._buf_before = None
-        self._pver_before = None
-        self._full_before = None
-        self._mode_before = None
-
-    def __enter__(self):
-        self._mode_before = self.generator.training
-        self._buf_before = buffer_only_hash(self.generator)
-        self._pver_before = parameter_version_signature(self.generator)
-        if self.check_full_hash:
-            self._full_before = canonical_tensor_state_hash(self.generator)
-        return self
-
-    def verify_unchanged(self):
-        if self.generator.training != self._mode_before:
-            raise StateInvariantViolation('Generator .training mode changed across critic-only block')
-        if buffer_only_hash(self.generator) != self._buf_before:
-            raise StateInvariantViolation('Generator buffer state changed across critic-only block (BN drift)')
-        if parameter_version_signature(self.generator) != self._pver_before:
-            raise StateInvariantViolation('Generator parameter _version changed across critic-only block')
-        if self.check_full_hash:
-            after = canonical_tensor_state_hash(self.generator)
-            if after != self._full_before:
-                raise StateInvariantViolation('Generator full canonical state hash changed across critic-only block')
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        return False
+# StateInvariantViolation and GeneratorStateGuard live in
+# protocol_v2.state_invariants (imported above) — G0.2A.3 Correction 2:
+# there is exactly one implementation, CPU-testable independently of this
+# file, not a duplicated test-only guard. Verification is owned by
+# GeneratorStateGuard.__exit__ itself (runs on both normal and exceptional
+# exit); callers must NOT call a separate verify_unchanged() after the
+# `with` block — see the call site below.
 
 
 def _require_execution_manifest(path):
@@ -376,7 +347,10 @@ class HardenedVerifierRunnerV2:
             # 0-based index (it has not been incremented yet this iteration).
             for extra_i in range(self.k_extra_verifier_steps):
                 do_full_hash = epoch_is_scheduled and n_batches == 0 and extra_i == 0
-                with GeneratorStateGuard(self.generator, do_full_hash) as guard:
+                # Verification runs inside GeneratorStateGuard.__exit__ itself
+                # (both normal and exceptional exit) — no manual post-`with`
+                # call is needed or correct (G0.2A.3 Correction 2).
+                with GeneratorStateGuard(self.generator, do_full_hash):
                     if self.batch_policy == 'same_batch':
                         extra_inputs1, extra_inputs2, extra_labels_id = inputs1, inputs2, labels_id
                     else:
@@ -393,7 +367,6 @@ class HardenedVerifierRunnerV2:
                     loss_extra.backward()
                     self.optimizer_ver.step()
                     self.verification_loss.verification_model.eval()
-                guard.verify_unchanged()  # raises StateInvariantViolation if generator moved
             n_batches += 1
 
         return {'generator_optimizer_step_count': self.generator_optimizer_step_count}

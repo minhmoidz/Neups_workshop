@@ -22,13 +22,14 @@ if ROOT not in sys.path:
 
 from reproduction.protocol_v2.state_invariants import (
     canonical_tensor_state_hash, buffer_only_hash, parameter_version_signature,
-    preserved_eval_forward,
+    preserved_eval_forward, GeneratorStateGuard, StateInvariantViolation,
 )
 from reproduction.protocol_v2.deterministic_loader import (
     DeterministicEpochSampler, build_deterministic_loader,
 )
 from reproduction.protocol_v2.role_manifest import (
-    validate_role_manifest, build_manifest, canonical_manifest_hash, RoleManifestError,
+    validate_role_manifest, build_manifest, canonical_manifest_hash, canonical_patient_id,
+    RoleManifestError,
 )
 from reproduction.protocol_v2.output_freshness import assert_fresh_output_dir, OutputNotFreshError
 from reproduction.protocol_v2.weight_provenance import record_weight_provenance, WeightProvenanceError
@@ -324,6 +325,60 @@ def test_role_manifest():
         raised = True
     check('canonical patient-ID collision (whitespace variant) rejected', raised)
 
+    # --- G0.2A.3 Correction 1: canonical identities must govern CROSS-role overlap ---
+
+    # (1) generator_train={1} and generator_select={"1"}: distinct raw Python
+    # set members (1 != "1"), so the OLD raw-set-intersection check would see
+    # no overlap at all. Both canonicalize to "1" -> must be rejected as a
+    # hard-forbidden overlap (generator_train/generator_select).
+    roles_cross1 = {k: set(v) for k, v in disjoint.items()}
+    roles_cross1['generator_train'] = {1, 'p2', 'p3'}
+    roles_cross1['generator_select'] = {'1', 'p4', 'p5'}
+    raised = False
+    try:
+        validate_role_manifest(roles_cross1)
+    except RoleManifestError:
+        raised = True
+    check('cross-role canonical overlap (int 1 vs str "1") rejected as hard-forbidden', raised)
+
+    # (2) whitespace variant across locked_confirm and another role.
+    roles_cross2 = {k: set(v) for k, v in disjoint.items()}
+    roles_cross2['locked_confirm'] = {' p9', 'p10'}
+    roles_cross2['attacker_train'] = {'p9', 'p6', 'p7'}
+    raised = False
+    try:
+        validate_role_manifest(roles_cross2)
+    except RoleManifestError:
+        raised = True
+    check('cross-role canonical overlap (whitespace variant vs locked_confirm) rejected', raised)
+
+    # (3) canonically-equivalent IDs across a WHITELISTABLE pair still require
+    # an explicit non-empty justification (same rule as an exact-match overlap).
+    roles_cross3 = {k: set(v) for k, v in disjoint.items()}
+    roles_cross3['generator_train'] = {'7', 'p2', 'p3'}
+    roles_cross3['attacker_train'] = {7, 'p6', 'p7'}
+    raised = False
+    try:
+        validate_role_manifest(roles_cross3)
+    except RoleManifestError:
+        raised = True
+    check('canonically-equivalent cross-role overlap without whitelist justification rejected', raised)
+    wl3 = {frozenset({'generator_train', 'attacker_train'}): 'predeclared canonical-overlap exception'}
+    check('same canonically-equivalent overlap WITH justification passes',
+          validate_role_manifest(roles_cross3, wl3) is True)
+
+    # (4) a raw ID with surrounding whitespace must serialize as its
+    # canonical (stripped) form in the built manifest.
+    roles_serialize = {k: set(v) for k, v in disjoint.items()}
+    roles_serialize['attacker_select'] = {' p9 '}
+    roles_serialize['locked_confirm'] = {'p10'}  # avoid accidental overlap with the ' p9 ' role above
+    m_serialize = build_manifest(roles_serialize)
+    check('raw " p9 " serializes as canonical "p9" in the manifest',
+          'p9' in m_serialize['roles']['attacker_select']['patient_ids_sorted']
+          and ' p9 ' not in m_serialize['roles']['attacker_select']['patient_ids_sorted'])
+    check('manifest patient_count reflects the canonical (deduplicated) set size',
+          m_serialize['roles']['attacker_select']['patient_count'] == 1)
+
 
 def test_output_freshness():
     with tempfile.TemporaryDirectory() as tmp:
@@ -512,6 +567,78 @@ def test_submodule_mode_topology_preserved():
     check('exact per-submodule mode vector restored after exception exit', before2 == after_exc)
 
 
+def test_generator_state_guard():
+    """G0.2A.3 Correction 2: GeneratorStateGuard (imported from
+    protocol_v2.state_invariants — the single real implementation, not a
+    duplicated test-only guard) must verify the COMPLETE per-submodule mode
+    topology, and must run its verification from __exit__ on both normal
+    and exceptional exit, per the required exception/drift interaction."""
+
+    # (1) Unchanged normal exit passes silently, no full hash requested.
+    m1 = ToyParent()
+    m1.train(True); m1.child_a.train(False); m1.child_b.train(True)
+    with GeneratorStateGuard(m1, check_full_hash=False):
+        pass  # no mutation at all
+    check('GeneratorStateGuard: unchanged normal exit passes', True)
+
+    # (2) Top-level mode unchanged but ONE CHILD mode changed must raise —
+    # this is exactly the gap a top-level-only check would miss.
+    m2 = ToyParent()
+    m2.train(True); m2.child_a.train(False); m2.child_b.train(True)
+    raised = False
+    try:
+        with GeneratorStateGuard(m2, check_full_hash=False):
+            m2.child_a.training = True  # child-only drift; m2.training (top-level) unchanged
+    except StateInvariantViolation:
+        raised = True
+    check('GeneratorStateGuard detects child-only mode drift (top-level flag alone would miss this)', raised)
+
+    # (3) An unrelated exception with NO state drift propagates UNCHANGED —
+    # drift-checking must never mask or replace an unrelated error.
+    m3 = ToyBNNet()
+    raised_type = None
+    try:
+        with GeneratorStateGuard(m3, check_full_hash=False):
+            raise KeyError('unrelated error, no state drift')
+    except KeyError:
+        raised_type = KeyError
+    except StateInvariantViolation:
+        raised_type = StateInvariantViolation
+    check('unrelated exception without drift propagates as itself (not replaced)', raised_type is KeyError)
+
+    # (4) Buffer/mode drift AND an unrelated exception together: the
+    # invariant violation must surface, with the original exception chained
+    # as __cause__ (not silently lost).
+    m4 = ToyBNNet()
+    m4.train(True)
+    caught = None
+    try:
+        with GeneratorStateGuard(m4, check_full_hash=False):
+            with torch.no_grad():
+                m4.bn.running_mean += 1.0  # real buffer drift
+            raise KeyError('unrelated error, WITH state drift')
+    except StateInvariantViolation as e:
+        caught = e
+    check('drift + unrelated exception together raises StateInvariantViolation', caught is not None)
+    check('original unrelated exception is chained as __cause__',
+          caught is not None and isinstance(caught.__cause__, KeyError))
+
+    # (5) The real runner source imports and uses THIS guard — no duplicated
+    # test-only guard class exists anywhere in the runner file.
+    runner_path = os.path.join(ROOT, 'reproduction', 'method_dev', 'run_hardened_verifier_v2.py')
+    runner_src = open(runner_path).read()
+    check('runner imports GeneratorStateGuard from protocol_v2.state_invariants',
+          'GeneratorStateGuard' in runner_src and 'from protocol_v2.state_invariants import' in runner_src)
+    check('runner does not define its own duplicate GeneratorStateGuard class',
+          'class GeneratorStateGuard' not in runner_src)
+    check('runner does not define its own duplicate StateInvariantViolation class',
+          'class StateInvariantViolation' not in runner_src)
+    check('runner no longer calls a manual verify_unchanged() after the with-block',
+          '.verify_unchanged(' not in runner_src)
+    check('runner documentation no longer claims inference_mode (Fix 1 uses no_grad)',
+          'forced .eval() + inference_mode' not in runner_src)
+
+
 def test_full_hash_schedule_source():
     """Fix 5 (G0.2A.2): AST/source-level check only — does not import or
     execute the real runner. Confirms the predeclared schedule constant is
@@ -553,6 +680,7 @@ def main():
     test_state_invariants()
     test_downstream_autograd_safe_forward()
     test_submodule_mode_topology_preserved()
+    test_generator_state_guard()
     test_deterministic_loader()
     test_role_manifest()
     test_output_freshness()

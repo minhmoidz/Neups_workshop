@@ -83,10 +83,20 @@ def validate_role_manifest(roles: dict, whitelist: dict = None):
             'Manifest role set does not exactly match required roles. missing=%s unexpected=%s'
             % (sorted(missing), sorted(unexpected)))
 
+    # Fix (G0.2A.3 Correction 1): overlap must be judged on CANONICAL identities,
+    # not raw Python set membership. `generator_train={1}` and
+    # `generator_select={"1"}` do not intersect as raw sets (1 != "1" in
+    # Python) but both canonicalize to the same manifest ID "1" — a real
+    # cross-role overlap that the previous raw-set intersection silently
+    # missed. `_check_canonical_collisions` already validates WITHIN-role
+    # uniqueness; here we build each role's canonical ID set for the
+    # ACROSS-role comparison.
+    canonical_sets = {}
     for role, patients in roles.items():
         if not isinstance(patients, (set, frozenset)):
             raise RoleManifestError('Role %r patient set must be a set (got %s)' % (role, type(patients)))
-        _check_canonical_collisions(role, patients)
+        canon_to_raw = _check_canonical_collisions(role, patients)
+        canonical_sets[role] = set(canon_to_raw.keys())
 
     for pair, justification in whitelist.items():
         if not isinstance(pair, frozenset) or pair not in _WHITELISTABLE:
@@ -97,13 +107,14 @@ def validate_role_manifest(roles: dict, whitelist: dict = None):
     names = sorted(roles.keys())
     for i, a in enumerate(names):
         for b in names[i + 1:]:
-            overlap = roles[a] & roles[b]
+            overlap = canonical_sets[a] & canonical_sets[b]
             if not overlap:
                 continue
             pair = frozenset({a, b})
             if pair in _HARD_FORBIDDEN:
                 raise RoleManifestError(
-                    'Forbidden overlap between %r and %r: %d shared patient(s)' % (a, b, len(overlap)))
+                    'Forbidden overlap between %r and %r: %d shared canonical patient ID(s) %s'
+                    % (a, b, len(overlap), sorted(overlap)))
             if pair in _WHITELISTABLE:
                 entry = whitelist.get(pair)
                 if not entry or not str(entry).strip():
@@ -118,14 +129,20 @@ def validate_role_manifest(roles: dict, whitelist: dict = None):
 
 
 def build_manifest(roles: dict, whitelist: dict = None) -> dict:
-    """Validate then produce a deterministic manifest dict (fails closed if invalid)."""
+    """Validate then produce a deterministic manifest dict (fails closed if invalid).
+
+    Serializes CANONICAL patient IDs (via canonical_patient_id()), and
+    `patient_count` is the size of the validated canonical set — not a raw
+    len(patients) count, which could disagree from the canonical count in
+    principle (though validate_role_manifest already rejects any manifest
+    where they would differ, since that implies a within-role collision)."""
     validate_role_manifest(roles, whitelist)
     whitelist = whitelist or {}
     manifest = {
         'roles': {
             role: {
-                'patient_count': len(patients),
-                'patient_ids_sorted': sorted(str(p) for p in patients),
+                'patient_count': len({canonical_patient_id(p) for p in patients}),
+                'patient_ids_sorted': sorted(canonical_patient_id(p) for p in patients),
             }
             for role, patients in sorted(roles.items())
         },
