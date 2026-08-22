@@ -1,0 +1,121 @@
+{
+  "schema_version": "P0_PROTOCOL_V1",
+  "authorization_status": "NOT_AUTHORIZED",
+  "evidence_base_commit": "a3513e5c3b3b5631838399fc14c9e708909fe923",
+
+  "arms": {
+    "U_PUBLISHED": {
+      "role": "released trained PriCheXy endpoint at mu=0.01",
+      "generator_path": "networks/generator_lowest_total_loss_mu_0.01.pth",
+      "generator_sha256": "4d82dcdd1c1b5856d6361fd08b7a6838b044ffc7db89e8bf953a6279cb3bf153"
+    },
+    "D_BDEV": {
+      "role": "selected current B_dev checkpoint (epoch 13)",
+      "generator_path": "research_runs/M2_S1/B_dev/seed_42/generator_best_method_neutral.pth",
+      "generator_sha256": "18381d92c64bb3d646b62d5fb9d0ed8c208cf2cb3154f8aa1dac4b1baff610cd"
+    }
+  },
+
+  "pair_files": {
+    "train": {
+      "path": "image_pairs/image_pairs_training_10000.txt",
+      "sha256": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
+      "role": "attacker_training"
+    },
+    "val": {
+      "path": "image_pairs/image_pairs_validation_2000.txt",
+      "sha256": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7",
+      "role": "attacker_selection_and_scoring"
+    }
+  },
+
+  "seeds": {
+    "screen": [42, 43, 44, 45, 46],
+    "full": [42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,
+             58, 59, 60, 61, 62, 63, 64, 65, 66, 67]
+  },
+
+  "statistics": {
+    "delta_definition": "AUC_U_PUBLISHED - AUC_D_BDEV",
+    "sign_rule": "negative delta favors U_PUBLISHED privacy; positive favors D_BDEV",
+    "seoi": 0.03,
+    "seoi_status": "PROVISIONAL_PENDING_HUMAN_RATIFICATION",
+    "primary_metric": "RAW_ROC_AUC",
+    "post_hoc_score_flipping": "FORBIDDEN",
+    "screen_inference": "TECHNICAL_DIAGNOSTIC_ONLY",
+    "full_inference": "CONDITIONAL_FIXED_GENERATORS_ONLY",
+    "statistical_unit": "paired attacker seed within fixed generator pair",
+    "tost_alpha": 0.05,
+    "equivalence_bounds": [-0.03, 0.03],
+    "permutation_sensitivity": {
+      "monte_carlo_sign_flips": 1000000,
+      "monte_carlo_seed": 20260822,
+      "pvalue_correction": "(extreme_count + 1) / (B + 1)"
+    }
+  },
+
+  "attacker_protocol": {
+    "architecture": "SiameseResNet50_fc128_absdiff_fc1",
+    "initialization": "fresh torchvision resnet50 ImageNet weights per seed; provenance identifier and local file hash required in approved execution manifest; automatic download FORBIDDEN at execution time",
+    "optimizer": "Adam",
+    "learning_rate": 0.0001,
+    "batch_size": 32,
+    "max_epochs": 100,
+    "early_stopping_patience": 5,
+    "selection_loss": "BCEWithLogitsLoss_minimized_on_VAL_anon_anon",
+    "training_geometry": "anon_x1__anon_x2_frozen_generator_eval_no_grad",
+    "selection_geometry": "anon_x1__anon_x2",
+    "scoring_geometry": "anon_x1__real_x2",
+    "score_direction": "sigmoid_logit_higher_means_same_patient_fixed_apriori",
+    "image_transforms": {
+      "load_resize": "256x256_bilinear_grayscale_1ch",
+      "snn_input": "expand_1ch_to_3ch_then_ImageNet_normalize_no_resize"
+    },
+    "flow_operator": {
+      "mu": 0.01,
+      "gaussian_kernel": 9,
+      "gaussian_sigma": 2,
+      "grid_sample_padding": "border",
+      "align_corners": true,
+      "operator_form": "grid=identity-mu*grid_blur_whole_grid"
+    },
+    "seed_contract_schema": "P0_SEED_V1",
+    "domains": [
+      "attacker_weight_init",
+      "train_order",
+      "dataloader_worker_base",
+      "statistical_sensitivity"
+    ]
+  },
+
+  "output_contract": {
+    "root": "reproduction/p0_bridge/runs",
+    "per_run_dir": "<arm>/<seed>",
+    "files": ["predictions.parquet", "attacker_best.pth", "run_manifest.json"],
+    "aggregate_manifest": "aggregate_manifest.json",
+    "expected_identities_full": 52,
+    "expected_identities_screen": 10,
+    "raw_prediction_retention": ["y_true", "y_score", "pair_id"],
+    "atomic_write": true,
+    "refuse_pre_existing_output": true
+  },
+
+  "fail_closed": [
+    "active_run_hardened_verifier_process",
+    "checkpoint_path_role_or_sha_mismatch",
+    "source_commit_mismatch",
+    "pair_file_or_order_hash_mismatch",
+    "unapproved_data_or_split",
+    "seed_mapping_difference_across_arms",
+    "architecture_or_initialization_provenance_difference",
+    "geometry_difference_across_arms",
+    "missing_raw_predictions",
+    "nan_or_inf_anywhere",
+    "selection_or_early_stop_behavior_difference_between_arms",
+    "pre_existing_or_stale_output",
+    "output_collision_or_partial_write",
+    "screen_trajectory_failure",
+    "omitted_or_replaced_seed",
+    "post_hoc_threshold_seed_flip_or_exclusion_proposal"
+  ]
+}
