@@ -195,8 +195,17 @@ def verify_all_artifacts(protocol, repo_root):
                             spec["generator_sha256"])
     for kind, spec in protocol.get("pair_files", {}).items():
         verify_artifact_sha(repo_root, spec["path"], spec["sha256"])
-    verify_artifact_sha(repo_root, weights["local_path"],
-                        weights["sha256"])
+    wpath = weights["local_path"]
+    if os.path.isabs(wpath):
+        # approved external artifact (e.g. torchvision hub cache): hash in
+        # place; reject symlinks and require regular file
+        if os.path.islink(wpath) or not os.path.isfile(wpath):
+            raise PermissionError(
+                "ImageNet weight artifact missing or is a symlink: %s" % wpath)
+        if sha256_file(wpath) != weights["sha256"]:
+            raise PermissionError("ImageNet weight artifact hash mismatch")
+    else:
+        verify_artifact_sha(repo_root, wpath, weights["sha256"])
 
 
 # ---------------------------------------------------------------------------

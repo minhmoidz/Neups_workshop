@@ -28,6 +28,10 @@ import torch.nn.functional as F
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# Process-level cache of eagerly-decoded, immutable datasets shared across
+# attacker seeds within one screen/bridge process (see _real_dataset_factory).
+_DATASET_CACHE = {}
+
 
 def _sha256_file(path):
     h = hashlib.sha256()
@@ -108,6 +112,8 @@ class P0AttackerRunner:
         # weight seeding IMMEDIATELY before attacker construction
         seed_everything_for_attacker_construction(
             self.derived_seeds["attacker_weight_init"])
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
 
         self.device = device or torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")
@@ -164,16 +170,24 @@ class P0AttackerRunner:
         self.best_state = None
 
     def _real_dataset_factory(self, image_root):
+        """Build or REUSE a cached eager pair dataset (P0_2_3 perf).
+
+        LazyPairDataset decodes ~12k images ONCE in __init__; sharing one
+        immutable instance across attacker seeds within this process removes
+        repeated decode cost without changing any tensor, label, or order —
+        the dataset is read-only after construction, and ordering comes
+        exclusively from the deterministic sampler.
+        """
         def factory(phase):
             from m2_dev.evaluator_common import LazyPairDataset
-            path = self.protocol["pair_files"]["train" if phase == "train"
-                                               else "val"]["path"]
-            pair_file = os.path.join(self.repo_root, path)
             phase_name = "training" if phase == "train" else "validation"
-            return LazyPairDataset(phase=phase_name, image_path=image_root,
-                                   metadata_path=os.path.join(
-                                       self.repo_root,
-                                       "Data_Entry_2017_v2020.csv"))
+            key = (phase_name, os.path.abspath(image_root))
+            if key not in _DATASET_CACHE:
+                _DATASET_CACHE[key] = LazyPairDataset(
+                    phase=phase_name, image_path=image_root,
+                    metadata_path=os.path.join(
+                        self.repo_root, "Data_Entry_2017_v2020.csv"))
+            return _DATASET_CACHE[key]
         # LazyPairDataset reads its own fixed pair files by phase; the
         # protocol-locked paths are byte-identical to those files (verified).
         return factory

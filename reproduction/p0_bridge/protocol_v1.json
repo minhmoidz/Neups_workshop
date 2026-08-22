@@ -77,8 +77,11 @@
     "post_hoc_threshold_seed_flip_or_exclusion_proposal"
   ],
   "imagenet_weight_artifact": {
-    "note": "exact torchvision weight-bundle identifier, local path and SHA-256 must be established and human-approved before any execution; --execute refuses while this is unresolved",
-    "status": "UNRESOLVED_BLOCKER"
+    "identifier": "torchvision ResNet50_Weights.IMAGENET1K_V1",
+    "local_path": "/home/minhtt/.cache/torch/hub/checkpoints/resnet50-0676ba61.pth",
+    "locked_by": "user approval 2026-08-23",
+    "sha256": "0676ba61b6795bbe1773cffd859882e5e297624d384b6993f7c9e683e722fb8a",
+    "status": "LOCKED"
   },
   "implementation_revision": "P0_2_3",
   "output_contract": {
