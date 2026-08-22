@@ -1,10 +1,19 @@
 """Frozen-generator state guard for attacker-training forwards.
 
-Runs a supplied deformation callable under torch.no_grad() and FAILS CLOSED if
-any generator state mutates. torch.inference_mode() is deliberately NOT used:
-inference tensors cannot participate in the downstream attacker's autograd
-graph, while no_grad tensors can.
+Revision P0_2_1 (external source-review closeout):
+- rejects training=True on ANY submodule (nested Dropout/BatchNorm included);
+- detects added, removed and mutated buffers;
+- recursively rejects inference tensors in nested outputs;
+- binds the callable as callable_fn(generator, *args);
+- model-state hash schema bumped to P0_MODELSTATE_V1_1 with length-prefixed
+  serialization and explicit sparse/meta rejection.
+
+torch.no_grad() only — never torch.inference_mode() for attacker-consumed
+outputs.
 """
+import hashlib
+import struct
+
 import torch
 
 
@@ -15,6 +24,14 @@ class GeneratorStateMutationError(RuntimeError):
 def _training_topology(module):
     return [(name, bool(sub.training))
             for name, sub in sorted(module.named_modules())]
+
+
+def _assert_all_submodules_eval(module):
+    offenders = [name for name, flag in _training_topology(module) if flag]
+    if offenders:
+        raise GeneratorStateMutationError(
+            "generator has submodule(s) with training=True: %s"
+            % offenders[:8])
 
 
 def _buffer_snapshot(module):
@@ -29,10 +46,8 @@ def _buffer_snapshot(module):
 
 
 def assert_generator_frozen_state(generator):
-    """Fail-closed pre-checks: eval mode + all parameters requires_grad=False."""
-    if generator.training:
-        raise GeneratorStateMutationError(
-            "generator must be in .eval() mode before protected forward")
+    """Fail-closed pre-checks: every submodule eval + all params frozen."""
+    _assert_all_submodules_eval(generator)
     trainable = [n for n, p in generator.named_parameters() if p.requires_grad]
     if trainable:
         raise GeneratorStateMutationError(
@@ -40,59 +55,99 @@ def assert_generator_frozen_state(generator):
             % sorted(trainable)[:8])
 
 
-def protected_forward(generator, callable_fn, *args, **kwargs):
-    """Run `callable_fn(*args, **kwargs)` under no_grad with state verification.
+def _assert_no_inference_tensors(obj, path="output"):
+    """Recursively reject inference tensors inside nested structures."""
+    if isinstance(obj, torch.Tensor):
+        if obj.is_inference():
+            raise GeneratorStateMutationError(
+                "inference tensor found at %s; it could not participate in a "
+                "downstream attacker backward" % path)
+        return
+    if isinstance(obj, (list, tuple)):
+        for i, item in enumerate(obj):
+            _assert_no_inference_tensors(item, "%s[%d]" % (path, i))
+    elif isinstance(obj, dict):
+        for key, item in obj.items():
+            _assert_no_inference_tensors(item, "%s[%r]" % (path, key))
 
-    Detects (never silently restores) any mutation of training flags or buffers
-    and raises GeneratorStateMutationError. Returns an ordinary no_grad tensor
+
+def protected_forward(generator, callable_fn, *args, **kwargs):
+    """Run `callable_fn(generator, *args, **kwargs)` under no_grad, verified.
+
+    The callable is explicitly bound to the supplied generator so an unrelated
+    module cannot be forwarded by accident. Detects (never silently restores)
+    any mutation of training flags or buffers, including added/removed buffers,
+    and raises GeneratorStateMutationError. Returns ordinary no_grad outputs
     usable in the downstream attacker's autograd graph.
     """
+    if not callable(callable_fn):
+        raise TypeError("callable_fn must be callable")
     assert_generator_frozen_state(generator)
     topology_before = _training_topology(generator)
     buffers_before = _buffer_snapshot(generator)
 
     with torch.no_grad():
-        output = callable_fn(*args, **kwargs)
+        output = callable_fn(generator, *args, **kwargs)
 
-    topology_after = _training_topology(generator)
-    if topology_after != topology_before:
-        changed = [n for (n, a), (_, b) in zip(topology_before, topology_after)
-                   if a != b]
+    if _training_topology(generator) != topology_before:
+        before = dict(topology_before)
+        after = dict(_training_topology(generator))
+        changed = [n for n in set(before) | set(after)
+                   if before.get(n) != after.get(n)]
         raise GeneratorStateMutationError(
             "submodule training flags changed across protected forward: %s"
-            % changed[:8])
+            % sorted(changed)[:8])
 
     buffers_after = _buffer_snapshot(generator)
-    mutated = [name for name in buffers_before
-               if buffers_after[name] != buffers_before[name]]
+    added = sorted(set(buffers_after) - set(buffers_before))
+    removed = sorted(set(buffers_before) - set(buffers_after))
+    mutated = [n for n in set(buffers_before) & set(buffers_after)
+               if buffers_after[n] != buffers_before[n]]
+    problems = []
+    if added:
+        problems.append("added=%s" % added[:4])
+    if removed:
+        problems.append("removed=%s" % removed[:4])
     if mutated:
+        problems.append("mutated=%s" % sorted(mutated)[:4])
+    if problems:
         raise GeneratorStateMutationError(
-            "BatchNorm/buffer state changed across protected forward: %s"
-            % sorted(mutated)[:8])
+            "frozen generator state changed across protected forward: %s"
+            % "; ".join(problems))
 
-    if isinstance(output, torch.Tensor) and output.is_inference():
-        raise GeneratorStateMutationError(
-            "protected forward produced an inference tensor; this would break "
-            "downstream attacker backward")
+    _assert_no_inference_tensors(output)
     return output
 
 
 def canonical_model_state_hash(module):
-    """Versioned deterministic hash of parameters+buffers.
+    """P0_MODELSTATE_V1_1 deterministic hash of parameters+buffers.
 
-    Sorted names; explicit dtype; explicit shape; contiguous CPU bytes; no
-    pickle; independent of dict insertion order.
+    Length-prefixed fields over sorted entries: name, dtype, shape, byte count,
+    dense contiguous CPU bytes. No pickle; independent of insertion order;
+    unsupported sparse/meta tensors are rejected explicitly.
     """
-    import hashlib
     h = hashlib.sha256()
-    h.update(b"P0_MODELSTATE_V1|")
+    h.update(b"P0_MODELSTATE_V1_1|")
+    h.update(struct.pack("<q", 0))  # reserved version field
+
+    def emit(field):
+        blob = field.encode("utf-8") if isinstance(field, str) else field
+        h.update(struct.pack("<q", len(blob)))
+        h.update(blob)
+
     entries = []
     for name, tensor in module.state_dict(keep_vars=True).items():
-        entries.append((str(name), str(tensor.dtype), tuple(tensor.shape),
-                        tensor.detach().cpu().contiguous().numpy().tobytes()))
+        if tensor.is_sparse or tensor.layout in (torch.sparse_coo,
+                                                 torch.sparse_csr):
+            raise TypeError("unsupported sparse tensor in state: %r" % name)
+        if tensor.device.type == "meta":
+            raise TypeError("unsupported meta tensor in state: %r" % name)
+        dense = tensor.detach().cpu().contiguous()
+        entries.append((str(name), str(dense.dtype), tuple(dense.shape),
+                        dense.numpy().tobytes()))
     for name, dtype, shape, blob in sorted(entries):
-        h.update(name.encode("utf-8")); h.update(b"|")
-        h.update(dtype.encode("utf-8")); h.update(b"|")
-        h.update(repr(shape).encode("utf-8")); h.update(b"|")
-        h.update(blob)
+        emit(name)
+        emit(dtype)
+        emit(repr(shape))
+        emit(blob)
     return h.hexdigest()

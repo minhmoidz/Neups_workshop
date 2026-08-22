@@ -1,4 +1,7 @@
-"""Standalone CPU-only generator-guard tests. Run: python test_generator_guard.py"""
+"""Standalone CPU-only generator-guard tests (P0_2_1 revision).
+
+Run: CUDA_VISIBLE_DEVICES="" python test_generator_guard.py
+"""
 import os
 import sys
 import types
@@ -28,31 +31,82 @@ def test_negative_control_train_mode_bn_drifts_under_no_grad():
     assert not torch.equal(before, g[1].running_mean)
 
 
-def test_protected_forward_no_drift():
+def test_nested_dropout_train_rejected_even_if_top_level_eval():
+    g = _toy_generator()
+    g.eval()
+    drop = nn.Dropout(p=0.5)
+    g.add_module("nested_drop", drop)      # nested submodule left in train mode
+    for p in g.parameters():
+        p.requires_grad_(False)
+    try:
+        protected_forward(g, lambda gen, t: gen(t), torch.randn(2, 1, 8, 8))
+        raise AssertionError("nested train-mode Dropout not rejected")
+    except GeneratorStateMutationError:
+        pass
+
+
+def test_nested_batchnorm_train_rejected():
+    g = _toy_generator(); g.eval()
+    for p in g.parameters():
+        p.requires_grad_(False)
+    g[1].training = True                    # top-level eval, nested BN train
+    try:
+        protected_forward(g, lambda gen, t: gen(t), torch.randn(2, 1, 8, 8))
+        raise AssertionError("nested train-mode BatchNorm not rejected")
+    except GeneratorStateMutationError:
+        pass
+
+
+def test_protected_forward_no_drift_and_callable_binding():
     g = _toy_generator(); g.eval()
     for p in g.parameters():
         p.requires_grad_(False)
     x = torch.randn(4, 1, 8, 8)
-    out = protected_forward(g, lambda t: g(t), x)
-    out2 = protected_forward(g, lambda t: g(t), x)
+    seen = {}
+    out = protected_forward(g, lambda gen, t: (seen.__setitem__("ok", gen is g),
+                                               gen(t))[1], x)
+    assert seen["ok"]                       # callable received THE generator
+    out2 = protected_forward(g, lambda gen, t: gen(t), x)
     assert torch.equal(out, out2)
 
 
-def test_train_mode_or_grads_rejected_precheck():
-    g = _toy_generator(); g.train()
+def test_added_and_removed_buffers_detected():
+    class BufNet(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.conv = nn.Conv2d(1, 1, 3, padding=1)
+
+        def forward(self, x):
+            return self.conv(x)
+
+    g = BufNet(); g.eval()
     for p in g.parameters():
         p.requires_grad_(False)
+
+    def add_buffer(gen, t):
+        gen.register_buffer("sneaky", torch.zeros(1))
+        return gen(t)
+
     try:
-        assert_generator_frozen_state(g)
-        raise AssertionError("train-mode generator not rejected")
+        protected_forward(g, add_buffer, torch.randn(1, 1, 8, 8))
+        raise AssertionError("added buffer not detected")
     except GeneratorStateMutationError:
         pass
-    g.eval()
-    for p in g.parameters():
-        p.requires_grad_(True)
+
+    g2 = nn.Sequential(nn.Conv2d(1, 1, 3, padding=1), nn.BatchNorm2d(1))
+    g2.eval()
+    for p in g2.parameters():
+        p.requires_grad_(False)
+
+    # removed buffer: delete a registered buffer inside the callable;
+    # do NOT run forward (BN would crash before the guard could report)
+    def really_remove(gen, t):
+        del gen[1]._buffers["running_mean"]
+        return t
+
     try:
-        assert_generator_frozen_state(g)
-        raise AssertionError("requires_grad generator not rejected")
+        protected_forward(g2, really_remove, torch.randn(1, 1, 8, 8))
+        raise AssertionError("removed buffer not detected")
     except GeneratorStateMutationError:
         pass
 
@@ -62,14 +116,32 @@ def test_mutation_injected_is_detected():
     for p in g.parameters():
         p.requires_grad_(False)
 
-    def evil(x):
+    def evil(gen, t):
         with torch.no_grad():
-            g[1].running_mean.add_(0.5)
-        return g(x)
+            gen[1].running_mean.add_(0.5)
+        return gen(t)
 
     try:
         protected_forward(g, evil, torch.randn(2, 1, 8, 8))
         raise AssertionError("mutation not detected")
+    except GeneratorStateMutationError:
+        pass
+
+
+def test_nested_inference_tensor_output_rejected():
+    g = _toy_generator(); g.eval()
+    for p in g.parameters():
+        p.requires_grad_(False)
+
+    def returns_inference_tuple(gen, t):
+        with torch.inference_mode():
+            inner = gen(t)
+        return {"a": [inner], "b": torch.ones(1)}
+
+    try:
+        protected_forward(g, returns_inference_tuple,
+                          torch.randn(2, 1, 8, 8))
+        raise AssertionError("nested inference tensor not rejected")
     except GeneratorStateMutationError:
         pass
 
@@ -80,7 +152,8 @@ def test_downstream_attacker_backward_succeeds_and_no_gen_grad():
         p.requires_grad_(False)
     head = nn.Linear(2 * 8 * 8, 1)
     x = torch.randn(2, 1, 8, 8)
-    feats = protected_forward(g, lambda t: g(t).reshape(t.shape[0], -1), x)
+    feats = protected_forward(
+        g, lambda gen, t: gen(t).reshape(t.shape[0], -1), x)
     assert not feats.is_inference()
     head(feats).sum().backward()
     assert all(p.grad is None or float(p.grad.abs().sum()) == 0.0
@@ -113,8 +186,8 @@ def test_initial_attacker_hash_contract_toy_model():
 
 
 if __name__ == "__main__":
-    fns = [globals()[k] for k in sorted(k for k in globals() if k.startswith("test_"))]
-    for fn in fns:
-        fn()
-        print("PASS", fn.__name__)
-    print("ALL PASS (%d)" % len(fns))
+    names = sorted(k for k in globals() if k.startswith("test_"))
+    for name in names:
+        globals()[name]()
+        print("PASS", name)
+    print("ALL PASS (%d)" % len(names))

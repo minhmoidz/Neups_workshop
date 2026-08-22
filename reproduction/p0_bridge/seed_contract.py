@@ -7,6 +7,9 @@ the valid non-negative signed 63-bit PyTorch seed range [0, 2**63 - 1].
 Serialization contract (exact UTF-8 bytes, "|" delimiters):
     message = "P0_SEED_V1|" + str(master_seed) + "|" + domain
     derived = big-endian int of sha256(message)[0:8]  mod  2**63
+
+Revision P0_2_1: adds a real per-arm seed-bundle constructor and hardens
+input validation.
 """
 import hashlib
 import random
@@ -42,6 +45,22 @@ def _validate_domain(domain):
     return domain
 
 
+def validate_epoch_index(epoch_index):
+    if isinstance(epoch_index, bool) or not isinstance(epoch_index, int):
+        raise TypeError("epoch_index must be a plain int")
+    if epoch_index < 0:
+        raise ValueError("epoch_index must be non-negative")
+    return epoch_index
+
+
+def validate_dataset_length(dataset_length):
+    if isinstance(dataset_length, bool) or not isinstance(dataset_length, int):
+        raise TypeError("dataset_length must be a plain int")
+    if dataset_length <= 0:
+        raise ValueError("dataset_length must be positive")
+    return dataset_length
+
+
 def derive_seed(master_seed, domain):
     """Deterministic 63-bit sub-seed for (master_seed, domain)."""
     _validate_master_seed(master_seed)
@@ -51,17 +70,39 @@ def derive_seed(master_seed, domain):
     return int.from_bytes(digest[:8], "big") % (_MAX_63BIT + 1)
 
 
+def train_order_seed(master_seed):
+    """Locked-domain helper: the train_order sub-seed for a master seed."""
+    return derive_seed(master_seed, "train_order")
+
+
 def derive_epoch_order_seed(master_seed, epoch_index, dataset_length,
-                            sampler_schema="P0_SAMPLER_V1"):
-    """Epoch-specific permutation seed; pure function of the locked inputs."""
+                            sampler_schema="P0_SAMPLER_V1_1"):
+    """Epoch-specific permutation seed; pure function of the locked inputs.
+
+    Binds sampler schema + derived train_order seed + epoch index + length.
+    """
     _validate_master_seed(master_seed)
-    if not isinstance(epoch_index, int) or isinstance(epoch_index, bool) or epoch_index < 0:
-        raise ValueError("epoch_index must be a non-negative int")
-    if not isinstance(dataset_length, int) or isinstance(dataset_length, bool) or dataset_length <= 0:
-        raise ValueError("dataset_length must be a positive int")
-    payload = "%s|%d|%d|%d" % (sampler_schema, master_seed, epoch_index, dataset_length)
+    validate_epoch_index(epoch_index)
+    validate_dataset_length(dataset_length)
+    payload = "%s|%d|%d|%d" % (
+        sampler_schema, train_order_seed(master_seed), epoch_index,
+        dataset_length)
     digest = hashlib.sha256(payload.encode("utf-8")).digest()
     return int.from_bytes(digest[:8], "big") % (_MAX_63BIT + 1)
+
+
+def build_arm_seed_bundle(master_seed):
+    """Independently construct the full derived-seed bundle for ONE arm.
+
+    Each call returns a NEW dictionary object; two arms calling this with the
+    same master seed get equal-valued but identity-distinct bundles.
+    """
+    _validate_master_seed(master_seed)
+    bundle = {}
+    for domain in DOMAINS:
+        bundle[domain] = derive_seed(master_seed, domain)
+    bundle["statistical_sensitivity_master"] = None  # set once globally elsewhere
+    return bundle
 
 
 def seed_everything_for_attacker_construction(weight_seed):

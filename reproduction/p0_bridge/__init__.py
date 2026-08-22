@@ -1,8 +1,14 @@
 """P0 reproduction-only bridge infrastructure (CPU-tested design).
 
-Reproduction-only: resolves the H2 (paired-order) and H3 (multi-seed) blockers
-without modifying any governed source. No execution authorization is granted or
-implied by anything in this package.
+Revision P0_2_1 — external source-review closeout:
+- explicit domain-separated seed contract with per-arm seed bundles;
+- deterministic epoch sampler independent of global RNG (P0_SAMPLER_V1_1);
+- validated order hashes (P0_ORDERHASH_V1_1);
+- hardened frozen-generator state guard and model-state hashing
+  (P0_MODELSTATE_V1_1);
+- protocol-aware fail-closed manifest aggregation with fresh-output claims;
+- hardened execution approval gate with actual artifact byte verification.
 
-Schema: P0_PROTOCOL_V1 / P0_SEED_V1 / P0_SAMPLER_V1 / P0_ORDERHASH_V1
+Reproduction-only: no scientific loop is implemented; nothing here grants
+execution authorization. Protocol schema: P0_PROTOCOL_V1_1.
 """
