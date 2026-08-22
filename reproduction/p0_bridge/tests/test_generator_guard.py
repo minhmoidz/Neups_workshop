@@ -185,6 +185,49 @@ def test_initial_attacker_hash_contract_toy_model():
     assert canonical_model_state_hash(wrapper) == h_a1
 
 
+def test_in_place_parameter_mutation_detected():
+    g = _toy_generator(); g.eval()
+    for p in g.parameters():
+        p.requires_grad_(False)
+
+    def evil(gen, t):
+        with torch.no_grad():
+            gen[0].weight.add_(0.5)      # in-place frozen-param mutation
+        return gen(t)
+
+    try:
+        protected_forward(g, evil, torch.randn(1, 1, 8, 8))
+        raise AssertionError("in-place parameter mutation not detected")
+    except GeneratorStateMutationError as e:
+        assert "PARAMETERS changed" in str(e)
+
+
+def test_parameter_replacement_detected():
+    g = _toy_generator(); g.eval()
+    for p in g.parameters():
+        p.requires_grad_(False)
+
+    def replace(gen, t):
+        new_param = torch.nn.Parameter(torch.zeros_like(gen[0].weight))
+        gen[0].weight = new_param           # object replacement
+        return gen(t)
+
+    try:
+        protected_forward(g, replace, torch.randn(1, 1, 8, 8))
+        raise AssertionError("parameter replacement not detected")
+    except GeneratorStateMutationError as e:
+        assert "PARAMETERS changed" in str(e)
+
+
+def test_unchanged_generator_forward_succeeds_with_params_tracked():
+    g = _toy_generator(); g.eval()
+    for p in g.parameters():
+        p.requires_grad_(False)
+    out = protected_forward(g, lambda gen, t: gen(t), torch.randn(2, 1, 8, 8))
+    out2 = protected_forward(g, lambda gen, t: gen(t), torch.randn(2, 1, 8, 8))
+    assert out.shape == out2.shape
+
+
 if __name__ == "__main__":
     names = sorted(k for k in globals() if k.startswith("test_"))
     for name in names:

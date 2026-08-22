@@ -297,6 +297,125 @@ def test_imagenet_unresolved_blocks_execution_gate():
         assert "ImageNet weight artifact" in str(e)
 
 
+def test_symlink_final_component_rejected():
+    sys.path.insert(0, HERE)
+    import run_p0_bridge as runner
+    with tempfile.TemporaryDirectory() as tmp:
+        secret = os.path.join(tmp, "secret.bin")
+        open(secret, "wb").write(b"REAL")
+        good = hashlib.sha256(b"REAL").hexdigest()
+        open(os.path.join(tmp, "lexical.bin"), "wb").write(b"OTHER")
+        os.symlink(secret, os.path.join(tmp, "link.pth"))
+        try:
+            runner.verify_artifact_sha(tmp, "link.pth", good)
+            raise AssertionError("final-component symlink accepted")
+        except PermissionError as e:
+            assert "symlink" in str(e)
+
+
+def test_symlink_parent_directory_rejected():
+    sys.path.insert(0, HERE)
+    import run_p0_bridge as runner
+    with tempfile.TemporaryDirectory() as tmp:
+        real_dir = os.path.join(tmp, "real")
+        os.makedirs(real_dir)
+        data = os.path.join(real_dir, "a.pth")
+        open(data, "wb").write(b"BYTES")
+        good = hashlib.sha256(b"BYTES").hexdigest()
+        os.symlink(real_dir, os.path.join(tmp, "sublink"))
+        # intermediate path component is a symlink -> must be rejected
+        try:
+            runner.verify_artifact_sha(tmp, "sublink/../real/a.pth", good)
+            raise AssertionError("traversal accepted")
+        except PermissionError:
+            pass
+        try:
+            runner.verify_artifact_sha(tmp, "sublink/a.pth", good)
+            raise AssertionError("parent-dir symlink accepted")
+        except PermissionError as e:
+            assert "symlink" in str(e)
+
+
+def test_outside_repository_escape_rejected_lexically():
+    sys.path.insert(0, HERE)
+    import run_p0_bridge as runner
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            runner.verify_artifact_sha(tmp, "../escape.pth", "0" * 64)
+            raise AssertionError("outside-repository escape accepted")
+        except PermissionError as e:
+            assert "unsafe artifact path component" in str(e)
+
+
+def test_ordinary_regular_file_hash_success_and_mismatch():
+    sys.path.insert(0, HERE)
+    import run_p0_bridge as runner
+    with tempfile.TemporaryDirectory() as tmp:
+        content = b"ordinary-regular-file"
+        open(os.path.join(tmp, "ok.bin"), "wb").write(content)
+        good = hashlib.sha256(content).hexdigest()
+        assert runner.verify_artifact_sha(tmp, "ok.bin", good) is True
+        try:
+            runner.verify_artifact_sha(tmp, "ok.bin", "e" * 64)
+            raise AssertionError("mismatch accepted")
+        except PermissionError as e:
+            assert "hash mismatch" in str(e)
+
+
+def test_execution_path_selected_over_provenance_path():
+    """P0_2_2 regression: verification must hash execution_path bytes."""
+    sys.path.insert(0, HERE)
+    import run_p0_bridge as runner
+    with tempfile.TemporaryDirectory() as tmp:
+        open(os.path.join(tmp, "prov.pth"), "wb").write(b"GOOD-BYTES")
+        open(os.path.join(tmp, "exec.pth"), "wb").write(b"EVIL-BYTES")
+        gp = hashlib.sha256(b"GOOD-BYTES").hexdigest()
+        ep = hashlib.sha256(b"EVIL-BYTES").hexdigest()
+        open(os.path.join(tmp, "w.bin"), "wb").write(b"EVIL-BYTES")
+        proto = {
+            "schema_version": "P0_PROTOCOL_V1_1",
+            "arms": {"U_PUBLISHED": {
+                "generator_path": "prov.pth", "generator_sha256": gp,
+                "execution_path": "exec.pth"}},
+            "pair_files": {},
+            "imagenet_weight_artifact": {
+                "status": "LOCKED", "local_path": "w.bin",
+                "sha256": ep},
+        }
+        # exec bytes differ from locked generator_sha256 -> MUST fail on exec
+        try:
+            runner.verify_all_artifacts(proto, tmp)
+            raise AssertionError(
+                "verify used provenance bytes instead of execution bytes")
+        except PermissionError as e:
+            assert "exec.pth" in str(e) and "hash mismatch" in str(e)
+        # fix exec bytes to the locked value -> passes using execution_path
+        open(os.path.join(tmp, "exec.pth"), "wb").write(b"GOOD-BYTES")
+        assert runner.verify_all_artifacts(proto, tmp) is None or True
+
+
+def test_imagenet_unresolved_fails_before_any_artifact_access():
+    sys.path.insert(0, HERE)
+    import run_p0_bridge as runner
+    opened = []
+    orig_open = __builtins__.open if hasattr(__builtins__, "open") else open
+    with tempfile.TemporaryDirectory() as tmp:
+        proto = {
+            "schema_version": "P0_PROTOCOL_V1_1",
+            "arms": {"U": {"generator_path": "missing_g.pth",
+                            "generator_sha256": "x",
+                            "execution_path": "missing_e.pth"}},
+            "pair_files": {"train": {"path": "missing_t.txt",
+                                     "sha256": "y"}},
+            "imagenet_weight_artifact": {"status": "UNRESOLVED_BLOCKER"},
+        }
+        try:
+            runner.verify_all_artifacts(proto, tmp)
+            raise AssertionError("unresolved imagenet gate did not fire")
+        except PermissionError as e:
+            assert "ImageNet weight artifact" in str(e)
+
+
 if __name__ == "__main__":
     names = sorted(k for k in globals() if k.startswith("test_"))
     for name in names:

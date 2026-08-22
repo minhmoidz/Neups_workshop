@@ -34,6 +34,22 @@ def _assert_all_submodules_eval(module):
             % offenders[:8])
 
 
+def _param_snapshot(module):
+    """Efficient parameter identity snapshot (no GPU->CPU byte copies).
+
+    Tracks per-parameter: storage pointer, mutation counter (_version),
+    dtype and shape. In-place mutation bumps _version; replacement changes
+    the tensor object (data_ptr/shape/dtype); addition/removal changes the
+    name set. Full byte-level hashing remains available at trajectory
+    boundaries via canonical_model_state_hash.
+    """
+    snap = {}
+    for name, p in module.named_parameters():
+        snap[name] = (int(p.data_ptr()), int(getattr(p, "_version", 0)),
+                      str(p.dtype), tuple(p.shape), bool(p.requires_grad))
+    return snap
+
+
 def _buffer_snapshot(module):
     snap = {}
     for name, buf in module.named_buffers():
@@ -85,9 +101,27 @@ def protected_forward(generator, callable_fn, *args, **kwargs):
     assert_generator_frozen_state(generator)
     topology_before = _training_topology(generator)
     buffers_before = _buffer_snapshot(generator)
+    params_before = _param_snapshot(generator)
 
     with torch.no_grad():
         output = callable_fn(generator, *args, **kwargs)
+
+    params_after = _param_snapshot(generator)
+    p_added = sorted(set(params_after) - set(params_before))
+    p_removed = sorted(set(params_before) - set(params_after))
+    p_changed = [n for n in set(params_before) & set(params_after)
+                 if params_after[n] != params_before[n]]
+    param_problems = []
+    if p_added:
+        param_problems.append("added=%s" % p_added[:4])
+    if p_removed:
+        param_problems.append("removed=%s" % p_removed[:4])
+    if p_changed:
+        param_problems.append("mutated_or_replaced=%s" % sorted(p_changed)[:4])
+    if param_problems:
+        raise GeneratorStateMutationError(
+            "frozen generator PARAMETERS changed across protected forward "
+            "(in-place mutation or replacement): %s" % "; ".join(param_problems))
 
     if _training_topology(generator) != topology_before:
         before = dict(topology_before)

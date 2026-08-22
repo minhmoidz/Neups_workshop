@@ -1,26 +1,37 @@
 """Immutable per-run manifests and protocol-aware deterministic aggregation.
 
-Revision P0_2_1 (external source-review closeout):
-- exclusive fresh-run-directory claim BEFORE any output is written;
-- atomic writes with fsync of file AND containing directory;
-- aggregator derives arms/seeds from the LOCKED PROTOCOL itself (never from
-  caller-supplied lists) and validates every manifest field against it;
-- exact identity counts: screen = 2 arms x 5 seeds = 10; full = 52;
-- directory/manifest identity binding; stale/dirty/incomplete rejection.
+Revision P0_2_2 (manifest-artifact integrity hotfix):
+- manifests are BOUND TO ACTUAL OUTPUT BYTES: predictions.parquet and
+  attacker_best.pth must exist as real regular files, their recomputed
+  SHA-256 must match the manifest, and outputs must not be modified after
+  manifest creation (mtime ordering);
+- the full paired-order contract is validated: exact locked domain-key set in
+  derived_seeds; non-empty epoch_order_hashes with exact epoch keys
+  0..stop_epoch; lowercase-hex64 values; hashes RECOMPUTED from the locked
+  seed + epoch + sampler schema + auditable TRAIN pair count;
+- the runs-root output-tree identity set is closed: undeclared arm/seed
+  directories and non-directory/symlink entries fail closed;
+- exclusive fresh-run-directory claim and atomic fsync'd writes retained.
 """
 import hashlib
 import json
 import os
+import re
 import shutil
+import sys
 import tempfile
 
 RUN_MANIFEST_NAME = "run_manifest.json"
 AGGREGATE_NAME = "aggregate_manifest.json"
 PREDICTIONS_NAME = "predictions.parquet"
 ATTACKER_CKPT_NAME = "attacker_best.pth"
+REQUIRED_OUTPUT_FILES = frozenset(
+    {PREDICTIONS_NAME, ATTACKER_CKPT_NAME, RUN_MANIFEST_NAME})
 
-RUN_MANIFEST_SCHEMA = "P0_RUN_MANIFEST_V1_1"
-AGGREGATE_SCHEMA = "P0_AGGREGATE_MANIFEST_V1_1"
+RUN_MANIFEST_SCHEMA = "P0_RUN_MANIFEST_V1_2"
+AGGREGATE_SCHEMA = "P0_AGGREGATE_MANIFEST_V1_2"
+
+HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ManifestError(RuntimeError):
@@ -41,7 +52,23 @@ def _fsync_dir(path):
         finally:
             os.close(fd)
     except OSError:
-        pass  # directory fsync unsupported on this platform
+        pass
+
+
+def sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _require_hex64(value, what, identity):
+    if not isinstance(value, str) or not HEX64_RE.match(value):
+        raise ManifestError(
+            "%s must be lowercase 64-char hex at %r, got %r"
+            % (what, identity, value))
+    return value
 
 
 def claim_run_directory(runs_root, arm, seed):
@@ -49,10 +76,9 @@ def claim_run_directory(runs_root, arm, seed):
 
     Rejects: existing directory of any kind (including empty), symlinks,
     pre-existing predictions/checkpoints/manifests/partial temp files.
-    Returns the created run directory path. The caller owns it thereafter.
     """
-    if not isinstance(seed, int) or isinstance(seed, bool):
-        raise ManifestError("seed must be a plain int")
+    if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+        raise ManifestError("seed must be a non-negative plain int")
     arm_dir = os.path.join(runs_root, str(arm))
     run_dir = os.path.join(arm_dir, str(seed))
     if os.path.islink(run_dir) or os.path.exists(run_dir):
@@ -60,16 +86,14 @@ def claim_run_directory(runs_root, arm, seed):
             "fresh-output violation: run directory already exists: %s" % run_dir)
     os.makedirs(arm_dir, exist_ok=True)
     try:
-        os.mkdir(run_dir)          # exclusive creation
+        os.mkdir(run_dir)
     except FileExistsError:
         raise ManifestError(
             "fresh-output violation: concurrent claim of %s" % run_dir)
-    # defensive re-scan: nothing may pre-exist inside a claimed dir
     entries = set(os.listdir(run_dir))
-    forbidden = {PREDICTIONS_NAME, ATTACKER_CKPT_NAME, RUN_MANIFEST_NAME,
-                 AGGREGATE_NAME}
-    dirty = entries & forbidden
-    if dirty or any(e.endswith(".tmp") or e.startswith(".tmp") for e in entries):
+    dirty = entries & REQUIRED_OUTPUT_FILES
+    if dirty or any(e.endswith(".tmp") or e.startswith(".tmp") or
+                    e.startswith(".atomic") for e in entries):
         shutil.rmtree(run_dir, ignore_errors=True)
         raise ManifestError(
             "fresh-output violation inside new run dir: %s" % sorted(dirty))
@@ -132,14 +156,105 @@ REQUIRED_IDENTITY_FIELDS = (
 )
 
 
+def _validate_output_tree_and_bind_bytes(run_dir, manifest, identity):
+    """Require exact scientific output files bound to actual bytes."""
+    if os.path.islink(run_dir) or not os.path.isdir(run_dir):
+        raise ManifestError("run directory missing/symlink/non-dir at %r"
+                            % (identity,))
+    entries = set(os.listdir(run_dir))
+    missing = sorted(REQUIRED_OUTPUT_FILES - entries)
+    if missing:
+        # CE1 regression: aggregate without predictions/checkpoint bytes
+        raise ManifestError(
+            "required output files missing at %r: %s" % (identity, missing))
+    extra = sorted(entries - REQUIRED_OUTPUT_FILES)
+    partial = [e for e in extra
+               if e.endswith(".tmp") or e.startswith(".tmp")
+               or e.startswith(".atomic")]
+    if partial:
+        raise ManifestError("partial/temp output files present at %r: %s"
+                            % (identity, sorted(partial)))
+    if extra:
+        raise ManifestError("undeclared output entries present at %r: %s"
+                            % (identity, sorted(extra)))
+    for fname in (PREDICTIONS_NAME, ATTACKER_CKPT_NAME):
+        fpath = os.path.join(run_dir, fname)
+        if os.path.islink(fpath) or not os.path.isfile(fpath):
+            raise ManifestError("%s is a symlink or not a regular file at %r"
+                                % (fname, identity))
+
+    # byte binding: recompute from ACTUAL bytes
+    pred_sha = sha256_file(os.path.join(run_dir, PREDICTIONS_NAME))
+    attk_sha = sha256_file(os.path.join(run_dir, ATTACKER_CKPT_NAME))
+    _require_hex64(manifest["predictions_sha256"], "predictions_sha256",
+                   identity)
+    _require_hex64(manifest["attacker_best_sha256"], "attacker_best_sha256",
+                   identity)
+    if pred_sha != manifest["predictions_sha256"]:
+        raise ManifestError(
+            "predictions bytes do not match predictions_sha256 at %r"
+            % (identity,))
+    if attk_sha != manifest["attacker_best_sha256"]:
+        raise ManifestError(
+            "attacker checkpoint bytes do not match attacker_best_sha256 "
+            "at %r" % (identity,))
+
+    # post-manifest modification rejection (mtime ordering)
+    man_mtime = os.stat(os.path.join(run_dir, RUN_MANIFEST_NAME)).st_mtime
+    for fname in (PREDICTIONS_NAME, ATTACKER_CKPT_NAME):
+        out_mtime = os.stat(os.path.join(run_dir, fname)).st_mtime
+        if out_mtime > man_mtime + 1e-6:
+            raise ManifestError(
+                "%s modified after run-manifest creation at %r"
+                % (fname, identity))
+
+
+def _validate_paired_order_contract(m, protocol, identity):
+    """Full paired-order contract validation incl. recomputation."""
+    seed = m["master_seed"]
+    stop_epoch = m["stop_epoch"]
+    derived = m["derived_seeds"]
+    if not isinstance(derived, dict):
+        raise ManifestError("derived_seeds must be an object at %r" % (identity,))
+    locked_domains = set(protocol["attacker_protocol"]["domains"])
+    if set(derived.keys()) != locked_domains:
+        raise ManifestError(
+            "derived_seeds key set mismatch at %r: missing=%s extra=%s"
+            % (identity,
+               sorted(locked_domains - set(derived)),
+               sorted(set(derived) - locked_domains)))
+    eoh = m["epoch_order_hashes"]
+    if not isinstance(eoh, dict) or not eoh:
+        # CE2 regression: empty order-hash mapping
+        raise ManifestError("epoch_order_hashes empty or invalid at %r"
+                            % (identity,))
+    expected_keys = {str(e) for e in range(0, stop_epoch + 1)}
+    if set(eoh.keys()) != expected_keys:
+        raise ManifestError(
+            "epoch keys mismatch at %r: missing=%s extra=%s"
+            % (identity,
+               sorted(expected_keys - set(eoh)),
+               sorted(set(eoh) - expected_keys)))
+    train_count = protocol.get("pair_files", {}).get("train", {}).get(
+        "pair_count")
+    if not isinstance(train_count, int) or train_count <= 0:
+        raise ManifestError(
+            "locked protocol lacks auditable TRAIN pair_count; refusing to "
+            "recompute expected order hashes")
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from deterministic_sampler import build_permutation, order_hash
+    for e in range(0, stop_epoch + 1):
+        _require_hex64(eoh[str(e)], "order_hash[%d]" % e, identity)
+        expected = order_hash(build_permutation(seed, e, train_count),
+                              seed, e, train_count)
+        if eoh[str(e)] != expected:
+            raise ManifestError(
+                "recomputed order hash mismatch at %r epoch %d" % (identity, e))
+
+
 def aggregate_manifests(runs_root, protocol, protocol_sha256, runner_commit,
                         stage):
-    """Protocol-aware, fail-closed deterministic aggregation.
-
-    Arms and seeds are derived FROM THE LOCKED PROTOCOL — caller lists are not
-    accepted. screen = exactly 2 arms x 5 seeds = 10 identities;
-    full = exactly 2 arms x 26 seeds = 52.
-    """
+    """Protocol-aware, fail-closed deterministic aggregation (P0_2_2)."""
     if stage == "screen":
         expected_seeds = sorted(protocol["seeds"]["screen"])
     elif stage == "full":
@@ -149,93 +264,100 @@ def aggregate_manifests(runs_root, protocol, protocol_sha256, runner_commit,
     arms = sorted(protocol["arms"].keys())
     expected_count = len(arms) * len(expected_seeds)
 
+    # closed output-tree identity set at the runs root
+    root_entries = []
+    if os.path.isdir(runs_root):
+        root_entries = sorted(os.listdir(runs_root))
+    for entry in root_entries:
+        if entry not in arms:
+            # CE4 regression: undeclared arm directory under runs root
+            raise ManifestError("undeclared arm directory at runs root: %r"
+                                % entry)
+
     records = []
     seen = set()
     for arm in arms:
         arm_spec = protocol["arms"][arm]
+        arm_dir = os.path.join(runs_root, str(arm))
+        if not os.path.isdir(arm_dir) or os.path.islink(arm_dir):
+            raise ManifestError("missing/symlink arm directory: %s" % arm_dir)
+        declared_seeds = {str(s) for s in expected_seeds}
+        for entry in sorted(os.listdir(arm_dir)):
+            if entry not in declared_seeds:
+                raise ManifestError("undeclared seed directory %r under %s"
+                                    % (entry, arm))
+            ep = os.path.join(arm_dir, entry)
+            if os.path.islink(ep) or not os.path.isdir(ep):
+                raise ManifestError(
+                    "non-directory/symlink seed entry %r under %s"
+                    % (entry, arm))
         for seed in expected_seeds:
             identity = (str(arm), int(seed))
             if identity in seen:
                 raise ManifestError("duplicate internal identity: %r"
                                     % (identity,))
             seen.add(identity)
-            run_dir = os.path.join(runs_root, str(arm), str(seed))
+            run_dir = os.path.join(arm_dir, str(seed))
             m = load_run_manifest(run_dir)
 
             for field in REQUIRED_IDENTITY_FIELDS:
                 if field not in m:
                     raise ManifestError("run manifest missing field %s at %r"
-                                        % (field, identity))
-            # directory/manifest identity binding
+                                        % (field, (identity,)))
             if m["arm"] != arm:
                 raise ManifestError(
                     "identity mismatch: directory arm %r vs manifest arm %r "
-                    "at %r" % (arm, m["arm"], identity))
+                    "at %r" % (arm, m["arm"], (identity,)))
             if m["master_seed"] != int(seed):
                 raise ManifestError(
                     "identity mismatch: directory seed %d vs manifest seed %r "
-                    "at %r" % (seed, m["master_seed"], identity))
-            # protocol binding
+                    "at %r" % (seed, m["master_seed"], (identity,)))
             if m["schema_version"] != RUN_MANIFEST_SCHEMA:
-                raise ManifestError("wrong run-manifest schema at %r"  %(identity,))
+                raise ManifestError(
+                    "wrong run-manifest schema at %r" % ((identity,),))
             if m["protocol_schema"] != protocol["schema_version"]:
-                raise ManifestError("stale protocol schema at %r"  %(identity,))
+                raise ManifestError("stale protocol schema at %r"
+                                    % ((identity,),))
             if m["protocol_sha256"] != protocol_sha256:
-                raise ManifestError("stale protocol hash at %r"  %(identity,))
+                raise ManifestError("stale protocol hash at %r"
+                                    % ((identity,),))
             if m["runner_commit"] != runner_commit:
-                raise ManifestError("runner-commit mismatch at %r"  %(identity,))
+                raise ManifestError("runner-commit mismatch at %r"
+                                    % ((identity,),))
             if m["generator_role"] != arm or \
                     m["generator_sha256"] != arm_spec["generator_sha256"]:
                 raise ManifestError("generator role/hash mismatch at %r"
-                                     %(identity,))
+                                    % ((identity,),))
             if m["train_pair_sha256"] != \
                     protocol["pair_files"]["train"]["sha256"]:
-                raise ManifestError("TRAIN pair hash mismatch at %r"  %(identity,))
+                raise ManifestError("TRAIN pair hash mismatch at %r"
+                                    % ((identity,),))
             if m["val_pair_sha256"] != \
                     protocol["pair_files"]["val"]["sha256"]:
-                raise ManifestError("VAL pair hash mismatch at %r"  %(identity,))
-            expected_bundle = {
-                d: __import__("seed_contract").derive_seed(int(seed), d)
-                for d in protocol["attacker_protocol"]["domains"]}
-            if {k: v for k, v in m["derived_seeds"].items()
-                    if k in expected_bundle} != expected_bundle:
-                raise ManifestError("derived-seed bundle mismatch at %r"
-                                     %(identity,))
-            for hname in ("initial_attacker_state_hash", "predictions_sha256",
-                          "attacker_best_sha256"):
-                h = m[hname]
-                if not isinstance(h, str) or len(h) != 64:
-                    raise ManifestError("invalid %s at %r" % (hname, identity))
+                raise ManifestError("VAL pair hash mismatch at %r"
+                                    % ((identity,),))
+            _require_hex64(m["initial_attacker_state_hash"],
+                           "initial_attacker_state_hash", (identity,))
+            _validate_paired_order_contract(m, protocol, identity)
+            _validate_output_tree_and_bind_bytes(run_dir, m, identity)
             if m["score_direction"] != \
                     protocol["attacker_protocol"]["score_direction"]:
-                raise ManifestError("score direction mismatch at %r"  %(identity,))
+                raise ManifestError("score direction mismatch at %r"
+                                    % ((identity,),))
             if not (0 <= m["best_epoch"] <= m["stop_epoch"]
                     <= protocol["attacker_protocol"]["max_epochs"] - 1):
-                raise ManifestError("invalid best/stop epochs at %r"  %(identity,))
+                raise ManifestError("invalid best/stop epochs at %r"
+                                    % ((identity,),))
             if m["status"] != "COMPLETE":
-                raise ManifestError("incomplete status at %r"  %(identity,))
+                raise ManifestError("incomplete status at %r" % ((identity,),))
             if not m.get("started_utc") or not m.get("finished_utc"):
-                raise ManifestError("missing timestamps at %r"  %(identity,))
+                raise ManifestError("missing timestamps at %r"
+                                    % ((identity,),))
             if not isinstance(m.get("environment_provenance"), dict) or \
                     not m["environment_provenance"]:
                 raise ManifestError("missing environment provenance at %r"
-                                     %(identity,))
+                                    % ((identity,),))
             records.append((identity, m))
-
-    # extra identities on disk?
-    for arm in arms:
-        arm_dir = os.path.join(runs_root, str(arm))
-        if not os.path.isdir(arm_dir):
-            raise ManifestError("missing arm directory: %s" % arm_dir)
-        for entry in os.listdir(arm_dir):
-            try:
-                entry_seed = int(entry)
-            except ValueError:
-                raise ManifestError("unexpected non-seed entry %r under %s"
-                                    % (entry, arm_dir))
-            if (str(arm), entry_seed) not in seen:
-                raise ManifestError("unexpected identity: %r"
-                                    % ((arm, entry_seed),))
 
     if len(records) != expected_count:
         raise ManifestError("identity count mismatch: got %d expected %d"

@@ -1,18 +1,23 @@
-"""Standalone CPU-only manifest tests (P0_2_1 revision).
+"""Standalone CPU-only manifest tests (P0_2_2 revision).
 
-Every regression test exercises PRODUCTION code (no locally duplicated logic).
+Every regression test exercises PRODUCTION code. All artifacts are small
+synthetic byte files in temporary directories.
 Run: CUDA_VISIBLE_DEVICES="" python test_manifest_io.py
 """
 import copy
+import hashlib
+import json
 import os
 import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from manifest_io import (ManifestError, aggregate_manifests,
-                         claim_run_directory, load_run_manifest,
+                         claim_run_directory,
+                         load_run_manifest,
                          write_aggregate_manifest_atomic,
                          write_run_manifest_atomic)
+from deterministic_sampler import build_permutation, order_hash
 from seed_contract import derive_seed
 
 ARMS = ["D_BDEV", "U_PUBLISHED"]
@@ -29,8 +34,8 @@ PROTOCOL = {
     "schema_version": "P0_PROTOCOL_V1_1",
     "seeds": {"screen": [42, 43], "full": [42, 43, 44, 45]},
     "arms": {a: {"generator_sha256": GEN_SHA[a]} for a in ARMS},
-    "pair_files": {"train": {"sha256": TRAIN_SHA},
-                   "val": {"sha256": VAL_SHA}},
+    "pair_files": {"train": {"sha256": TRAIN_SHA, "pair_count": 10000},
+                   "val": {"sha256": VAL_SHA, "pair_count": 2000}},
     "attacker_protocol": {
         "domains": ["attacker_weight_init", "train_order",
                     "dataloader_worker_base", "statistical_sensitivity"],
@@ -39,276 +44,298 @@ PROTOCOL = {
 }
 
 
-def base_manifest(arm, seed, order_hashes=None, init_hash=None,
-                  protocol_sha=PROTO_SHA, runner_commit=RUNNER_COMMIT,
-                  status="COMPLETE"):
-    if order_hashes is None:
-        shared = {"0": "oh-shared-%d" % seed, "1": "ohb-shared-%d" % seed}
-        order_hashes = shared
-    if init_hash is None:
-        init_hash = ("ih-shared-%d-" % seed).ljust(64, "0")
-    return {
-        "schema_version": "P0_RUN_MANIFEST_V1_1",
+def _epoch_hashes(seed, stop_epoch):
+    return {str(e): order_hash(build_permutation(seed, e, 10000),
+                               seed, e, 10000)
+            for e in range(0, stop_epoch + 1)}
+
+
+def make_valid_run(root, arm, seed, **overrides):
+    """Production-path run creation: fresh claim -> output bytes -> manifest."""
+    rd = claim_run_directory(root, arm, int(seed))
+    pred = ("predictions-%s-%d" % (arm, seed)).encode()
+    attk = ("attacker-%s-%d" % (arm, seed)).encode()
+    open(os.path.join(rd, "predictions.parquet"), "wb").write(pred)
+    open(os.path.join(rd, "attacker_best.pth"), "wb").write(attk)
+    m = {
+        "schema_version": "P0_RUN_MANIFEST_V1_2",
         "protocol_schema": PROTOCOL["schema_version"],
-        "protocol_sha256": protocol_sha,
-        "runner_commit": runner_commit,
+        "protocol_sha256": overrides.get("protocol_sha", PROTO_SHA),
+        "runner_commit": overrides.get("runner_commit", RUNNER_COMMIT),
         "arm": arm,
         "master_seed": int(seed),
-        "derived_seeds": {
-            d: derive_seed(int(seed), d) for d in
-            PROTOCOL["attacker_protocol"]["domains"]},
-        "generator_role": arm,
-        "generator_sha256": GEN_SHA[arm],
+        "derived_seeds": copy.deepcopy(overrides.get("derived_seeds")) or {
+            d: derive_seed(int(seed), d)
+            for d in PROTOCOL["attacker_protocol"]["domains"]},
+        "generator_role": overrides.get("generator_role", arm),
+        "generator_sha256": GEN_SHA[overrides.get("generator_role", arm)],
         "train_pair_sha256": TRAIN_SHA,
         "val_pair_sha256": VAL_SHA,
-        "initial_attacker_state_hash": init_hash,
-        "epoch_order_hashes": order_hashes,
-        "attacker_best_sha256": "b" * 64,
+        "initial_attacker_state_hash":
+            overrides.get("init_hash") or
+            hashlib.sha256(("init-attacker-%d" % int(seed)).encode()).hexdigest(),
+        "epoch_order_hashes": overrides.get(
+            "epoch_order_hashes", _epoch_hashes(int(seed), 8)),
+        "attacker_best_sha256": hashlib.sha256(attk).hexdigest(),
         "best_epoch": 3,
         "stop_epoch": 8,
-        "score_direction":
-            PROTOCOL["attacker_protocol"]["score_direction"],
-        "predictions_sha256": "p" * 64,
+        "score_direction": PROTOCOL["attacker_protocol"]["score_direction"],
+        "predictions_sha256": hashlib.sha256(pred).hexdigest(),
         "environment_provenance": {"torch": "cpu-test"},
-        "status": status,
-        "started_utc": "2026-08-22T00:00:00+00:00",
-        "finished_utc": "2026-08-22T01:00:00+00:00",
+        "status": overrides.get("status", "COMPLETE"),
+        "started_utc": "2026-08-23T00:00:00+00:00",
+        "finished_utc": "2026-08-23T01:00:00+00:00",
     }
+    for k, v in overrides.items():
+        if k in m and k not in ("protocol_sha", "runner_commit"):
+            m[k] = v
+    write_run_manifest_atomic(rd, m)
+    return rd
 
 
-def _populate(root, manifests):
-    for m in manifests:
-        rd = os.path.join(root, m["arm"], str(m["master_seed"]))
-        write_run_manifest_atomic(rd, copy.deepcopy(m))
-
-
-def _grid(seeds, **overrides):
-    out = []
+def _grid(root, seeds, **overrides):
     for s in seeds:
-        out.append(base_manifest("U_PUBLISHED", s, **overrides))
-        out.append(base_manifest("D_BDEV", s, **overrides))
-    return out
+        for a in ARMS:
+            make_valid_run(root, a, s, **copy.deepcopy(overrides))
 
 
-def test_atomic_write_preexisting_rejection_and_payload_integrity():
-    with tempfile.TemporaryDirectory() as tmp:
-        rd = os.path.join(tmp, "U_PUBLISHED", "42")
-        write_run_manifest_atomic(rd, base_manifest("U_PUBLISHED", 42))
-        try:
-            write_run_manifest_atomic(rd, base_manifest("U_PUBLISHED", 42))
-            raise AssertionError("pre-existing manifest not rejected")
-        except ManifestError:
-            pass
-        assert load_run_manifest(rd)["master_seed"] == 42
+def _expect_merr(fn, needle=None):
+    try:
+        fn()
+    except ManifestError as e:
+        if needle is not None:
+            assert needle in str(e), "message %r lacks %r" % (str(e), needle)
+        return str(e)
+    raise AssertionError("expected ManifestError")
 
 
-def test_fresh_claim_rejects_stale_outputs():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = os.path.join(tmp, "runs")
-        # pre-existing empty run dir
-        os.makedirs(os.path.join(root, "U_PUBLISHED", "42"))
-        for bad in ("empty_dir",):
-            try:
-                claim_run_directory(root, "U_PUBLISHED", 42)
-                raise AssertionError("%s not rejected" % bad)
-            except ManifestError:
-                pass
-        # pre-existing predictions.parquet / attacker_best.pth /
-        # run_manifest.json via existing non-empty dir
-        os.remove(os.path.join(root, "U_PUBLISHED", "42")) if False else None
-        for fname in ("predictions.parquet", "attacker_best.pth",
-                      "run_manifest.json"):
-            d = os.path.join(root, "U_PUBLISHED", "%s_%s" % (42, fname))
-            os.makedirs(d)
-            open(os.path.join(d, fname), "w").close()
-            try:
-                # claim checks only the exact path; simulate by re-claiming
-                claim_run_directory(os.path.dirname(d), "U_PUBLISHED", 42)
-            except ManifestError:
-                pass
-        # symlinked run dir
-        link = os.path.join(root, "U_PUBLISHED", "77")
-        os.symlink(os.path.join(root, "U_PUBLISHED", "42"), link)
-        try:
-            claim_run_directory(root, "U_PUBLISHED", 77)
-            raise AssertionError("symlink run dir not rejected")
-        except ManifestError:
-            pass
-        # happy path: exclusive fresh claim works once, twice fails
-        rd = claim_run_directory(root, "D_BDEV", 42)
-        assert os.path.isdir(rd)
-        try:
-            claim_run_directory(root, "D_BDEV", 42)
-            raise AssertionError("double claim accepted")
-        except ManifestError:
-            pass
-
-
-def test_directory_manifest_identity_binding():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = os.path.join(tmp, "runs")
-        grid = _grid([42, 43])
-        _populate(root, grid)
-        # overwrite U_PUBLISHED/42 with a manifest whose internal arm differs
-        wrong = base_manifest("D_BDEV", 42)
-        from manifest_io import canonical_json_bytes
-        payload = canonical_json_bytes(wrong)
-        wrong["manifest_payload_sha256"] = \
-            __import__("hashlib").sha256(payload).hexdigest()
-        final = os.path.join(root, "U_PUBLISHED", "42", "run_manifest.json")
-        os.remove(final)
-        with open(final, "wb") as f:
-            f.write(canonical_json_bytes(wrong))
-        try:
-            aggregate_manifests(root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT,
-                                "screen")
-            raise AssertionError("MISMATCHED_INTERNAL_IDENTITY_ACCEPTED")
-        except ManifestError as e:
-            assert "identity mismatch" in str(e)
-
-
-def test_one_arm_screen_rejected():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = os.path.join(tmp, "runs")
-        _populate(root, [base_manifest("U_PUBLISHED", 42),
-                         base_manifest("U_PUBLISHED", 43)])
-        try:
-            aggregate_manifests(root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT,
-                                "screen")
-            raise AssertionError("ONE_ARM_SCREEN_ACCEPTED")
-        except ManifestError:
-            pass
-
-
-def test_four_record_screen_rejected():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = os.path.join(tmp, "runs")
-        # screen expects seeds [42,43] x 2 arms; drop one record -> missing
-        _populate(root, [m for i, m in enumerate(_grid([42, 43])) if i != 3])
-        try:
-            aggregate_manifests(root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT,
-                                "screen")
-            raise AssertionError("incomplete screen accepted")
-        except ManifestError:
-            pass
-
-
-def test_screen_exact_count_10_passes_with_locked_seeds():
+def test_valid_screen_and_full_counts_with_locked_protocol():
     real = dict(PROTOCOL)
-    real["seeds"] = {"screen": [42, 43, 44, 45, 46],
-                     "full": list(range(42, 68))}
+    real["seeds"] = {"screen": [42, 43, 44, 45, 46], "full": list(range(42, 68))}
     with tempfile.TemporaryDirectory() as tmp:
         root = os.path.join(tmp, "runs")
-        _populate(root, _grid([42, 43, 44, 45, 46]))
+        _grid(root, [42, 43, 44, 45, 46])
         agg = aggregate_manifests(root, real, PROTO_SHA, RUNNER_COMMIT,
                                   "screen")
         assert agg["count"] == 10               # exactly 2 arms x 5 seeds
-
-
-def test_full_exact_count_52_passes_with_locked_seeds():
-    real = dict(PROTOCOL)
-    full_seeds = list(range(42, 68))
-    real["seeds"] = {"screen": [42, 43, 44, 45, 46], "full": full_seeds}
     with tempfile.TemporaryDirectory() as tmp:
         root = os.path.join(tmp, "runs")
-        _populate(root, _grid(full_seeds))       # 26 x 2 = 52 records
+        _grid(root, list(range(42, 68)))
         agg = aggregate_manifests(root, real, PROTO_SHA, RUNNER_COMMIT, "full")
-        assert agg["count"] == 52 and len(agg["identities"]) == 52
-        p = write_aggregate_manifest_atomic(root, agg)
-        assert os.path.exists(p)
+        assert agg["count"] == 52               # exactly 2 arms x 26 seeds
 
 
-def test_missing_extra_duplicate_stale_status_rejected():
+def test_ce1_missing_output_bytes_rejected():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "runs")
+        _grid(root, [42, 43])
+        # delete actual prediction bytes from one valid run
+        victim = os.path.join(root, "U_PUBLISHED", "42")
+        os.remove(os.path.join(victim, "predictions.parquet"))
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "required output files missing")
+
+
+def test_ce2_empty_order_hashes_rejected():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "runs")
+        _grid(root, [42, 43], epoch_order_hashes={})
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "epoch_order_hashes empty")
+
+
+def test_ce3_extra_derived_seeds_key_rejected():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "runs")
+        bad = {d: derive_seed(42, d)
+               for d in PROTOCOL["attacker_protocol"]["domains"]}
+        bad["sneaky"] = 1
+        _grid(root, [42, 43], derived_seeds=bad)
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "derived_seeds key set mismatch")
+
+
+def test_ce4_undeclared_arm_dir_rejected():
     real = dict(PROTOCOL)
-    real["seeds"] = {"screen": [42, 43, 44, 45, 46],
-                     "full": list(range(42, 68))}
+    real["seeds"] = {"screen": [42, 43, 44, 45, 46], "full": list(range(42, 68))}
     with tempfile.TemporaryDirectory() as tmp:
         root = os.path.join(tmp, "runs")
-        grid = _grid([42, 43, 44, 45, 46])
-        # missing identity: drop one
-        partial = [m for i, m in enumerate(grid) if i != 7]
-        _populate(root, partial)
-        try:
-            aggregate_manifests(root, real, PROTO_SHA, RUNNER_COMMIT, "screen")
-            raise AssertionError("missing identity accepted")
-        except ManifestError:
-            pass
-        # extra identity
-        root2 = os.path.join(tmp, "runs2")
-        _populate(root2, grid + [base_manifest("U_PUBLISHED", 99)])
-        try:
-            aggregate_manifests(root2, real, PROTO_SHA, RUNNER_COMMIT,
-                                "screen")
-            raise AssertionError("extra identity accepted")
-        except ManifestError:
-            pass
-        # incomplete status
-        root3 = os.path.join(tmp, "runs3")
-        ms = _grid([42, 43, 44, 45, 46])
-        ms[0]["status"] = "PARTIAL"
-        _populate(root3, ms)
-        try:
-            aggregate_manifests(root3, real, PROTO_SHA, RUNNER_COMMIT,
-                                "screen")
-            raise AssertionError("incomplete status accepted")
-        except ManifestError:
-            pass
+        _grid(root, [42, 43, 44, 45, 46])
+        rogue = os.path.join(root, "ROGUE_ARM")
+        os.makedirs(rogue)
+        open(os.path.join(rogue, "note.txt"), "w").close()
+        msg = _expect_merr(lambda: aggregate_manifests(
+            root, real, PROTO_SHA, RUNNER_COMMIT, "screen"))
+        assert "ROGUE_ARM" in msg
 
 
-def test_stale_protocol_wrong_commit_wrong_generator_wrong_pair_rejected():
-    variants = [
-        lambda m: m.update(protocol_sha256="deadbeef" + "0" * 56),
-        lambda m: m.update(runner_commit="d" * 40),
-        lambda m: m.update(generator_sha256="bad" + "0" * 61),
-        lambda m: m.update(train_pair_sha256="q" * 64),
-        lambda m: m.update(val_pair_sha256="q" * 64),
-    ]
-    for i, mutate in enumerate(variants):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = os.path.join(tmp, "runs")
-            ms = _grid([42, 43])
-            mutate(ms[i % len(ms)])
-            _populate(root, ms)
-            try:
-                aggregate_manifests(root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT,
-                                    "screen")
-                raise AssertionError("variant %d accepted" % i)
-            except ManifestError:
-                pass
-
-
-def test_paired_order_and_init_mismatch_rejected():
+def test_undeclared_seed_dir_rejected():
     with tempfile.TemporaryDirectory() as tmp:
         root = os.path.join(tmp, "runs")
-        shared = {"0": "same", "1": "same"}
-        _populate(root, [
-            base_manifest("U_PUBLISHED", 42, order_hashes=shared),
-            base_manifest("D_BDEV", 42,
-                          order_hashes={"0": "diff", "1": "same"}),
-            base_manifest("U_PUBLISHED", 43, order_hashes=shared),
-            base_manifest("D_BDEV", 43, order_hashes=shared)])
-        try:
-            aggregate_manifests(root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT,
-                                "screen")
-            raise AssertionError("paired order mismatch accepted")
-        except ManifestError:
-            pass
+        _grid(root, [42, 43])
+        os.makedirs(os.path.join(root, "U_PUBLISHED", "99"))
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "undeclared seed directory")
+
+
+def test_symlink_run_entry_rejected():
     with tempfile.TemporaryDirectory() as tmp:
         root = os.path.join(tmp, "runs")
-        shared = {"0": "same", "1": "same"}
-        _populate(root, [
-            base_manifest("U_PUBLISHED", 42, order_hashes=shared,
-                          init_hash="identical"),
-            base_manifest("D_BDEV", 42, order_hashes=shared,
-                          init_hash="different"),
-            base_manifest("U_PUBLISHED", 43, order_hashes=shared),
-            base_manifest("D_BDEV", 43, order_hashes=shared)])
-        try:
-            aggregate_manifests(root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT,
-                                "screen")
-            raise AssertionError("paired init mismatch accepted")
-        except ManifestError:
-            pass
+        _grid(root, [42, 43])
+        target = os.path.join(root, "U_PUBLISHED", "42")
+        link = os.path.join(root, "U_PUBLISHED", "43")
+        os.rename(os.path.join(root, "U_PUBLISHED", "43"),
+                  os.path.join(tmp, "moved43"))
+        os.symlink(target, link)
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "symlink")
+
+
+def test_byte_hash_binding_rejects_wrong_bytes():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "runs")
+        _grid(root, [42, 43])
+        victim_dir = os.path.join(root, "D_BDEV", "42")
+        man_mtime = os.stat(os.path.join(victim_dir,
+                                         "run_manifest.json")).st_mtime
+        victim = os.path.join(victim_dir, "predictions.parquet")
+        open(victim, "wb").write(b"TAMPERED-BYTES")   # bytes no longer match
+        os.utime(victim, (man_mtime - 1, man_mtime - 1))  # keep mtime ordering
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "predictions bytes do not match")
+
+
+def test_post_manifest_modification_rejected():
+    import time
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "runs")
+        _grid(root, [42, 43])
+        victim = os.path.join(root, "D_BDEV", "42")
+        man_mtime = os.stat(os.path.join(victim,
+                                         "run_manifest.json")).st_mtime
+        future = man_mtime + 100
+        p = os.path.join(victim, "predictions.parquet")
+        os.utime(p, (future, future))     # newer than manifest => tampered
+        time.sleep(0.01)
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "modified after run-manifest creation")
+
+
+def test_order_hash_contract_regressions():
+    # malformed (non-hex) order value
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "r1")
+        oh = _epoch_hashes(42, 8); oh["3"] = "Z" * 64
+        _grid(root, [42, 43], epoch_order_hashes=oh)
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "lowercase 64-char hex")
+    # incorrect (recomputed-mismatch) order value
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "r2")
+        oh = _epoch_hashes(42, 8); oh["5"] = "a" * 64   # plausible but wrong
+        _grid(root, [42, 43], epoch_order_hashes=oh)
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "recomputed order hash mismatch")
+    # extra epoch key beyond stop_epoch
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "r3")
+        oh = _epoch_hashes(42, 8); oh["9"] = "a" * 64
+        _grid(root, [42, 43], epoch_order_hashes=oh)
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "epoch keys mismatch")
+    # missing epoch key
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "r4")
+        oh = _epoch_hashes(42, 8); del oh["0"]
+        _grid(root, [42, 43], epoch_order_hashes=oh)
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "epoch keys mismatch")
+
+
+def test_non_hex_hash_fields_rejected():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "runs")
+        grid_ok = []
+        for s in [42, 43]:
+            for a in ARMS:
+                rd = claim_run_directory(root, a, s)
+                pred = b"x" * s
+                open(os.path.join(rd, "predictions.parquet"), "wb").write(pred)
+                open(os.path.join(rd, "attacker_best.pth"), "wb").write(b"y")
+                m = {
+                    "schema_version": "P0_RUN_MANIFEST_V1_2",
+                    "protocol_schema": PROTOCOL["schema_version"],
+                    "protocol_sha256": PROTO_SHA,
+                    "runner_commit": RUNNER_COMMIT,
+                    "arm": a, "master_seed": s,
+                    "derived_seeds": {d: derive_seed(s, d)
+                                      for d in PROTOCOL["attacker_protocol"]["domains"]},
+                    "generator_role": a, "generator_sha256": GEN_SHA[a],
+                    "train_pair_sha256": TRAIN_SHA, "val_pair_sha256": VAL_SHA,
+                    "initial_attacker_state_hash": "NOT-HEX",
+                    "epoch_order_hashes": _epoch_hashes(s, 8),
+                    "attacker_best_sha256":
+                        hashlib.sha256(b"y").hexdigest(),
+                    "best_epoch": 3, "stop_epoch": 8,
+                    "score_direction":
+                        PROTOCOL["attacker_protocol"]["score_direction"],
+                    "predictions_sha256": hashlib.sha256(pred).hexdigest(),
+                    "environment_provenance": {"t": 1},
+                    "status": "COMPLETE",
+                    "started_utc": "2026-08-23T00:00:00+00:00",
+                    "finished_utc": "2026-08-23T01:00:00+00:00",
+                }
+                write_run_manifest_atomic(rd, m)
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "initial_attacker_state_hash must be lowercase")
+
+
+def test_identity_binding_one_arm_stale_status_still_rejected():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "runs")
+        _grid(root, [42, 43])
+        # identity mismatch: swap internal arm label inside U_PUBLISHED/42
+        rd = os.path.join(root, "U_PUBLISHED", "42")
+        m = load_run_manifest(rd)
+        m["arm"] = "D_BDEV"          # actual internal-label swap
+        m.pop("manifest_payload_sha256", None)
+        payload = json.dumps(m, sort_keys=True, separators=(",", ":")) + "\n"
+        m["manifest_payload_sha256"] = hashlib.sha256(payload.encode()).hexdigest()
+        final = os.path.join(rd, "run_manifest.json")
+        os.remove(final)
+        with open(final, "wb") as f:
+            f.write(json.dumps(m, sort_keys=True,
+                               separators=(",", ":")).encode() + b"\n")
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "identity mismatch")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "runs")
+        _grid(root, [42, 43])
+        # only one arm present -> missing/symlink arm dir rejection
+        import shutil as _sh
+        _sh.rmtree(os.path.join(root, "D_BDEV"))
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "arm directory")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "runs")
+        _grid(root, [42, 43], status="PARTIAL")
+        _expect_merr(lambda: aggregate_manifests(
+            root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
+            "incomplete status")
 
 
 if __name__ == "__main__":

@@ -102,18 +102,65 @@ def sha256_file(path):
     return h.hexdigest()
 
 
+def _validate_lexical_relative_path(relative_path):
+    """Reject absolute paths, traversal and unsafe components lexically."""
+    if not isinstance(relative_path, str) or not relative_path:
+        raise PermissionError("artifact path must be a non-empty string")
+    if relative_path.startswith("/") or "\\" in relative_path:
+        raise PermissionError(
+            "artifact path must be repository-relative: %r" % relative_path)
+    parts = relative_path.split("/")
+    for comp in parts:
+        if comp in ("", ".", ".."):
+            raise PermissionError(
+                "unsafe artifact path component in %r" % relative_path)
+    return parts
+
+
 def verify_artifact_sha(repo_root, relative_path, expected_sha256):
     """Verify actual bytes of one artifact under an injected repository root.
 
-    Raises PermissionError on absence or hash mismatch. Never downloads.
+    P0_2_2 hardening: inspects the LEXICAL artifact path and EVERY component
+    beneath the injected root; rejects symlinks (final component AND parent
+    directories) and repository escapes BEFORE hashing; opens with
+    O_NOFOLLOW where supported and fstat-verifies a regular file to reduce
+    TOCTOU risk. Never downloads. Never follows symlinks.
     """
-    real = os.path.realpath(os.path.join(repo_root, relative_path))
-    if not real.startswith(os.path.realpath(repo_root) + os.sep):
+    parts = _validate_lexical_relative_path(relative_path)
+    root_real = os.path.realpath(repo_root)
+    cur = repo_root
+    for comp in parts:
+        cur = os.path.join(cur, comp)
+        if os.path.islink(cur):
+            raise PermissionError(
+                "symlink component rejected in artifact path: %s" % cur)
+        if not os.path.exists(cur):
+            raise PermissionError("artifact missing: %s" % relative_path)
+    real = os.path.realpath(cur)
+    if not (real == root_real or real.startswith(root_real + os.sep)):
         raise PermissionError("artifact escapes repository: %r" % relative_path)
-    if not os.path.isfile(real) or os.path.islink(real):
-        raise PermissionError("artifact missing or is a symlink: %s"
+    if not os.path.isfile(cur):
+        raise PermissionError("artifact is not a regular file: %s"
                               % relative_path)
-    actual = sha256_file(real)
+
+    flags = os.O_RDONLY
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(cur, flags | nofollow)
+    try:
+        import stat as _stat
+        st = os.fstat(fd)
+        if not _stat.S_ISREG(st.st_mode):
+            raise PermissionError(
+                "fstat: artifact is not a regular file: %s" % relative_path)
+        h = hashlib.sha256()
+        while True:
+            block = os.read(fd, 1 << 20)
+            if not block:
+                break
+            h.update(block)
+        actual = h.hexdigest()
+    finally:
+        os.close(fd)
     if actual != expected_sha256:
         raise PermissionError(
             "artifact hash mismatch for %s: %s != %s"
@@ -122,18 +169,32 @@ def verify_artifact_sha(repo_root, relative_path, expected_sha256):
 
 
 def verify_all_artifacts(protocol, repo_root):
-    """Byte-verify generators, pair files, and the ImageNet weight artifact."""
-    for arm_spec in protocol["arms"].values():
-        verify_artifact_sha(repo_root, arm_spec["generator_path"],
-                            arm_spec["generator_sha256"])
-    for kind, spec in protocol.get("pair_files", {}).items():
-        verify_artifact_sha(repo_root, spec["path"], spec["sha256"])
+    """Byte-verify execution artifacts under the locked protocol.
+
+    P0_2_2 ordering: the unresolved ImageNet-artifact gate fires FIRST, before
+    any other artifact is opened or hashed. Per arm, verification uses
+    `execution_path` (the ACTUAL local bytes); `generator_path` remains
+    provenance metadata only but must still be a safe repository-relative
+    lexical path.
+    """
     weights = protocol.get("imagenet_weight_artifact", {})
     if weights.get("status") != "LOCKED":
         raise PermissionError(
             "ImageNet weight artifact is %r: refusing execution until a "
             "human-approved local artifact (identifier + SHA-256) is locked "
             "in the protocol" % weights.get("status"))
+    for arm, spec in sorted(protocol["arms"].items()):
+        exec_path = spec.get("execution_path")
+        if not exec_path:
+            raise PermissionError(
+                "arm %r lacks execution_path; refusing to verify provenance "
+                "metadata instead of actual bytes" % arm)
+        _validate_lexical_relative_path(spec["generator_path"])
+        _validate_lexical_relative_path(exec_path)
+        verify_artifact_sha(repo_root, exec_path,
+                            spec["generator_sha256"])
+    for kind, spec in protocol.get("pair_files", {}).items():
+        verify_artifact_sha(repo_root, spec["path"], spec["sha256"])
     verify_artifact_sha(repo_root, weights["local_path"],
                         weights["sha256"])
 

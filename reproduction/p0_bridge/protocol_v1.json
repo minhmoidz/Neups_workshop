@@ -48,11 +48,12 @@
   },
   "authorization_status": "NOT_AUTHORIZED",
   "component_schemas": {
+    "aggregate_manifest": "P0_AGGREGATE_MANIFEST_V1_2",
     "approval_manifest": "P0_APPROVAL_MANIFEST_V1_1",
     "loader_generator": "P0_LOADERGEN_V1_1",
     "model_state_hash": "P0_MODELSTATE_V1_1",
     "order_hash": "P0_ORDERHASH_V1_1",
-    "run_manifest": "P0_RUN_MANIFEST_V1_1",
+    "run_manifest": "P0_RUN_MANIFEST_V1_2",
     "sampler": "P0_SAMPLER_V1_1",
     "seed": "P0_SEED_V1"
   },
@@ -79,7 +80,7 @@
     "note": "exact torchvision weight-bundle identifier, local path and SHA-256 must be established and human-approved before any execution; --execute refuses while this is unresolved",
     "status": "UNRESOLVED_BLOCKER"
   },
-  "implementation_revision": "P0_2_1",
+  "implementation_revision": "P0_2_2",
   "output_contract": {
     "aggregate_manifest": "aggregate_manifest.json",
     "atomic_write": true,
@@ -101,11 +102,13 @@
   },
   "pair_files": {
     "train": {
+      "pair_count": 10000,
       "path": "image_pairs/image_pairs_training_10000.txt",
       "role": "attacker_training",
       "sha256": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268"
     },
     "val": {
+      "pair_count": 2000,
       "path": "image_pairs/image_pairs_validation_2000.txt",
       "role": "attacker_selection_and_scoring",
       "sha256": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7"
@@ -170,5 +173,5 @@
     "statistical_unit": "paired attacker seed within fixed generator pair",
     "tost_alpha": 0.05
   },
-  "supersedes_protocol_sha256": "b63f98af8e37a294b45ea6686282e5f392b4a26ff68179cf9ff86ea4a732e731"
+  "supersedes_protocol_sha256": "096aeeb7e54e236838ebf97c296fee3b2423dd340d9ac9869b882e2569db8a4e"
 }
