@@ -23,7 +23,7 @@ import tempfile
 
 RUN_MANIFEST_NAME = "run_manifest.json"
 AGGREGATE_NAME = "aggregate_manifest.json"
-PREDICTIONS_NAME = "predictions.parquet"
+PREDICTIONS_NAME = "predictions.csv"
 ATTACKER_CKPT_NAME = "attacker_best.pth"
 REQUIRED_OUTPUT_FILES = frozenset(
     {PREDICTIONS_NAME, ATTACKER_CKPT_NAME, RUN_MANIFEST_NAME})

@@ -80,14 +80,14 @@
     "note": "exact torchvision weight-bundle identifier, local path and SHA-256 must be established and human-approved before any execution; --execute refuses while this is unresolved",
     "status": "UNRESOLVED_BLOCKER"
   },
-  "implementation_revision": "P0_2_2",
+  "implementation_revision": "P0_2_3",
   "output_contract": {
     "aggregate_manifest": "aggregate_manifest.json",
     "atomic_write": true,
     "expected_identities_full": 52,
     "expected_identities_screen": 10,
     "files": [
-      "predictions.parquet",
+      "predictions.csv",
       "attacker_best.pth",
       "run_manifest.json"
     ],
@@ -173,5 +173,5 @@
     "statistical_unit": "paired attacker seed within fixed generator pair",
     "tost_alpha": 0.05
   },
-  "supersedes_protocol_sha256": "096aeeb7e54e236838ebf97c296fee3b2423dd340d9ac9869b882e2569db8a4e"
+  "supersedes_protocol_sha256": "528da8b471b9a2d71b49eab2485ddc0b5690d2836fd5219fa42af035284d117c"
 }
