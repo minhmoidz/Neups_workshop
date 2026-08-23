@@ -369,12 +369,26 @@ def aggregate_manifests(runs_root, protocol, protocol_sha256, runner_commit,
 
     for seed, per_arm in sorted(by_seed.items()):
         refs = list(per_arm.values())
+        # Paired-order contract applies to the COMMON trained epochs: arms
+        # legitimately early-stop at different epochs, so compare the
+        # intersection (which is non-empty by construction: epoch 0 always
+        # runs). Each manifest's own 0..stop_epoch completeness was already
+        # validated per record.
+        common = None
+        for m in refs:
+            ks = set(m["epoch_order_hashes"].keys())
+            common = ks if common is None else (common & ks)
+        if not common:
+            raise ManifestError(
+                "paired order hashes share no common epoch at seed %d" % seed)
         order_ref = refs[0]["epoch_order_hashes"]
         init_ref = refs[0]["initial_attacker_state_hash"]
         for m in refs[1:]:
-            if m["epoch_order_hashes"] != order_ref:
-                raise ManifestError("paired order-hash mismatch at seed %d"
-                                    % seed)
+            for e in sorted(common):
+                if m["epoch_order_hashes"][e] != order_ref[e]:
+                    raise ManifestError(
+                        "paired order-hash mismatch at seed %d epoch %s"
+                        % (seed, e))
             if m["initial_attacker_state_hash"] != init_ref:
                 raise ManifestError(
                     "paired initial-attacker-hash mismatch at seed %d" % seed)
