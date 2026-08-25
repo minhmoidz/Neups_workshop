@@ -358,7 +358,15 @@ def _check_path_syntax(protocol):
     paths += [spec["path"] for spec in protocol["pair_files"].values()]
     weights = protocol.get("imagenet_weight_artifact") or {}
     if weights.get("status") == "LOCKED":
-        paths.append(weights["local_path"])
+        wpath = weights["local_path"]
+        # P0_2_3: an APPROVED ABSOLUTE external artifact (e.g. the torchvision
+        # hub cache) is validated by a dedicated absolute-path rule instead of
+        # the repository-relative regex.
+        if os.path.isabs(wpath):
+            if ".." in wpath.split(os.sep) or not wpath.endswith(".pth"):
+                raise ValueError("unsafe absolute artifact path: %r" % wpath)
+        else:
+            paths.append(wpath)
     for candidate in paths:
         if not isinstance(candidate, str) or not rel.match(candidate):
             raise ValueError("unsafe path syntax: %r" % (candidate,))
