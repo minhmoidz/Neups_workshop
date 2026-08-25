@@ -1,0 +1,13 @@
+{
+    "image_path": "/home/minhtt/datasets/nih/images/",
+    "save_path": "./archive/v2ctrl_b16acc1_eval/",
+    "classifier_checkpoint": "./networks/pretrained_classifier.pth",
+    "perturbation_type": "flow_field",
+    "perturbation_model_file": "./archive/v2ctrl_b16acc1/generator_lowest_total_loss.pth",
+    "mu": 0.01,
+    "b": null,
+    "m": null,
+    "eps": null,
+    "eval_fold": "val",
+    "batch_size": 16
+}

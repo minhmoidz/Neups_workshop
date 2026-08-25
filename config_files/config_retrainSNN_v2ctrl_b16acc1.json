@@ -1,0 +1,13 @@
+{
+    "experiment_description": "v2ctrl_b16acc1_snn",
+    "image_path": "/home/minhtt/datasets/nih/images/",
+    "perturbation_type": "flow_field",
+    "perturbation_model_file": "./archive/v2ctrl_b16acc1/generator_lowest_total_loss.pth",
+    "mu": 0.01,
+    "image_size": 256,
+    "batch_size": 32,
+    "learning_rate": 0.0001,
+    "max_epochs": 100,
+    "early_stopping": 5,
+    "allow_test": false
+}
