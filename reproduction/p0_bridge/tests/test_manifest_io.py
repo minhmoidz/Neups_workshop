@@ -55,7 +55,7 @@ def make_valid_run(root, arm, seed, **overrides):
     rd = claim_run_directory(root, arm, int(seed))
     pred = ("predictions-%s-%d" % (arm, seed)).encode()
     attk = ("attacker-%s-%d" % (arm, seed)).encode()
-    open(os.path.join(rd, "predictions.parquet"), "wb").write(pred)
+    open(os.path.join(rd, "predictions.csv"), "wb").write(pred)
     open(os.path.join(rd, "attacker_best.pth"), "wb").write(attk)
     m = {
         "schema_version": "P0_RUN_MANIFEST_V1_2",
@@ -131,7 +131,7 @@ def test_ce1_missing_output_bytes_rejected():
         _grid(root, [42, 43])
         # delete actual prediction bytes from one valid run
         victim = os.path.join(root, "U_PUBLISHED", "42")
-        os.remove(os.path.join(victim, "predictions.parquet"))
+        os.remove(os.path.join(victim, "predictions.csv"))
         _expect_merr(lambda: aggregate_manifests(
             root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT, "screen"),
             "required output files missing")
@@ -203,7 +203,7 @@ def test_byte_hash_binding_rejects_wrong_bytes():
         victim_dir = os.path.join(root, "D_BDEV", "42")
         man_mtime = os.stat(os.path.join(victim_dir,
                                          "run_manifest.json")).st_mtime
-        victim = os.path.join(victim_dir, "predictions.parquet")
+        victim = os.path.join(victim_dir, "predictions.csv")
         open(victim, "wb").write(b"TAMPERED-BYTES")   # bytes no longer match
         os.utime(victim, (man_mtime - 1, man_mtime - 1))  # keep mtime ordering
         _expect_merr(lambda: aggregate_manifests(
@@ -220,7 +220,7 @@ def test_post_manifest_modification_rejected():
         man_mtime = os.stat(os.path.join(victim,
                                          "run_manifest.json")).st_mtime
         future = man_mtime + 100
-        p = os.path.join(victim, "predictions.parquet")
+        p = os.path.join(victim, "predictions.csv")
         os.utime(p, (future, future))     # newer than manifest => tampered
         time.sleep(0.01)
         _expect_merr(lambda: aggregate_manifests(
@@ -271,7 +271,7 @@ def test_non_hex_hash_fields_rejected():
             for a in ARMS:
                 rd = claim_run_directory(root, a, s)
                 pred = b"x" * s
-                open(os.path.join(rd, "predictions.parquet"), "wb").write(pred)
+                open(os.path.join(rd, "predictions.csv"), "wb").write(pred)
                 open(os.path.join(rd, "attacker_best.pth"), "wb").write(b"y")
                 m = {
                     "schema_version": "P0_RUN_MANIFEST_V1_2",
