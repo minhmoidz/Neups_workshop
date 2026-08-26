@@ -1,0 +1,21 @@
+{
+	"experiment_description": "v2_attention_feat1_run1",
+	"image_path": "/home/minhtt/datasets/nih/images/",
+
+	"ac_loss_weight": 1,
+	"ver_loss_weight": 1,
+	"feature_loss_weight": 1.0,
+	"gate_entropy_weight": 0.0,
+	"ver_loglik_eps": 0.0,
+
+	"generator_type": "flow_field_att",
+	"mu": 0.01,
+
+	"image_size": 256,
+	"batch_size": 16,
+	"learning_rate": 0.0001,
+	"max_epochs": 250,
+
+	"show_every_n_epochs": 10,
+	"show_every_n_iterations": 100
+}

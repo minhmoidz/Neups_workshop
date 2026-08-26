@@ -1,0 +1,20 @@
+{
+	"experiment_description": "dirC_continuation_from_U_run1",
+	"image_path": "/home/minhtt/datasets/nih/images/",
+
+	"ac_loss_weight": 1,
+	"ver_loss_weight": 1,
+
+	"generator_type": "flow_field",
+	"mu": 0.01,
+
+	"pretrained_generator_file": "./reproduction/workspace_prichexy/networks/generator_lowest_total_loss_mu_0.01.pth",
+
+	"image_size": 256,
+	"batch_size": 16,
+	"learning_rate": 0.00002,
+	"max_epochs": 40,
+
+	"show_every_n_epochs": 5,
+	"show_every_n_iterations": 100
+}
