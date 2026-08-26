@@ -1,6 +1,6 @@
 # BRANCHES.MD — BẢN ĐỒ NHÁNH CHÍNH THỨC (single source of truth)
 
-Cập nhật: 2026-08-23. Mọi câu hỏi "đọc/commit/push ở đâu, nhánh gì" tra cứu tại đây.
+Cập nhật: 2026-08-26. Mọi câu hỏi "đọc/commit/push ở đâu, nhánh gì" tra cứu tại đây.
 
 ---
 
@@ -8,7 +8,7 @@ Cập nhật: 2026-08-23. Mọi câu hỏi "đọc/commit/push ở đâu, nhánh
 
 | Nhánh | HEAD | Vai trò | Quy tắc |
 |---|---|---|---|
-| `research/method-restart` (LOCAL) | `f2a3ac1` | **Method development**: code V2 (AgentV2, attention UNet, configs), audit fixes F1/F2 | ⚠️ ĐANG FORK với remote: local-only `{c2ee268, f2a3ac1}` ↔ remote-only `{a3513e5}`. Cấm push đến khi human quyết định hợp nhất |
+| `research/method-restart` | `a53d352` | **Method development**: code V2 (AgentV2, attention UNet, configs), audit fixes F1/F2, Direction C (U-checkpoint continuation) | ✅ Fork đã được hợp nhất bằng merge commit `e776897` (2026-08-26) — local và remote cùng HEAD, push/pull bình thường |
 | `review/p0-runner-attacker-loop-20260823` (remote, @ `2952abd`) | — | **P0 harness chính thức**: protocol P0_2_3, attacker_loop, screen/bridge results, prereg I_M2 | Mọi thay đổi hạ tầng P0 commit tại đây |
 
 ## B. BẰNG CHỨNG ĐÓNG BĂNG (read-only, đã external-review)
