@@ -98,12 +98,12 @@ class Agent:
         }
 
         # Define the auxiliary classifier (self.ac_model is already on GPU)
-        self.ac_model = torch.load('./networks/pretrained_classifier.pth')['model']
+        self.ac_model = torch.load('./networks/pretrained_classifier.pth', weights_only=False)['model']
         self.ac_loss = ACLoss(ac_model=self.ac_model).cuda()
 
         # Define the verification model and the verification loss
         self.verification_model = SiameseNetwork().cuda()
-        self.verification_model.load_state_dict(torch.load('./networks/pretrained_verification_model.pth'))
+        self.verification_model.load_state_dict(torch.load('./networks/pretrained_verification_model.pth', weights_only=False))
         self.verification_loss = VerificationLoss(verification_model=self.verification_model, reduction='none').cuda()
 
         # Loss functions for the auxiliary classifier and the verification model

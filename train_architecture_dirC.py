@@ -30,7 +30,7 @@ if __name__ == "__main__":
     SAVINGS_PATH = './archive/' + config['experiment_description'] + '/'
     # NOTE: baseline utils.make_zip archives the whole repo (multi-GB);
     # provenance is recorded via config copy instead.
-    shutil.copy(config_path + args.config, SAVINGS_PATH + args.config)
+    shutil.copy(args.config_path + args.config, SAVINGS_PATH + args.config)
 
     # Call agent and run experiment
     experiment = Agent(config)
