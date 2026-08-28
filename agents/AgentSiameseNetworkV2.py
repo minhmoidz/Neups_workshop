@@ -108,6 +108,16 @@ class AgentSiameseNetworkV2:
                 self.perturbation_net = UNet(1, 2, 32).cuda()
                 self.perturbation_net.load_state_dict(checkpoint, strict=True)
             self.perturbation_net.eval()
+            # The anonymizer is a FROZEN measurement instrument here, never a
+            # trainable module: only self.net (the attacker) is optimized.
+            # Without this, its 118 parameter tensors keep requires_grad=True,
+            # so every attacker backward also propagates through the whole
+            # U-Net and accumulates .grad buffers that are never zeroed (the
+            # attacker's optimizer only owns self.net) and never stepped --
+            # pure wasted compute and memory. Mirrors the P0 harness contract
+            # in generator_guard.assert_generator_frozen_state.
+            for p in self.perturbation_net.parameters():
+                p.requires_grad_(False)
         else:
             raise ValueError("AgentSiameseNetworkV2 supports 'flow_field_att' "
                              "or 'flow_field', got '%s'." % self.perturbation_type)
@@ -201,12 +211,18 @@ class AgentSiameseNetworkV2:
         return out1, self._anonymize_single(inputs2)
 
     def _anonymize_single(self, x):
-        grid = self.perturbation_net(x)
-        grid = self.grid_identity - self.mu * grid
-        grid = self.gauss_filter(grid)
-        grid = grid.permute(0, 2, 3, 1)
-        return torch.nn.functional.grid_sample(x, grid, padding_mode='border',
-                                               align_corners=True)
+        # no_grad: the attacker only needs gradients w.r.t. its OWN parameters,
+        # and the anonymized image is an input to it, not a differentiable
+        # function of anything being optimized. Building the generator's graph
+        # here would cost a full U-Net backward per batch for nothing.
+        with torch.no_grad():
+            grid = self.perturbation_net(x)
+            grid = self.grid_identity - self.mu * grid
+            grid = self.gauss_filter(grid)
+            grid = grid.permute(0, 2, 3, 1)
+            return torch.nn.functional.grid_sample(x, grid,
+                                                   padding_mode='border',
+                                                   align_corners=True)
 
     # ------------------------------------------------------------------ #
     # Epoch loops (mirror utils.train_snn / validate_snn step-for-step)   #

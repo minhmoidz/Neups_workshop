@@ -226,19 +226,31 @@ class AgentV2:
     def _initial_gate_sanity_check(self, ckpt_path):
         """Numerically verify the initialization contract BEFORE training.
 
-        Check 1 -- near-identity gates: with zero-initialized W_g/W_x/psi
-        weights and psi bias b, every gate output equals sigmoid(b) regardless
-        of input.
+        Check 1 -- near-identity gates: with psi bias b dominating the
+        pre-sigmoid activation, every gate output is within GATE_INIT_TOL of
+        sigmoid(b) regardless of input.
         Check 2 -- structural parity with the plain U-Net: feeding the same
         random image through both networks (same overlapping weights) must
         yield nearly identical flow fields. This is the check that catches
         data-flow bugs such as concatenating the wrong tensors in the decoder
         path; a violation aborts the run before any GPU-hours are spent.
+        Check 3 -- gradient liveness: EVERY gate parameter tensor must receive
+        a nonzero gradient. Added 2026-08-28 after a completed 250-epoch run
+        was found to have left all W_g/W_x/psi.weight tensors at exactly 0.0:
+        the previous all-zero init was a gradient fixed point, so the gates
+        could never learn and the attention mechanism was inert. Checks 1 and
+        2 both PASS in that degenerate state -- only this check catches it.
         """
         self.generator.eval()
         g = torch.Generator().manual_seed(12345)
         dummy = torch.randn(1, 1, self.image_size, self.image_size,
                             generator=g).cuda()
+
+        # Tolerance for the near-identity contract. psi.weight is initialized
+        # at std=PSI_INIT_WEIGHT_STD, so the pre-sigmoid perturbation is tiny
+        # next to GATE_INIT_BIAS; anything beyond this band means the gate is
+        # no longer starting from the pre-trained plain-U-Net behaviour.
+        GATE_INIT_TOL = 0.02
 
         with torch.no_grad():
             expected_gate = torch.sigmoid(
@@ -246,10 +258,12 @@ class AgentV2:
             _, gates = self.generator(dummy, return_gates=True)
             for name, gmap in gates.items():
                 g_min, g_max = gmap.min().item(), gmap.max().item()
-                if abs(g_min - expected_gate) > 1e-4 or abs(g_max - expected_gate) > 1e-4:
+                if abs(g_min - expected_gate) > GATE_INIT_TOL \
+                        or abs(g_max - expected_gate) > GATE_INIT_TOL:
                     raise RuntimeError(
                         'Gate %s not near-identity at init: range [%f, %f], '
-                        'expected ~%f everywhere.' % (name, g_min, g_max, expected_gate))
+                        'expected ~%f everywhere (tol %.3f).'
+                        % (name, g_min, g_max, expected_gate, GATE_INIT_TOL))
 
             # Structural parity against the plain U-Net baseline.
             reference = UNet(1, 2, 32).cuda()
@@ -277,6 +291,27 @@ class AgentV2:
                     % (max_dev, tolerance))
             print('[V2] Init sanity OK: gates=%.6f, parity max|dflow|=%.4f'
                   % (expected_gate, max_dev))
+
+        # ---- Check 3: gradient liveness of every gate parameter ----
+        # Runs OUTSIDE no_grad. A scalar objective on the flow field must
+        # deposit a nonzero gradient in each att* tensor; a zero gradient means
+        # that tensor can never move and the gate is structurally dead.
+        for p in self.generator.parameters():
+            p.grad = None
+        self.generator(dummy).pow(2).mean().backward()
+        dead = [n for n, p in self.generator.named_parameters()
+                if n.split('.')[0] in {'att1', 'att2', 'att3', 'att4'}
+                and (p.grad is None or not torch.any(p.grad != 0))]
+        for p in self.generator.parameters():
+            p.grad = None
+        if dead:
+            raise RuntimeError(
+                'Attention gate parameters receive ZERO gradient at init and '
+                'can never train (dead-gate initialization): %s. Refusing to '
+                'burn GPU-hours on an inert attention mechanism.' % dead)
+        print('[V2] Init sanity OK: all %d gate tensors have live gradients.'
+              % sum(1 for n, _ in self.generator.named_parameters()
+                    if n.split('.')[0] in {'att1', 'att2', 'att3', 'att4'}))
         self.generator.train()
 
     # ------------------------------------------------------------------ #
@@ -294,6 +329,17 @@ class AgentV2:
         def safe_sha(path):
             return _sha256_file(path) if os.path.exists(path) else None
 
+        # The hash MUST be of the checkpoint this run actually loaded. An
+        # earlier revision hard-coded the default path's hash regardless of
+        # `pretrained_generator_file`, so a run initialized from
+        # generator_lowest_total_loss_mu_0.01.pth (U_PUBLISHED, 4d82dcdd...)
+        # recorded the hash of pretrained_generator_prichexy_net.pth
+        # (10122689...). Those two checkpoints are exactly the pair the P0.3
+        # lineage finding turns on, so a path/hash mismatch here silently
+        # misattributes the run's starting point. Fixed 2026-08-28.
+        gen_init_path = self.config.get(
+            'pretrained_generator_file',
+            './networks/pretrained_generator_prichexy_net.pth')
         manifest = {
             'agent': 'AgentV2',
             'git_head': git_head(),
@@ -301,9 +347,8 @@ class AgentV2:
             'cuda_available': torch.cuda.is_available(),
             'config': json.loads(json.dumps(self.config)),
             'pretrained_generator': {
-                'path': self.config.get('pretrained_generator_file',
-                                        './networks/pretrained_generator_prichexy_net.pth'),
-                'sha256': safe_sha('./networks/pretrained_generator_prichexy_net.pth'),
+                'path': gen_init_path,
+                'sha256': safe_sha(gen_init_path),
                 'num_loaded_tensors': self.load_summary['num_loaded_tensors'],
                 'missing_attention_keys': self.load_summary['missing_attention_keys'],
             },
@@ -479,7 +524,15 @@ class AgentV2:
                     (loss_ac / accum).backward(inputs=ac_params)
                     if is_step_boundary:
                         self.optimizer_ac.step()
-                        self.ac_loss.ac_model.eval()
+                    # eval() must restore EVERY micro-batch, symmetrically with
+                    # the ver critic above -- not only at the step boundary.
+                    # utils.ACLoss.forward deep-copies ac_model on every call,
+                    # so leaving it in train() across a micro-batch boundary
+                    # makes the NEXT micro-batch's generator loss use BatchNorm
+                    # batch statistics instead of running statistics (and drift
+                    # the running stats). With accumulation_steps=1 this is a
+                    # no-op; it only bit the accumulation arms. Fixed 2026-08-28.
+                    self.ac_loss.ac_model.eval()
 
                     print('Epoch [%d/%d], Iteration [%d/%d], '
                           'Verification Loss (ver_loss): %.4f'

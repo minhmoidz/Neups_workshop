@@ -37,16 +37,35 @@ class AttentionGate(nn.Module):
     Deliberate deviations from the standard Attention U-Net gate head:
       * No BatchNorm inside the gate head. BatchNorm would re-center the
         pre-sigmoid activations and destroy any constant-bias initialization,
-        making an identity-preserving initialization impossible. Removing BN
-        keeps the gate purely deterministic at init.
-      * Weights of W_g, W_x and psi are zero-initialized and the psi bias is
-        set to GATE_INIT_BIAS so that sigmoid(bias) ~= 1. At initialization the
-        gate therefore acts as the identity map on the skip connection, i.e.
-        the network starts out behaving exactly like the pre-trained plain
+        making a near-identity initialization impossible. Removing BN keeps
+        the gate deterministic at init.
+      * The psi bias is set to GATE_INIT_BIAS so that sigmoid(bias) ~= 1, i.e.
+        the gate starts out as (very nearly) the identity map on the skip
+        connection and the network begins training as the pre-trained plain
         U-Net it was initialized from. This is essential for a controlled
         comparison against the baseline: epoch-0 behaviour matches the
         published starting point, and training can only deviate from it where
         gradients justify doing so.
+
+    NEAR-IDENTITY MUST NOT BECOME A DEAD GRADIENT (fix 2026-08-28).
+    An earlier revision zero-initialized W_g, W_x AND psi.weight together.
+    That is a self-sustaining fixed point, not an initialization:
+
+        a = relu(W_g(g) + W_x(x)) = relu(0) = 0
+        dL/d(psi.weight) proportional to a        = 0  -> psi.weight stays 0
+        dL/da            proportional to psi.weight = 0  -> W_g, W_x get NO gradient
+
+    so every gate weight remains exactly zero forever and the gate collapses
+    to the single learnable scalar sigmoid(psi.bias). This was confirmed on a
+    completed 250-epoch run: all W_g/W_x/psi.weight tensors were still exactly
+    0.0 and only the four psi.bias scalars had moved. The attention mechanism
+    was therefore never active.
+
+    The fix keeps W_g/W_x at their default (Kaiming-uniform) init so `a` is
+    nonzero, and gives psi.weight a small nonzero init (PSI_INIT_WEIGHT_STD)
+    so gradient flows back into W_g/W_x. The pre-sigmoid perturbation
+    psi.weight . a stays orders of magnitude below GATE_INIT_BIAS, so the gate
+    is still ~sigmoid(6) at init and the near-identity contract holds.
 
     :param F_l: int
         Number of channels of the skip-connection (encoder) feature map.
@@ -57,6 +76,9 @@ class AttentionGate(nn.Module):
     """
 
     GATE_INIT_BIAS = 6.0  # sigmoid(6.0) ~= 0.9975 -> gate ~= identity at init
+    # Small enough that psi.weight . a << GATE_INIT_BIAS at init (so the gate
+    # stays near-identity), large enough that gradients reach W_g and W_x.
+    PSI_INIT_WEIGHT_STD = 1e-3
 
     def __init__(self, F_l, F_g, F_int):
         super().__init__()
@@ -65,12 +87,10 @@ class AttentionGate(nn.Module):
         self.psi = nn.Conv2d(F_int, 1, kernel_size=1, stride=1, padding=0, bias=True)
         self.relu = nn.ReLU(inplace=True)
 
-        # Identity-preserving initialization (see class docstring).
-        nn.init.zeros_(self.W_g.weight)
-        nn.init.zeros_(self.W_g.bias)
-        nn.init.zeros_(self.W_x.weight)
-        nn.init.zeros_(self.W_x.bias)
-        nn.init.zeros_(self.psi.weight)
+        # Near-identity initialization WITH live gradients (see class docstring).
+        # W_g and W_x keep nn.Conv2d's default Kaiming-uniform init so that
+        # a = relu(W_g(g) + W_x(x)) is not identically zero.
+        nn.init.normal_(self.psi.weight, mean=0.0, std=self.PSI_INIT_WEIGHT_STD)
         nn.init.constant_(self.psi.bias, self.GATE_INIT_BIAS)
 
     def forward(self, x_skip, g):
