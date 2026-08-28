@@ -41,7 +41,7 @@ def _sha256_file(path):
     return h.hexdigest()
 
 
-def build_anonymize_from_generator(generator, protocol):
+def build_anonymize_from_generator(generator, protocol, mu=None):
     """Frozen legacy flow-field operator bound to an already-loaded generator.
 
     Mirrors evaluator constants: grid = identity - mu*grid; GaussianSmoothing
@@ -55,7 +55,11 @@ def build_anonymize_from_generator(generator, protocol):
     from utils.GaussianSmoothing import GaussianSmoothing
 
     ap = protocol["attacker_protocol"]["flow_operator"]
-    mu = float(ap["mu"]); k = int(ap["gaussian_kernel"]); sigma = int(ap["gaussian_sigma"])
+    # P0_PROTOCOL_V1_2: mu is a property of the GENERATOR being evaluated, not
+    # of the attacker. The arm's value wins; the V1_1 global remains the
+    # default so every V1_1 arm resolves to exactly its V1_1 value.
+    mu = float(ap["mu"] if mu is None else mu)
+    k = int(ap["gaussian_kernel"]); sigma = int(ap["gaussian_sigma"])
     dev = next(generator.parameters()).device
     cache = {}
     gauss_cache = {}
@@ -130,8 +134,11 @@ class P0AttackerRunner:
         self.generator.eval()
         for p in self.generator.parameters():
             p.requires_grad_(False)
+        self.resolved_mu = float(arm_spec.get(
+            "mu", protocol["attacker_protocol"]["flow_operator"]["mu"]))
         self.anonymize = build_anonymize_from_generator(self.generator,
-                                                        protocol)
+                                                        protocol,
+                                                        mu=self.resolved_mu)
 
         from networks.SiameseNetwork import SiameseNetwork
         self.net = (net_factory() if net_factory is not None
@@ -318,6 +325,10 @@ class P0AttackerRunner:
             "generator_role": self.arm,
             "generator_sha256":
                 self.protocol["arms"][self.arm]["generator_sha256"],
+            # P0_PROTOCOL_V1_2: bind every result to the mu it was ACTUALLY
+            # evaluated at. Without this a reader cannot tell whether a
+            # mu=0.001 checkpoint was scored with a mu=0.001 deformation.
+            "resolved_mu": self.resolved_mu,
             "train_pair_sha256":
                 self.protocol["pair_files"]["train"]["sha256"],
             "val_pair_sha256":

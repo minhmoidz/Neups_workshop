@@ -25,10 +25,13 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-PROTOCOL_PATH = os.path.join(HERE, "protocol_v1.json")
+PROTOCOL_PATH = os.path.join(HERE, "protocol_v1_2.json")
 
-ACTIVE_PROCESS_PATTERN = "run_hardened_verifier"
-EXPECTED_SCHEMA = "P0_PROTOCOL_V1_1"
+# Substring patterns, ANY of which counts as a competing GPU trainer.
+# (A single "a|b" string would never match -- the check below is a substring
+# test, not a regex.)
+ACTIVE_PROCESS_PATTERNS = ("run_hardened_verifier", "run_corrected_objective")
+EXPECTED_SCHEMA = "P0_PROTOCOL_V1_2"
 
 REQUIRED_APPROVAL_FIELDS = (
     "authorization_status",
@@ -85,7 +88,8 @@ def worktree_is_clean_tracked():
 def active_training_process_running():
     out = subprocess.run(["ps", "aux"], capture_output=True, text=True).stdout
     for line in out.splitlines():
-        if ACTIVE_PROCESS_PATTERN in line and "grep" not in line:
+        if any(pat in line for pat in ACTIVE_PROCESS_PATTERNS) \
+                and "grep" not in line:
             return True, line.strip()
     return False, None
 
@@ -311,7 +315,7 @@ def load_and_check_approval(approval_path):
     if running:
         raise PermissionError(
             "refusing to start: an active %s process exists (%s)"
-            % (ACTIVE_PROCESS_PATTERN, cmdline))
+            % ("|".join(ACTIVE_PROCESS_PATTERNS), cmdline))
 
     # Environment and byte-level gates LAST: they require a clean tracked
     # worktree and the actual governed artifacts.

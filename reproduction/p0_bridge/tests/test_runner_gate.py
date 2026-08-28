@@ -58,18 +58,20 @@ def _load_protocol():
 
 
 def _full_approval(tmp, **overrides):
-    (_, sha), rc = _load_protocol()
+    (protocol, sha), rc = _load_protocol()
     approval = {
         "authorization_status": "APPROVED",
         "approved_protocol_sha256": sha,
         "approved_runner_commit": rc or ("c" * 40),
         "approved_screen_or_full_stage": "screen",
         "approved_seed_list": [42, 43, 44, 45, 46],
+        # Derived from the protocol rather than hard-coded, so the fixture
+        # tracks protocol evolution (V1_2 added the mu=0.001 / mu=0.005
+        # released endpoints). A hard-coded arm list makes this test fail on
+        # any protocol revision for a reason unrelated to what it tests.
         "approved_generator_roles_and_hashes": {
-            "U_PUBLISHED":
-                "4d82dcdd1c1b5856d6361fd08b7a6838b044ffc7db89e8bf953a6279cb3bf153",
-            "D_BDEV":
-                "18381d92c64bb3d646b62d5fb9d0ed8c208cf2cb3154f8aa1dac4b1baff610cd"},
+            a: s_["generator_sha256"]
+            for a, s_ in protocol["arms"].items()},
         "approved_pair_hashes": {
             "train": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
             "val": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7"},

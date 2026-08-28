@@ -1,0 +1,198 @@
+{
+  "arms": {
+    "D_BDEV": {
+      "execution_path": "research_runs/M2_S1/B_dev/seed_42/generator_best_method_neutral.pth",
+      "generator_path": "research_runs/M2_S1/B_dev/seed_42/generator_best_method_neutral.pth",
+      "generator_sha256": "18381d92c64bb3d646b62d5fb9d0ed8c208cf2cb3154f8aa1dac4b1baff610cd",
+      "role": "selected current B_dev checkpoint (epoch 13)",
+      "mu": 0.01
+    },
+    "U_PUBLISHED": {
+      "execution_path": "reproduction/workspace_prichexy/networks/generator_lowest_total_loss_mu_0.01.pth",
+      "generator_path": "networks/generator_lowest_total_loss_mu_0.01.pth",
+      "generator_sha256": "4d82dcdd1c1b5856d6361fd08b7a6838b044ffc7db89e8bf953a6279cb3bf153",
+      "role": "released trained PriCheXy endpoint at mu=0.01",
+      "mu": 0.01
+    },
+    "U_MU0001": {
+      "execution_path": "networks/generator_lowest_total_loss_mu_0.001.pth",
+      "generator_path": "networks/generator_lowest_total_loss_mu_0.001.pth",
+      "generator_sha256": "2452f102d6ec75853c9f71a552175ab1672c6c3e72c6a6e8bb6b07b73ca63ead",
+      "mu": 0.001,
+      "role": "released trained PriCheXy endpoint at mu=0.001 (paper Table 1 row 2)"
+    },
+    "U_MU0005": {
+      "execution_path": "networks/generator_lowest_total_loss_mu_0.005.pth",
+      "generator_path": "networks/generator_lowest_total_loss_mu_0.005.pth",
+      "generator_sha256": "4d368637426e0c33606090d37d3338e472ff0f6a64a5791b9f22e25c3aceae3b",
+      "mu": 0.005,
+      "role": "released trained PriCheXy endpoint at mu=0.005 (paper Table 1 row 3)"
+    }
+  },
+  "attacker_protocol": {
+    "architecture": "SiameseResNet50_fc128_absdiff_fc1",
+    "batch_size": 32,
+    "domains": [
+      "attacker_weight_init",
+      "train_order",
+      "dataloader_worker_base",
+      "statistical_sensitivity"
+    ],
+    "early_stopping_patience": 5,
+    "flow_operator": {
+      "align_corners": true,
+      "gaussian_kernel": 9,
+      "gaussian_sigma": 2,
+      "grid_sample_padding": "border",
+      "mu": 0.01,
+      "operator_form": "grid=identity-mu*grid_blur_whole_grid"
+    },
+    "image_transforms": {
+      "load_resize": "256x256_bilinear_grayscale_1ch",
+      "snn_input": "expand_1ch_to_3ch_then_ImageNet_normalize_no_resize"
+    },
+    "initialization": "fresh torchvision resnet50 ImageNet weights per seed; provenance identifier and local file hash required in approved execution manifest; automatic download FORBIDDEN at execution time",
+    "learning_rate": 0.0001,
+    "max_epochs": 100,
+    "optimizer": "Adam",
+    "score_direction": "sigmoid_logit_higher_means_same_patient_fixed_apriori",
+    "scoring_geometry": "anon_x1__real_x2",
+    "seed_contract_schema": "P0_SEED_V1",
+    "selection_geometry": "anon_x1__anon_x2",
+    "selection_loss": "BCEWithLogitsLoss_minimized_on_VAL_anon_anon",
+    "training_geometry": "anon_x1__anon_x2_frozen_generator_eval_no_grad"
+  },
+  "authorization_status": "NOT_AUTHORIZED",
+  "component_schemas": {
+    "aggregate_manifest": "P0_AGGREGATE_MANIFEST_V1_2",
+    "approval_manifest": "P0_APPROVAL_MANIFEST_V1_1",
+    "loader_generator": "P0_LOADERGEN_V1_1",
+    "model_state_hash": "P0_MODELSTATE_V1_1",
+    "order_hash": "P0_ORDERHASH_V1_1",
+    "run_manifest": "P0_RUN_MANIFEST_V1_2",
+    "sampler": "P0_SAMPLER_V1_1",
+    "seed": "P0_SEED_V1",
+    "protocol": "P0_PROTOCOL_V1_2"
+  },
+  "evidence_base_commit": "a3513e5c3b3b5631838399fc14c9e708909fe923",
+  "fail_closed": [
+    "active_run_hardened_verifier_process",
+    "checkpoint_path_role_or_sha_mismatch",
+    "source_commit_mismatch",
+    "pair_file_or_order_hash_mismatch",
+    "unapproved_data_or_split",
+    "seed_mapping_difference_across_arms",
+    "architecture_or_initialization_provenance_difference",
+    "geometry_difference_across_arms",
+    "missing_raw_predictions",
+    "nan_or_inf_anywhere",
+    "selection_or_early_stop_behavior_difference_between_arms",
+    "pre_existing_or_stale_output",
+    "output_collision_or_partial_write",
+    "screen_trajectory_failure",
+    "omitted_or_replaced_seed",
+    "post_hoc_threshold_seed_flip_or_exclusion_proposal"
+  ],
+  "imagenet_weight_artifact": {
+    "identifier": "torchvision ResNet50_Weights.IMAGENET1K_V1",
+    "local_path": "/home/minhtt/.cache/torch/hub/checkpoints/resnet50-0676ba61.pth",
+    "locked_by": "user approval 2026-08-23",
+    "sha256": "0676ba61b6795bbe1773cffd859882e5e297624d384b6993f7c9e683e722fb8a",
+    "status": "LOCKED"
+  },
+  "implementation_revision": "P0_2_4",
+  "output_contract": {
+    "aggregate_manifest": "aggregate_manifest.json",
+    "atomic_write": true,
+    "expected_identities_full": 52,
+    "expected_identities_screen": 10,
+    "files": [
+      "predictions.csv",
+      "attacker_best.pth",
+      "run_manifest.json"
+    ],
+    "per_run_dir": "<arm>/<seed>",
+    "raw_prediction_retention": [
+      "y_true",
+      "y_score",
+      "pair_id"
+    ],
+    "refuse_pre_existing_output": true,
+    "root": "reproduction/p0_bridge/runs"
+  },
+  "pair_files": {
+    "train": {
+      "pair_count": 10000,
+      "path": "image_pairs/image_pairs_training_10000.txt",
+      "role": "attacker_training",
+      "sha256": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268"
+    },
+    "val": {
+      "pair_count": 2000,
+      "path": "image_pairs/image_pairs_validation_2000.txt",
+      "role": "attacker_selection_and_scoring",
+      "sha256": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7"
+    }
+  },
+  "schema_version": "P0_PROTOCOL_V1_2",
+  "seeds": {
+    "full": [
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67
+    ],
+    "screen": [
+      42,
+      43,
+      44,
+      45,
+      46
+    ]
+  },
+  "statistics": {
+    "delta_definition": "AUC_U_PUBLISHED - AUC_D_BDEV",
+    "equivalence_bounds": [
+      -0.03,
+      0.03
+    ],
+    "full_inference": "CONDITIONAL_FIXED_GENERATORS_ONLY",
+    "permutation_sensitivity": {
+      "monte_carlo_seed": 20260822,
+      "monte_carlo_sign_flips": 1000000,
+      "pvalue_correction": "(extreme_count + 1) / (B + 1)"
+    },
+    "post_hoc_score_flipping": "FORBIDDEN",
+    "primary_metric": "RAW_ROC_AUC",
+    "screen_inference": "TECHNICAL_DIAGNOSTIC_ONLY",
+    "seoi": 0.03,
+    "seoi_status": "PROVISIONAL_PENDING_HUMAN_RATIFICATION",
+    "sign_rule": "negative delta favors U_PUBLISHED privacy; positive favors D_BDEV",
+    "statistical_unit": "paired attacker seed within fixed generator pair",
+    "tost_alpha": 0.05
+  },
+  "supersedes_protocol_sha256": "20106805300365fef36e1bf076aa5437819a61990c92a9b2fa5e150983dbcf6c",
+  "mu_semantics": "mu is a property of the GENERATOR being evaluated, not of the attacker. V1_2 moves it to each arm; attacker_protocol.flow_operator.mu is retained as the default for arms that do not declare one, so every V1_1 arm resolves to exactly its V1_1 value and V1_1 results remain substantively comparable."
+}
