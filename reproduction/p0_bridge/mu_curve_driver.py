@@ -53,6 +53,8 @@ def main():
     ap.add_argument("--image-root", default="/home/minhtt/datasets/nih/images/")
     ap.add_argument("--repo-root", default=DEFAULT_REPO)
     ap.add_argument("--runs-root", default="reproduction/p0_bridge/runs_mucurve")
+    ap.add_argument("--approval", required=True,
+                    help="path to the human-signed execution approval manifest")
     args = ap.parse_args()
 
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
@@ -63,8 +65,15 @@ def main():
     sys.path.insert(0, repo_root)
     sys.path.insert(0, os.path.join(repo_root, "research_agent"))
 
-    from run_p0_bridge import load_protocol, verify_all_artifacts
-    protocol, proto_sha = load_protocol()
+    # Every gate BEFORE any scientific import or GPU touch: signature,
+    # protocol hash, runner commit, complete arm role/hash set, pair hashes,
+    # SEOI, output root, competing-trainer check, clean tracked worktree, and
+    # byte-verification of every governed artifact. An unsigned or stale
+    # manifest stops the run here.
+    from run_p0_bridge import load_and_check_approval, load_protocol
+    protocol, proto_sha, stage, approval = load_and_check_approval(args.approval)
+    print("[mucurve] approval OK: stage=%s approved_by=%r at %s"
+          % (stage, approval["approved_by"], approval["approval_timestamp"]))
 
     unknown = [a for a in arms if a not in protocol["arms"]]
     if unknown:
@@ -81,9 +90,7 @@ def main():
               % (a, protocol["arms"][a].get("mu", default_mu),
                  protocol["arms"][a]["execution_path"]))
 
-    # Verifies EVERY arm in the protocol byte-for-byte, not just the ones we run.
-    verify_all_artifacts(protocol, repo_root)
-    print("[mucurve] governed artifacts verified; starting")
+    print("[mucurve] governed artifacts verified by the approval gate; starting")
 
     from attacker_loop import P0AttackerRunner
 
