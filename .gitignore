@@ -5,6 +5,12 @@ __pycache__
 .venv/
 *.pyc
 
+# Unrelated local npm install (claude-code CLI), not part of this Python project
+node_modules/
+package.json
+package-lock.json
+.npmrc
+
 # Data and logs
 data/
 logs/
