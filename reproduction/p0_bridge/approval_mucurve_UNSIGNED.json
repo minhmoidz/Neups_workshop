@@ -1,0 +1,28 @@
+{
+  "authorization_status": "NOT_AUTHORIZED",
+  "approved_protocol_sha256": "eb8dfeab2636e5f6da87e92ccd003bef69e3b0498999e4e604bfde83dbd0475c",
+  "approved_runner_commit": "81146f3049a9b055e216271157042bf381830e69",
+  "approved_screen_or_full_stage": "screen",
+  "approved_seed_list": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "approved_generator_roles_and_hashes": {
+    "D_BDEV": "18381d92c64bb3d646b62d5fb9d0ed8c208cf2cb3154f8aa1dac4b1baff610cd",
+    "U_PUBLISHED": "4d82dcdd1c1b5856d6361fd08b7a6838b044ffc7db89e8bf953a6279cb3bf153",
+    "U_MU0001": "2452f102d6ec75853c9f71a552175ab1672c6c3e72c6a6e8bb6b07b73ca63ead",
+    "U_MU0005": "4d368637426e0c33606090d37d3338e472ff0f6a64a5791b9f22e25c3aceae3b"
+  },
+  "approved_pair_hashes": {
+    "train": "3c535eed013305bacf231dea9c72fb047cc6b6cb15e3958ef7a308956394b268",
+    "val": "9e33a081dfd5e4f28e658a9d13417f8a61f24cba60b2cb03272b20535b9fa9f7"
+  },
+  "approved_SEOI": 0.03,
+  "approved_output_root": "reproduction/p0_bridge/runs",
+  "approved_by": "",
+  "approval_timestamp": "",
+  "active_process_clearance": false
+}
