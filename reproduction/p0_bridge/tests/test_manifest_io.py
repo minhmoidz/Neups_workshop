@@ -172,6 +172,16 @@ def test_ce4_undeclared_arm_dir_rejected():
         assert "ROGUE_ARM" in msg
 
 
+def test_stray_root_file_not_treated_as_arm():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "runs")
+        _grid(root, [42, 43])
+        with open(os.path.join(root, "screen_stats.json"), "w") as fh:
+            fh.write("{}")
+        aggregate_manifests(root, PROTOCOL, PROTO_SHA, RUNNER_COMMIT,
+                            "screen")
+
+
 def test_undeclared_seed_dir_rejected():
     with tempfile.TemporaryDirectory() as tmp:
         root = os.path.join(tmp, "runs")

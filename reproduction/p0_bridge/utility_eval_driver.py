@@ -47,6 +47,7 @@ def main():
     ap.add_argument("--image-root", default="/home/minhtt/datasets/nih/images/")
     ap.add_argument("--repo-root", default=REPO)
     ap.add_argument("--wait-gpu-threshold-mb", type=int, default=3000)
+    ap.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
     ap.add_argument("--batch-size", type=int, default=32)
     args = ap.parse_args()
 
@@ -59,9 +60,10 @@ def main():
     verify_all_artifacts(protocol, args.repo_root)
     print("[utility] governed artifacts verified", flush=True)
 
-    wait_gpu(args.wait_gpu_threshold_mb)
+    if args.device == "cuda":
+        wait_gpu(args.wait_gpu_threshold_mb)
 
-    device = torch.device("cuda")
+    device = torch.device(args.device)
 
     from m2_dev.evaluator_common import (
         SCIENTIFIC_IMAGE_ROOT, build_anonymize_fn,

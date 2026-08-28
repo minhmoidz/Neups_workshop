@@ -269,6 +269,10 @@ def aggregate_manifests(runs_root, protocol, protocol_sha256, runner_commit,
     if os.path.isdir(runs_root):
         root_entries = sorted(os.listdir(runs_root))
     for entry in root_entries:
+        entry_path = os.path.join(runs_root, entry)
+        if not os.path.isdir(entry_path):
+            # regular files (e.g. summary JSONs) are not arms; arms are dirs
+            continue
         if entry not in arms:
             # CE4 regression: undeclared arm directory under runs root
             raise ManifestError("undeclared arm directory at runs root: %r"
