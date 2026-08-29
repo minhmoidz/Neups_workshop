@@ -49,6 +49,11 @@ def main():
     ap.add_argument("--wait-gpu-threshold-mb", type=int, default=3000)
     ap.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
     ap.add_argument("--batch-size", type=int, default=32)
+    ap.add_argument("--arms", default="U_PUBLISHED,D_BDEV",
+                    help="comma-separated arm names from the locked protocol")
+    ap.add_argument("--out-name", default="utility_results.json",
+                    help="output filename; a distinct name avoids clobbering "
+                         "an existing result set")
     args = ap.parse_args()
 
     import torch
@@ -91,26 +96,38 @@ def main():
 
     model = load_frozen_classifier(device)
 
+    default_mu = protocol["attacker_protocol"]["flow_operator"]["mu"]
+
     def make_anon(arm_spec):
         gen_path = os.path.join(args.repo_root, arm_spec["execution_path"])
         gen = UNet(1, 2, 32).to(device)
         gen.load_state_dict(torch.load(gen_path, map_location=device,
                                        weights_only=False))
         grid_identity, gauss_filter = make_flow_field_components(device, 256)
-        return build_anonymize_fn(gen, grid_identity, gauss_filter, MU)
+        # P0_PROTOCOL_V1_2: mu belongs to the generator, not the evaluator.
+        # Using the global MU here would deform a mu=0.001 endpoint at 0.01
+        # and report the utility of a model that was never trained.
+        mu = float(arm_spec.get("mu", default_mu))
+        return build_anonymize_fn(gen, grid_identity, gauss_filter, mu), mu
 
-    variants = [("original", None)]
-    for arm in ("U_PUBLISHED", "D_BDEV"):
-        variants.append((arm, make_anon(protocol["arms"][arm])))
+    arms = [a.strip() for a in args.arms.split(",") if a.strip()]
+    unknown = [a for a in arms if a not in protocol["arms"]]
+    if unknown:
+        raise SystemExit("arms not in the locked protocol: %s" % unknown)
+    variants = [("original", None, None)]
+    for arm in arms:
+        fn, mu = make_anon(protocol["arms"][arm])
+        variants.append((arm, fn, mu))
 
     results = {}
-    for name, anon_fn in variants:
+    for name, anon_fn, arm_mu in variants:
         t0 = time.time()
         _, auc_df, macro_auc = classify_val_dataset(
             model, dataloader, anon_fn, "flow_field",
             device=device, batch_size=args.batch_size)
         results[name] = {
             "macro_auc": macro_auc,
+            "resolved_mu": arm_mu,
             "per_class": dict(zip(auc_df["label"].tolist(),
                                   [round(a, 4) for a in auc_df["auc"]]))}
         print("[UTILITY DONE] %s macro=%.4f (%.0fs)" %
@@ -123,7 +140,7 @@ def main():
     out_dir = os.path.join(args.repo_root,
                            "reproduction/p0_bridge/runs_utility")
     os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "utility_results.json"), "w") as f:
+    with open(os.path.join(out_dir, args.out_name), "w") as f:
         json.dump(results, f, indent=1)
     print("[UTILITY COMPLETE]", json.dumps(
         {k: v.get("macro_auc") if isinstance(v, dict) else v
