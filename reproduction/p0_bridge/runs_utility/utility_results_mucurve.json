@@ -1,0 +1,67 @@
+{
+ "original": {
+  "macro_auc": 0.8157845673517491,
+  "resolved_mu": null,
+  "per_class": {
+   "Atelectasis": 0.8159,
+   "Cardiomegaly": 0.8672,
+   "Effusion": 0.8879,
+   "Infiltration": 0.5922,
+   "Mass": 0.8588,
+   "Nodule": 0.767,
+   "Pneumonia": 0.7338,
+   "Pneumothorax": 0.8662,
+   "Consolidation": 0.8057,
+   "Edema": 0.8965,
+   "Emphysema": 0.9211,
+   "Fibrosis": 0.7241,
+   "Pleural_Thickening": 0.8157,
+   "Hernia": 0.869
+  }
+ },
+ "U_MU0001": {
+  "macro_auc": 0.8127977733851945,
+  "resolved_mu": 0.001,
+  "per_class": {
+   "Atelectasis": 0.8158,
+   "Cardiomegaly": 0.8686,
+   "Effusion": 0.8864,
+   "Infiltration": 0.594,
+   "Mass": 0.8562,
+   "Nodule": 0.7648,
+   "Pneumonia": 0.7323,
+   "Pneumothorax": 0.8678,
+   "Consolidation": 0.8059,
+   "Edema": 0.8903,
+   "Emphysema": 0.9129,
+   "Fibrosis": 0.7122,
+   "Pleural_Thickening": 0.8162,
+   "Hernia": 0.856
+  }
+ },
+ "U_MU0005": {
+  "macro_auc": 0.8035059728569067,
+  "resolved_mu": 0.005,
+  "per_class": {
+   "Atelectasis": 0.8037,
+   "Cardiomegaly": 0.8665,
+   "Effusion": 0.8794,
+   "Infiltration": 0.5959,
+   "Mass": 0.8481,
+   "Nodule": 0.749,
+   "Pneumonia": 0.6996,
+   "Pneumothorax": 0.8537,
+   "Consolidation": 0.7994,
+   "Edema": 0.8721,
+   "Emphysema": 0.8944,
+   "Fibrosis": 0.7073,
+   "Pleural_Thickening": 0.8088,
+   "Hernia": 0.8711
+  }
+ },
+ "_meta": {
+  "protocol_sha256": "eb8dfeab2636e5f6",
+  "runner_commit": "c6f28cd39ccf",
+  "finished_utc": "2026-08-29T02:54:25+00:00"
+ }
+}

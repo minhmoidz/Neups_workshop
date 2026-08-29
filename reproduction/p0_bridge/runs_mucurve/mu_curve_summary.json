@@ -1,0 +1,120 @@
+{
+ "stage": "mu_curve",
+ "protocol_sha256": "eb8dfeab2636e5f6da87e92ccd003bef69e3b0498999e4e604bfde83dbd0475c",
+ "protocol_schema": "P0_PROTOCOL_V1_2",
+ "runner_commit": "ef67810a8ecaa9855d65f98988595aa919231bef",
+ "arms": [
+  "U_MU0001",
+  "U_MU0005"
+ ],
+ "seeds": [
+  42,
+  43,
+  44,
+  45,
+  46
+ ],
+ "total_elapsed_sec": 30388.7,
+ "results": [
+  {
+   "arm": "U_MU0001",
+   "seed": 42,
+   "resolved_mu": 0.001,
+   "raw_roc_auc": 0.83051,
+   "best_epoch": 6,
+   "stop_epoch": 11,
+   "elapsed_sec": 3199.1,
+   "run_dir": "/home/minhtt/Neups_workshop/reproduction/p0_bridge/runs_mucurve/U_MU0001/42"
+  },
+  {
+   "arm": "U_MU0001",
+   "seed": 43,
+   "resolved_mu": 0.001,
+   "raw_roc_auc": 0.809685,
+   "best_epoch": 6,
+   "stop_epoch": 11,
+   "elapsed_sec": 3238.0,
+   "run_dir": "/home/minhtt/Neups_workshop/reproduction/p0_bridge/runs_mucurve/U_MU0001/43"
+  },
+  {
+   "arm": "U_MU0001",
+   "seed": 44,
+   "resolved_mu": 0.001,
+   "raw_roc_auc": 0.8530300000000001,
+   "best_epoch": 4,
+   "stop_epoch": 9,
+   "elapsed_sec": 2747.2,
+   "run_dir": "/home/minhtt/Neups_workshop/reproduction/p0_bridge/runs_mucurve/U_MU0001/44"
+  },
+  {
+   "arm": "U_MU0001",
+   "seed": 45,
+   "resolved_mu": 0.001,
+   "raw_roc_auc": 0.880096,
+   "best_epoch": 6,
+   "stop_epoch": 11,
+   "elapsed_sec": 3286.8,
+   "run_dir": "/home/minhtt/Neups_workshop/reproduction/p0_bridge/runs_mucurve/U_MU0001/45"
+  },
+  {
+   "arm": "U_MU0001",
+   "seed": 46,
+   "resolved_mu": 0.001,
+   "raw_roc_auc": 0.826736,
+   "best_epoch": 4,
+   "stop_epoch": 9,
+   "elapsed_sec": 2750.9,
+   "run_dir": "/home/minhtt/Neups_workshop/reproduction/p0_bridge/runs_mucurve/U_MU0001/46"
+  },
+  {
+   "arm": "U_MU0005",
+   "seed": 42,
+   "resolved_mu": 0.005,
+   "raw_roc_auc": 0.7853794999999999,
+   "best_epoch": 4,
+   "stop_epoch": 9,
+   "elapsed_sec": 2742.7,
+   "run_dir": "/home/minhtt/Neups_workshop/reproduction/p0_bridge/runs_mucurve/U_MU0005/42"
+  },
+  {
+   "arm": "U_MU0005",
+   "seed": 43,
+   "resolved_mu": 0.005,
+   "raw_roc_auc": 0.707587,
+   "best_epoch": 6,
+   "stop_epoch": 11,
+   "elapsed_sec": 3299.6,
+   "run_dir": "/home/minhtt/Neups_workshop/reproduction/p0_bridge/runs_mucurve/U_MU0005/43"
+  },
+  {
+   "arm": "U_MU0005",
+   "seed": 44,
+   "resolved_mu": 0.005,
+   "raw_roc_auc": 0.798043,
+   "best_epoch": 5,
+   "stop_epoch": 10,
+   "elapsed_sec": 3050.9,
+   "run_dir": "/home/minhtt/Neups_workshop/reproduction/p0_bridge/runs_mucurve/U_MU0005/44"
+  },
+  {
+   "arm": "U_MU0005",
+   "seed": 45,
+   "resolved_mu": 0.005,
+   "raw_roc_auc": 0.7840010000000001,
+   "best_epoch": 6,
+   "stop_epoch": 11,
+   "elapsed_sec": 3305.0,
+   "run_dir": "/home/minhtt/Neups_workshop/reproduction/p0_bridge/runs_mucurve/U_MU0005/45"
+  },
+  {
+   "arm": "U_MU0005",
+   "seed": 46,
+   "resolved_mu": 0.005,
+   "raw_roc_auc": 0.756142,
+   "best_epoch": 4,
+   "stop_epoch": 9,
+   "elapsed_sec": 2768.5,
+   "run_dir": "/home/minhtt/Neups_workshop/reproduction/p0_bridge/runs_mucurve/U_MU0005/46"
+  }
+ ]
+}
